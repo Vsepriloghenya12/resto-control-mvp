@@ -1,0 +1,18 @@
+{
+  "name": "resto-control-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SaaS MVP для ресторанов: чек-листы, заявки, инвентаризация, задачи и база знаний",
+  "scripts": {
+    "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix webapp\"",
+    "build": "npm run build --prefix webapp",
+    "start": "npm run start --prefix server",
+    "seed": "node server/scripts/reset-demo.js"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
