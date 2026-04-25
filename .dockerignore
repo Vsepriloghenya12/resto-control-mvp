@@ -1,0 +1,7 @@
+node_modules
+webapp/node_modules
+server/node_modules
+webapp/dist
+.git
+.env
+*.zip

@@ -10,10 +10,10 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "resto-control-mvp": "file:..",
     "typescript": "latest",
-    "vite": "latest"
-  }
+    "vite": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {}
 }

@@ -69,3 +69,23 @@ npm run start
 ```
 
 Target port: `8080`.
+
+## Деплой на Railway через GitHub
+
+Важно: в репозитории должны лежать файлы проекта прямо в корне: `package.json`, `server/`, `webapp/`, `Dockerfile`, `start.sh`. Если Railway видит только `.gitattributes`, значит файлы приложения не были загружены в GitHub или выбран неправильный Root Directory.
+
+Railway settings:
+
+- Builder: Dockerfile
+- Start command: `node server/index.js`
+- Target port: `8080`
+
+Env variables:
+
+```env
+PORT=8080
+JWT_SECRET=replace-with-long-secret
+SUPER_ADMIN_LOGIN=admin
+SUPER_ADMIN_PASSWORD=admin123
+TRIAL_DAYS=14
+```

@@ -4,9 +4,9 @@
   "private": true,
   "description": "SaaS MVP для ресторанов: чек-листы, заявки, инвентаризация, задачи и база знаний",
   "scripts": {
-    "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix webapp\"",
-    "build": "npm run build --prefix webapp",
-    "start": "npm run start --prefix server",
+    "dev": "concurrently \"npm run dev --workspace server\" \"npm run dev --workspace webapp\"",
+    "build": "npm run build --workspace webapp",
+    "start": "node server/index.js",
     "seed": "node server/scripts/reset-demo.js"
   },
   "devDependencies": {
@@ -14,5 +14,9 @@
   },
   "engines": {
     "node": ">=18"
-  }
+  },
+  "workspaces": [
+    "server",
+    "webapp"
+  ]
 }
