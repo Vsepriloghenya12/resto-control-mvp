@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { api, clearToken, download, getToken, setToken } from './api';
 
 type View = 'login' | 'register';
@@ -64,6 +64,96 @@ function Textarea({ label, ...props }: any) {
 
 function Empty({ text }: { text: string }) {
   return <div className="empty">{text}</div>;
+}
+
+function CameraCapture({ title, onCapture, onClose }: { title: string; onCapture: (photo: string) => void; onClose: () => void }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [busy, setBusy] = useState(true);
+  const [error, setError] = useState('');
+
+  function stopStream() {
+    streamRef.current?.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
+  }
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function openCamera() {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setError('Камера недоступна в этом браузере');
+        setBusy(false);
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' } },
+          audio: false
+        });
+        if (!mounted) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+      } catch {
+        setError('Не удалось открыть камеру. Проверьте разрешение на съёмку.');
+      } finally {
+        if (mounted) setBusy(false);
+      }
+    }
+
+    openCamera();
+    return () => {
+      mounted = false;
+      stopStream();
+    };
+  }, []);
+
+  function takePhoto() {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const maxSide = 1280;
+    const scale = Math.min(1, maxSide / Math.max(video.videoWidth || maxSide, video.videoHeight || maxSide));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round((video.videoWidth || maxSide) * scale));
+    canvas.height = Math.max(1, Math.round((video.videoHeight || maxSide) * scale));
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) {
+      setError('Не удалось сохранить кадр');
+      return;
+    }
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const photo = canvas.toDataURL('image/jpeg', 0.82);
+    stopStream();
+    onCapture(photo);
+    onClose();
+  }
+
+  return <div className="modal" onClick={onClose}>
+    <div className="modalCard" onClick={(e) => e.stopPropagation()}>
+      <div className="rowBetween">
+        <h2>Фото для: {title}</h2>
+        <button className="iconBtn" onClick={onClose}>×</button>
+      </div>
+      {busy && <div className="notice">Подключаем камеру...</div>}
+      {error && <div className="error">{error}</div>}
+      {!error && <video ref={videoRef} className="cameraVideo" autoPlay playsInline muted />}
+      <div className="actions cameraActions">
+        <Button kind="soft" onClick={onClose}>Отмена</Button>
+        <Button disabled={busy || !!error} onClick={takePhoto}>Сделать фото</Button>
+      </div>
+    </div>
+  </div>;
 }
 
 export default function App() {
@@ -333,14 +423,24 @@ function Checklists({ user, admin = false }: any) {
   const [runs, setRuns] = useState<any[]>([]);
   const [answers, setAnswers] = useState<any>({});
   const [msg, setMsg] = useState('');
+  const [cameraTarget, setCameraTarget] = useState<{ itemId: string; title: string } | null>(null);
   async function load() {
     setTemplates(await api('/api/checklists/templates'));
     if (admin) setRuns(await api('/api/admin/checklists/runs'));
   }
   useEffect(() => { load(); }, []);
+  function updateAnswer(itemId: string, patch: any) {
+    setAnswers((current: any) => ({ ...current, [itemId]: { ...(current[itemId] || {}), ...patch } }));
+  }
   async function submit(template: any) {
+    setMsg('');
     const templateAnswers: any = {};
     template.items.forEach((i: any) => { templateAnswers[i.id] = answers[i.id] || { done: false, comment: '' }; });
+    const missingPhoto = template.items.find((i: any) => templateAnswers[i.id]?.done && !templateAnswers[i.id]?.photo_url);
+    if (missingPhoto) {
+      setMsg(`Для пункта "${missingPhoto.text}" нужно сделать фото`);
+      return;
+    }
     await api('/api/checklists/runs', { method: 'POST', body: JSON.stringify({ template_id: template.id, answers: templateAnswers }) });
     setMsg('Чек-лист сохранён'); setAnswers({}); load();
   }
@@ -349,15 +449,36 @@ function Checklists({ user, admin = false }: any) {
       {templates.length === 0 && <Empty text="Нет чек-листов" />}
       <div className="grid">{templates.map(t => <div className="miniCard" key={t.id}>
         <div className="rowBetween"><b>{t.title}</b><span className="badge">{roles[t.role]} · {t.type}</span></div>
-        <div className="checkItems">{t.items.map((i: any) => <label className="checkRow" key={i.id}>
-          <input type="checkbox" checked={!!answers[i.id]?.done} onChange={(e) => setAnswers({ ...answers, [i.id]: { ...(answers[i.id] || {}), done: e.target.checked } })} />
-          <span>{i.text}</span>
-        </label>)}</div>
+        <div className="checkItems">{t.items.map((i: any) => <div className="checkRow" key={i.id}>
+          <input type="checkbox" checked={!!answers[i.id]?.done} onChange={(e) => updateAnswer(i.id, { done: e.target.checked })} />
+          <div className="checkContent">
+            <span>{i.text}</span>
+            {answers[i.id]?.done && <div className="checkExtras">
+              <Button kind="soft" onClick={() => setCameraTarget({ itemId: i.id, title: i.text })}>
+                {answers[i.id]?.photo_url ? 'Переснять фото' : 'Сделать фото'}
+              </Button>
+              {answers[i.id]?.photo_url && <img className="photoPreview" src={answers[i.id].photo_url} alt={`Фото: ${i.text}`} />}
+            </div>}
+          </div>
+        </div>)}</div>
         <Button onClick={() => submit(t)}>Сохранить выполнение</Button>
       </div>)}</div>
       {msg && <div className="notice">{msg}</div>}
     </Card>
-    {admin && <Card title="История выполнения"><div className="list">{runs.map(r => <div className="listRow" key={r.id}><div><b>{r.template?.title}</b><span>{r.user?.name} · {fmtDate(r.created_at)}</span></div><span className="badge active">{r.status}</span></div>)}</div></Card>}
+    {admin && <Card title="История выполнения"><div className="list">{runs.map(r => <div className="miniCard" key={r.id}>
+      <div className="rowBetween"><div><b>{r.template?.title}</b><span>{r.user?.name} · {fmtDate(r.created_at)}</span></div><span className="badge active">{r.status}</span></div>
+      <div className="thumbRow">
+        {r.answers?.filter((answer: any) => answer.photo_url).map((answer: any) => <a key={answer.id} className="thumbLink" href={answer.photo_url} target="_blank" rel="noreferrer">
+          <img src={answer.photo_url} alt="Фото подтверждения" />
+        </a>)}
+        {r.answers?.filter((answer: any) => answer.photo_url).length === 0 && <span className="muted">Без фото</span>}
+      </div>
+    </div>)}</div></Card>}
+    {cameraTarget && <CameraCapture
+      title={cameraTarget.title}
+      onClose={() => setCameraTarget(null)}
+      onCapture={(photo) => updateAnswer(cameraTarget.itemId, { done: true, photo_url: photo })}
+    />}
   </>;
 }
 

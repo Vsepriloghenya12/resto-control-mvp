@@ -4,6 +4,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import jwt from 'jsonwebtoken';
 import ExcelJS from 'exceljs';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import {
@@ -28,9 +29,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const webDist = path.resolve(__dirname, '../webapp/dist');
+const uploadsDir = path.resolve(__dirname, 'data/uploads');
+const checklistUploadsDir = path.join(uploadsDir, 'checklists');
 
 app.use(cors());
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '15mb' }));
 app.use(morgan('tiny'));
 
 let db = loadDb();
@@ -115,6 +118,23 @@ function normalizeRequestItems(restaurant_id, department, rawItems = []) {
   }
 
   return { items };
+}
+
+function saveChecklistPhoto(dataUrl, restaurant_id, run_id, item_id) {
+  const match = String(dataUrl || '').match(/^data:image\/(jpeg|jpg|png|webp);base64,(.+)$/);
+  if (!match) {
+    throw new Error('Некорректный формат фото');
+  }
+
+  const ext = match[1] === 'jpeg' ? 'jpg' : match[1];
+  const restaurantDir = path.join(checklistUploadsDir, restaurant_id);
+  fs.mkdirSync(restaurantDir, { recursive: true });
+
+  const filename = `${run_id}-${item_id}-${Date.now()}.${ext}`;
+  const filepath = path.join(restaurantDir, filename);
+  fs.writeFileSync(filepath, Buffer.from(match[2], 'base64'));
+
+  return `/uploads/checklists/${restaurant_id}/${filename}`;
 }
 
 function makeAssignmentsForTask(task) {
@@ -276,11 +296,28 @@ app.post('/api/checklists/runs', auth, ensureRestaurantActive, (req, res) => {
   const template = db.checklist_templates.find(t => t.id === template_id && t.restaurant_id === rid);
   if (!template) return res.status(404).json({ error: 'Чек-лист не найден' });
   if (!['owner', 'manager', template.role].includes(req.user.role)) return res.status(403).json({ error: 'Этот чек-лист не для вашей роли' });
+  const templateItems = db.checklist_items.filter(i => i.template_id === template.id);
+  const missingPhotoItem = templateItems.find(item => {
+    const value = answers?.[item.id] || {};
+    return Boolean(value.done) && !value.photo_url;
+  });
+  if (missingPhotoItem) {
+    return res.status(400).json({ error: `Для пункта "${missingPhotoItem.text}" нужно сделать фото` });
+  }
+
   const run = { id: uid('clrun'), restaurant_id: rid, template_id, user_id: req.user.id, status: 'completed', comment: comment || '', created_at: nowIso(), completed_at: nowIso() };
   db.checklist_runs.push(run);
-  Object.entries(answers || {}).forEach(([item_id, value]) => {
-    db.checklist_answers.push({ id: uid('clans'), restaurant_id: rid, run_id: run.id, item_id, done: !!value.done, comment: value.comment || '', photo_url: value.photo_url || '' });
-  });
+  try {
+    templateItems.forEach(item => {
+      const value = answers?.[item.id] || {};
+      const done = Boolean(value.done);
+      const photo_url = done && value.photo_url ? saveChecklistPhoto(value.photo_url, rid, run.id, item.id) : '';
+      db.checklist_answers.push({ id: uid('clans'), restaurant_id: rid, run_id: run.id, item_id: item.id, done, comment: value.comment || '', photo_url });
+    });
+  } catch (error) {
+    db.checklist_runs = db.checklist_runs.filter(savedRun => savedRun.id !== run.id);
+    return res.status(400).json({ error: error.message || 'Не удалось сохранить фото' });
+  }
   persist();
   res.status(201).json(run);
 });
@@ -515,6 +552,7 @@ app.get('/api/admin/knowledge/stats', auth, ensureRestaurantActive, adminOnly, (
   })));
 });
 
+app.use('/uploads', express.static(uploadsDir));
 app.use(express.static(webDist));
 app.get('*', (req, res) => {
   res.sendFile(path.join(webDist, 'index.html'), err => {

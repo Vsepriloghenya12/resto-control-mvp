@@ -62,15 +62,22 @@ input:focus, textarea:focus, select:focus { border-color: #22c55e; box-shadow: 0
 .checkItems { display: grid; gap: 8px; }
 .checkRow { display: flex; align-items: flex-start; gap: 10px; padding: 10px; background: rgba(15,23,42,.5); border-radius: 14px; }
 .checkRow input { width: 18px; height: 18px; margin-top: 2px; accent-color: #22c55e; }
+.checkContent { display: grid; gap: 10px; width: 100%; }
+.checkExtras { display: grid; gap: 10px; }
+.photoPreview, .thumbLink img { width: 100%; max-width: 220px; border-radius: 16px; border: 1px solid rgba(148, 163, 184, .16); object-fit: cover; background: rgba(255,255,255,.04); }
 .productsGrid { display: grid; gap: 8px; }
 .productQty { display: grid; grid-template-columns: 1fr 88px; gap: 8px; align-items: center; padding: 10px; background: rgba(15,23,42,.52); border-radius: 14px; }
 .productQty span { display: grid; gap: 2px; }
 .productQty em, .docRow em { color: #94a3b8; font-style: normal; font-size: 12px; }
 .receiveRow { display: grid; grid-template-columns: 1fr 96px; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid rgba(148, 163, 184, .1); }
 .docRow { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; color: #f8fafc; border: 1px solid rgba(148, 163, 184, .12); background: rgba(15,23,42,.58); border-radius: 14px; padding: 12px; margin-top: 8px; }
+.thumbRow { display: flex; flex-wrap: wrap; gap: 10px; }
+.thumbLink { display: inline-flex; }
 .modal { position: fixed; inset: 0; display: grid; place-items: center; z-index: 50; background: rgba(2,6,23,.72); padding: 18px; }
 .modalCard { width: min(720px, 100%); max-height: 85vh; overflow: auto; border-radius: 30px; background: #0f172a; border: 1px solid rgba(148,163,184,.2); padding: 22px; box-shadow: 0 30px 90px rgba(0,0,0,.5); }
 .modalCard pre { white-space: pre-wrap; line-height: 1.6; color: #e2e8f0; background: rgba(255,255,255,.04); border-radius: 18px; padding: 16px; }
+.cameraVideo { width: 100%; border-radius: 22px; background: rgba(0,0,0,.45); min-height: 260px; object-fit: cover; }
+.cameraActions { margin-top: 16px; justify-content: flex-end; }
 .empty { padding: 18px; text-align: center; border: 1px dashed rgba(148, 163, 184, .22); border-radius: 18px; }
 @media (max-width: 720px) {
   .appShell { padding: 12px 12px 32px; }
