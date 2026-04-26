@@ -1281,6 +1281,10 @@ input[type='checkbox'] {
   gap: 12px;
 }
 
+.mobileChecklistActions.single {
+  grid-template-columns: 1fr;
+}
+
 .mobileGhostButton,
 .mobilePrimaryButton {
   width: 100%;
@@ -1298,7 +1302,8 @@ input[type='checkbox'] {
 .mobileInventoryList,
 .mobileKnowledgeDocs,
 .mobileProductsList,
-.mobileChecklistTasks {
+.mobileChecklistTasks,
+.mobileOverviewList {
   display: grid;
   gap: 12px;
 }
@@ -1329,6 +1334,10 @@ input[type='checkbox'] {
   text-align: left;
   background: rgba(255, 255, 255, 0.03);
   border-radius: 20px;
+}
+
+.mobileTaskRow.compact {
+  padding: 14px 16px;
 }
 
 .mobileTaskRow.static {
@@ -1375,6 +1384,70 @@ input[type='checkbox'] {
   line-height: 1.5;
 }
 
+.compactMobileCard {
+  padding: 18px;
+}
+
+.mobileOverviewRow {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 76px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(17, 29, 49, 0.95), rgba(9, 17, 31, 0.95));
+  color: var(--text);
+  text-align: left;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+}
+
+.mobileOverviewIcon {
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mobileOverviewIcon.blue {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.mobileOverviewIcon.green {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.12);
+}
+
+.mobileOverviewIcon.amber {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.mobileOverviewIcon.purple {
+  color: #a855f7;
+  background: rgba(168, 85, 247, 0.12);
+}
+
+.mobileOverviewCopy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mobileOverviewCopy span {
+  color: var(--text-secondary);
+}
+
+.mobileOverviewRow b {
+  font-size: 1.1rem;
+}
+
 .mobileChipRow {
   display: grid;
   grid-auto-flow: column;
@@ -1409,29 +1482,31 @@ input[type='checkbox'] {
   border-color: rgba(34, 197, 94, 0.35);
 }
 
-.mobileChecklistRail {
+.mobileChecklistPicker {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 84%;
-  gap: 12px;
-  overflow-x: auto;
+  gap: 10px;
 }
 
-.mobileChecklistTab {
-  display: grid;
-  gap: 6px;
+.mobileChecklistPickerItem {
   width: 100%;
-  padding: 18px;
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
   text-align: left;
 }
 
-.mobileChecklistTab span {
+.mobileChecklistPickerItem span {
   color: var(--text-secondary);
-  font-size: 0.88rem;
+  font-size: 0.84rem;
 }
 
-.mobileChecklistTab.active {
+.mobileChecklistPickerItem.active {
   border-color: rgba(34, 197, 94, 0.32);
+  background: rgba(34, 197, 94, 0.08);
 }
 
 .mobileProgressCard {
@@ -1453,6 +1528,10 @@ input[type='checkbox'] {
   align-items: flex-start;
 }
 
+.mobileProgressCardCopy.compact {
+  align-items: center;
+}
+
 .mobileProgressCard h3 {
   margin: 0;
   font-size: 1.1rem;
@@ -1462,19 +1541,6 @@ input[type='checkbox'] {
 .mobileProgressMeta span {
   margin: 6px 0 0;
   color: var(--text-secondary);
-}
-
-.mobileChecklistItem {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 14px;
-  border-radius: 24px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.mobileChecklistItem.done {
-  border-color: rgba(34, 197, 94, 0.24);
 }
 
 .mobileChecklistToggle,
@@ -1494,22 +1560,50 @@ input[type='checkbox'] {
   color: #bbf7d0;
 }
 
-.mobileChecklistBody {
+.mobileChecklistPlainList {
+  display: grid;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mobileChecklistLine {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.mobileChecklistLine:last-child {
+  border-bottom: 0;
+}
+
+.mobileChecklistLine.done {
+  opacity: 0.98;
+}
+
+.mobileChecklistLineBody {
   display: grid;
   gap: 12px;
   min-width: 0;
 }
 
-.mobileChecklistHead strong {
+.mobileChecklistLineHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mobileChecklistLineHead strong {
   display: block;
   font-size: 1rem;
 }
 
-.mobileChecklistHead span {
-  display: block;
-  margin-top: 4px;
+.mobileChecklistLineHead span {
   color: var(--text-secondary);
   font-size: 0.84rem;
+  white-space: nowrap;
 }
 
 .mobileChecklistPhoto {
@@ -1521,6 +1615,28 @@ input[type='checkbox'] {
 
 .mobileInlineNotice {
   margin-top: -8px;
+}
+
+.mobileChecklistLineMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mobileChecklistPhotoStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #bbf7d0;
+  font-size: 0.88rem;
+}
+
+.mobileChecklistRetake {
+  border: 0;
+  background: transparent;
+  color: #86efac;
+  font-weight: 700;
 }
 
 .mobileProductRow,

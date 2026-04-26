@@ -14,7 +14,6 @@ import {
 import {
   BottomNavigation,
   BottomSheet,
-  CircularProgress,
   MobileHeader,
   PageContainer,
   ProgressBar,
@@ -833,7 +832,7 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     { id: 'today', title: 'Обзор', icon: 'overview', active: tab === 'today', onClick: () => setTab('today') },
     { id: 'checklists', title: 'Чек-листы', icon: 'checklists', active: tab === 'checklists', onClick: () => setTab('checklists') },
     { id: 'tasks', title: 'Задачи', icon: 'tasks', active: tab === 'tasks', onClick: () => setTab('tasks') },
-    { id: 'profile', title: 'Профиль', icon: 'user', onClick: () => setTab('knowledge') }
+    { id: 'knowledge', title: 'База знаний', icon: 'knowledge', active: tab === 'knowledge', onClick: () => setTab('knowledge') }
   ];
 
   const mobileMenuItems: MobileActionItem[] = [
@@ -877,7 +876,7 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     }}
   >
     <div className="hello"><b>{user.name}</b><span>{roles[user.role]} · {restaurant?.name}</span></div>
-    {tab === 'today' && <Today user={user} onOpenTasks={() => setTab('tasks')} onOpenChecklists={() => setTab('checklists')} onOpenRequests={() => setTab('requests')} />}
+    {tab === 'today' && <Today user={user} onOpenTasks={() => setTab('tasks')} onOpenChecklists={() => setTab('checklists')} onOpenRequests={() => setTab('requests')} onOpenInventory={() => setTab('inventory')} />}
     {tab === 'checklists' && <Checklists user={user} />}
     {tab === 'requests' && <Requests user={user} />}
     {tab === 'inventory' && <Inventory user={user} />}
@@ -890,12 +889,14 @@ function Today({
   user,
   onOpenTasks,
   onOpenChecklists,
-  onOpenRequests
+  onOpenRequests,
+  onOpenInventory
 }: {
   user: any;
   onOpenTasks: () => void;
   onOpenChecklists: () => void;
   onOpenRequests: () => void;
+  onOpenInventory: () => void;
 }) {
   const [overview, setOverview] = useState<any | null>(null);
 
@@ -937,87 +938,58 @@ function Today({
   const completedTasks = overview.tasks.filter((task: any) => task.assignment?.done);
   const openRequests = overview.requests.filter((request: any) => !['received', 'done', 'cancelled'].includes(request.status));
   const inventoryItems = overview.templates.reduce((total: number, template: any) => total + (template.items?.length || 0), 0);
-  const recentEvents = [
-    ...overview.requests.slice(0, 2).map((request: any) => ({
-      id: `request-${request.id}`,
-      icon: 'requests' as IconName,
-      title: `Заявка ${departments[request.department] || 'отдела'}`,
-      subtitle: `${request.items?.length || 0} позиций · ${fmtDate(request.created_at)}`
-    })),
-    ...overview.tasks.slice(0, 2).map((task: any) => ({
-      id: `task-${task.id}`,
-      icon: 'tasks' as IconName,
-      title: task.title,
-      subtitle: task.assignment?.done ? 'Выполнено' : 'В работе'
-    }))
-  ].slice(0, 4);
 
   return <div className="mobileSectionStack">
-    <SectionTitle
-      title="Сегодня"
-      subtitle="Быстрый обзор по смене, задачам и рабочим действиям"
-      action={<button type="button" className="sectionLink" onClick={onOpenTasks}>Смотреть всё</button>}
-    />
+    <SectionTitle title="Сегодня" action={<button type="button" className="sectionLink" onClick={onOpenTasks}>Все задачи</button>} />
 
-    <div className="mobileStatsGrid">
-      <article className="mobileStatCard">
-        <div className="mobileStatBadge blue"><AppIcon name="checklists" className="navIcon" /></div>
-        <strong>{overview.checklists.length}</strong>
-        <span>Чек-листа</span>
-        <small>на сегодня</small>
-      </article>
-      <article className="mobileStatCard">
-        <div className="mobileStatBadge green"><AppIcon name="tasks" className="navIcon" /></div>
-        <strong>{openTasks.length}</strong>
-        <span>Задачи</span>
-        <small>в работе</small>
-      </article>
-      <article className="mobileStatCard">
-        <div className="mobileStatBadge amber"><AppIcon name="requests" className="navIcon" /></div>
-        <strong>{openRequests.length}</strong>
-        <span>Заявки</span>
-        <small>в обработке</small>
-      </article>
-      <article className="mobileStatCard">
-        <div className="mobileStatBadge purple"><AppIcon name="inventory" className="navIcon" /></div>
-        <strong>{inventoryItems}</strong>
-        <span>Товаров</span>
-        <small>в наличии</small>
-      </article>
+    <div className="mobileOverviewList">
+      <button type="button" className="mobileOverviewRow" onClick={onOpenChecklists}>
+        <div className="mobileOverviewIcon blue"><AppIcon name="checklists" className="navIcon" /></div>
+        <div className="mobileOverviewCopy">
+          <strong>Чек-листы</strong>
+          <span>{overview.checklists.length} на сегодня</span>
+        </div>
+        <b>{overview.checklists.length}</b>
+      </button>
+      <button type="button" className="mobileOverviewRow" onClick={onOpenTasks}>
+        <div className="mobileOverviewIcon green"><AppIcon name="tasks" className="navIcon" /></div>
+        <div className="mobileOverviewCopy">
+          <strong>Задачи</strong>
+          <span>{openTasks.length} в работе</span>
+        </div>
+        <b>{openTasks.length}</b>
+      </button>
+      <button type="button" className="mobileOverviewRow" onClick={onOpenRequests}>
+        <div className="mobileOverviewIcon amber"><AppIcon name="requests" className="navIcon" /></div>
+        <div className="mobileOverviewCopy">
+          <strong>Заявки</strong>
+          <span>{openRequests.length} открыто</span>
+        </div>
+        <b>{openRequests.length}</b>
+      </button>
+      <button type="button" className="mobileOverviewRow" onClick={onOpenInventory}>
+        <div className="mobileOverviewIcon purple"><AppIcon name="inventory" className="navIcon" /></div>
+        <div className="mobileOverviewCopy">
+          <strong>Инвентаризация</strong>
+          <span>{inventoryItems} позиций</span>
+        </div>
+        <b>{inventoryItems}</b>
+      </button>
     </div>
 
-    <Card title="Приоритетные задачи" className="mobileCard">
+    <Card title="Приоритет" className="mobileCard compactMobileCard">
       <div className="mobileTaskList">
-        {openTasks.slice(0, 3).map((task: any) => <button key={task.id} type="button" className="mobileTaskRow" onClick={onOpenTasks}>
+        {openTasks.slice(0, 3).map((task: any) => <button key={task.id} type="button" className="mobileTaskRow compact" onClick={onOpenTasks}>
           <span className="mobileTaskStatus" />
           <div className="mobileTaskCopy">
             <strong>{task.title}</strong>
-            <span>{task.description || 'Откройте задачу, чтобы посмотреть детали.'}</span>
+            <span>{task.description || 'Открыть задачу'}</span>
           </div>
-          <span className="badge sent">{task.assignment?.done ? 'готово' : 'важно'}</span>
+          <AppIcon name="chevron" className="navIcon" />
         </button>)}
         {openTasks.length === 0 && <Empty text="Нет открытых задач на эту смену" />}
       </div>
-      <div className="mobileQuickActions">
-        <Button type="button" kind="soft" className="mobileGhostButton" onClick={onOpenChecklists}>Открыть чек-листы</Button>
-        <Button type="button" className="mobilePrimaryButton" onClick={onOpenRequests}>Создать заявку</Button>
-      </div>
-    </Card>
-
-    <Card title="Недавняя активность" className="mobileCard">
-      <div className="mobileActivityList">
-        {recentEvents.length === 0 && <Empty text="Пока нет новых событий" />}
-        {recentEvents.map((event) => <div key={event.id} className="mobileActivityItem">
-          <div className="mobileActivityIcon">
-            <AppIcon name={event.icon} className="navIcon" />
-          </div>
-          <div className="mobileActivityCopy">
-            <strong>{event.title}</strong>
-            <span>{event.subtitle}</span>
-          </div>
-        </div>)}
-      </div>
-      {completedTasks.length > 0 && <div className="mobileInlineHint">Выполнено задач за смену: {completedTasks.length}</div>}
+      {completedTasks.length > 0 && <div className="mobileInlineHint">Выполнено за смену: {completedTasks.length}</div>}
     </Card>
   </div>;
 }
@@ -1030,7 +1002,6 @@ function Checklists({ user, admin = false }: any) {
   const [editorMsg, setEditorMsg] = useState('');
   const [cameraTarget, setCameraTarget] = useState<{ itemId: string; title: string } | null>(null);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
-  const [selectedType, setSelectedType] = useState<string>('all');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [templateForm, setTemplateForm] = useState<any>({
     title: '',
@@ -1137,23 +1108,19 @@ function Checklists({ user, admin = false }: any) {
     ? templates
     : templates.filter((template) => !template.role || template.role === user.role);
 
-  const filteredTemplates = selectedType === 'all'
-    ? availableTemplates
-    : availableTemplates.filter((template) => template.type === selectedType);
-
   useEffect(() => {
     if (admin) return;
-    if (!filteredTemplates.length) {
+    if (!availableTemplates.length) {
       setSelectedTemplateId('');
       return;
     }
-    if (!filteredTemplates.some((template) => template.id === selectedTemplateId)) {
-      setSelectedTemplateId(filteredTemplates[0].id);
+    if (!availableTemplates.some((template) => template.id === selectedTemplateId)) {
+      setSelectedTemplateId(availableTemplates[0].id);
     }
-  }, [admin, filteredTemplates, selectedTemplateId]);
+  }, [admin, availableTemplates, selectedTemplateId]);
 
   const selectedTemplate = !admin
-    ? filteredTemplates.find((template) => template.id === selectedTemplateId) || filteredTemplates[0]
+    ? availableTemplates.find((template) => template.id === selectedTemplateId) || availableTemplates[0]
     : null;
 
   const completedChecklistItems = selectedTemplate
@@ -1162,113 +1129,86 @@ function Checklists({ user, admin = false }: any) {
 
   const checklistRequiresPhoto = selectedTemplate?.items.some((item: any) => answers[item.id]?.done && !answers[item.id]?.photo_url);
 
+  function toggleChecklistItem(item: any) {
+    const current = answers[item.id] || {};
+    if (current.done) {
+      updateAnswer(item.id, { done: false, photo_url: '', comment: '' });
+      return;
+    }
+    setCameraTarget({ itemId: item.id, title: item.text });
+  }
+
   if (!admin) {
     return <div className="mobileSectionStack">
-      <SectionTitle title="Чек-листы" subtitle="Выполняйте задачи и отмечайте прогресс по смене" />
+      <SectionTitle title="Чек-листы" />
 
-      <div className="mobileChipRow">
-        <button type="button" className={cx('mobileChip', selectedType === 'all' && 'active')} onClick={() => setSelectedType('all')}>
-          <span>Все</span>
-          <b>{availableTemplates.length}</b>
-        </button>
-        {Object.entries(checklistTypes).map(([type, label]) => {
-          const count = availableTemplates.filter((template) => template.type === type).length;
-          return <button key={type} type="button" className={cx('mobileChip', selectedType === type && 'active')} onClick={() => setSelectedType(type)}>
-            <span>{label}</span>
-            <b>{count}</b>
-          </button>;
-        })}
-      </div>
-
-      {!filteredTemplates.length && <Card className="mobileCard">
+      {!availableTemplates.length && <Card className="mobileCard compactMobileCard">
         <Empty text="Для вашей роли пока нет активных чек-листов" />
       </Card>}
 
-      {!!filteredTemplates.length && <div className="mobileChecklistRail">
-        {filteredTemplates.map((template) => <button
+      {!!availableTemplates.length && <div className="mobileChecklistPicker">
+        {availableTemplates.map((template) => <button
           key={template.id}
           type="button"
-          className={cx('mobileChecklistTab', selectedTemplate?.id === template.id && 'active')}
+          className={cx('mobileChecklistPickerItem', selectedTemplate?.id === template.id && 'active')}
           onClick={() => setSelectedTemplateId(template.id)}
         >
           <strong>{template.title}</strong>
-          <span>{checklistTypes[template.type] || template.type} · {template.items.length} пунктов</span>
+          <span>{template.items.length} пунктов</span>
         </button>)}
       </div>}
 
-      {selectedTemplate && <Card className="mobileCard mobileProgressCard">
-        <div className="mobileProgressCardCopy">
-          <div>
-            <h3>{selectedTemplate.title}</h3>
-            <p>Прогресс выполнения</p>
-          </div>
-          <CircularProgress value={completedChecklistItems} max={selectedTemplate.items.length} />
+      {selectedTemplate && <Card className="mobileCard compactMobileCard">
+        <div className="mobileProgressCardCopy compact">
+          <h3>{selectedTemplate.title}</h3>
+          <span className="badge active">{completedChecklistItems} / {selectedTemplate.items.length}</span>
         </div>
         <ProgressBar value={completedChecklistItems} max={selectedTemplate.items.length} />
-        <div className="mobileProgressMeta">
-          <span>{completedChecklistItems} / {selectedTemplate.items.length} выполнено</span>
-          <span>{roles[user.role]}</span>
-        </div>
       </Card>}
 
-      {selectedTemplate && <div className="mobileChecklistTasks">
+      {selectedTemplate && <div className="mobileChecklistPlainList">
         {selectedTemplate.items.map((item: any, index: number) => {
           const itemAnswer = answers[item.id] || {};
-          return <div key={item.id} className={cx('mobileChecklistItem', itemAnswer.done && 'done')}>
+          return <div key={item.id} className={cx('mobileChecklistLine', itemAnswer.done && 'done')}>
             <button
               type="button"
               className={cx('mobileChecklistToggle', itemAnswer.done && 'done')}
-              onClick={() => updateAnswer(item.id, { done: !itemAnswer.done, photo_url: itemAnswer.done ? '' : itemAnswer.photo_url })}
+              onClick={() => toggleChecklistItem(item)}
               aria-label={itemAnswer.done ? 'Снять отметку' : 'Отметить выполненным'}
             >
               {itemAnswer.done && <span>✓</span>}
             </button>
-            <div className="mobileChecklistBody">
-              <div className="mobileChecklistHead">
-                <div>
-                  <strong>{item.text}</strong>
-                  <span>Пункт {index + 1} из {selectedTemplate.items.length}</span>
-                </div>
+            <div className="mobileChecklistLineBody">
+              <div className="mobileChecklistLineHead">
+                <strong>{item.text}</strong>
+                <span>{index + 1} / {selectedTemplate.items.length}</span>
+              </div>
+              {itemAnswer.done && <div className="mobileChecklistLineMeta">
+                <span className="mobileChecklistPhotoStatus">
+                  <AppIcon name="camera" className="navIcon" />
+                  Фото добавлено
+                </span>
                 <button
                   type="button"
-                  className={cx('mobileCameraButton', itemAnswer.photo_url && 'ready')}
+                  className="mobileChecklistRetake"
                   onClick={() => setCameraTarget({ itemId: item.id, title: item.text })}
                 >
-                  <AppIcon name="camera" className="navIcon" />
+                  Переснять
                 </button>
-              </div>
+              </div>}
+              {itemAnswer.done && itemAnswer.photo_url && <img className="mobileChecklistPhoto" src={itemAnswer.photo_url} alt={`Фото: ${item.text}`} />}
               {itemAnswer.done && <Textarea
-                label="Комментарий (необязательно)"
+                label="Комментарий"
                 value={itemAnswer.comment || ''}
                 onChange={(e: any) => updateAnswer(item.id, { comment: e.target.value })}
-                placeholder="Напишите комментарий..."
+                placeholder="Комментарий"
               />}
-              {itemAnswer.photo_url && <img className="mobileChecklistPhoto" src={itemAnswer.photo_url} alt={`Фото: ${item.text}`} />}
             </div>
           </div>;
         })}
       </div>}
 
-      {selectedTemplate && <div className="mobileChecklistActions">
-        <Button
-          type="button"
-          kind="soft"
-          className="mobileGhostButton"
-          onClick={() => setRunMsg('Дополнительные пункты добавляет менеджер в шаблон чек-листа.')}
-        >
-          + Добавить задачу
-        </Button>
-        <Button
-          type="button"
-          kind="soft"
-          className="mobileGhostButton"
-          onClick={() => {
-            const nextTarget = selectedTemplate.items.find((item: any) => answers[item.id]?.done && !answers[item.id]?.photo_url) || selectedTemplate.items[0];
-            if (nextTarget) setCameraTarget({ itemId: nextTarget.id, title: nextTarget.text });
-          }}
-        >
-          Сделать фото
-        </Button>
+      {selectedTemplate && <div className="mobileChecklistActions single">
         <Button
           type="button"
           className="mobilePrimaryButton"
@@ -1391,7 +1331,7 @@ function Requests({ user, admin = false }: any) {
 
   if (!admin) {
     return <div className="mobileSectionStack">
-      <SectionTitle title="Заявки" subtitle="Создавайте запросы и отслеживайте статус поставок" />
+      <SectionTitle title="Заявки" />
 
       <Card title="Создать заявку" className="mobileCard">
         <div className="mobileProductsList">
@@ -1591,7 +1531,7 @@ function Inventory({ user, admin = false }: any) {
     }
 
     return <div className="mobileSectionStack">
-      <SectionTitle title="Инвентаризация" subtitle="Заполняйте остатки быстро и без лишних шагов" />
+      <SectionTitle title="Инвентаризация" />
 
       <Card className="mobileCard">
         <Field
@@ -1800,7 +1740,7 @@ function Tasks({ user, admin = false }: any) {
     const finishedTechRequests = techRequests.filter((request) => ['done', 'cancelled'].includes(request.status));
 
     return <div className="mobileSectionStack">
-      <SectionTitle title="Задачи" subtitle="Управляйте поручениями и техзаявками по смене" />
+      <SectionTitle title="Задачи" />
 
       <Card title="Сообщить о техпроблеме" className="mobileCard">
         <form className="form" onSubmit={createTechRequest}>
@@ -1976,7 +1916,7 @@ function Knowledge({ user, admin = false }: any) {
 
     return <>
       <div className="mobileSectionStack">
-        <SectionTitle title="База знаний" subtitle="Инструкции, сервис-бук и документы для смены" />
+        <SectionTitle title="База знаний" />
         <Card className="mobileCard">
           <Field label="Поиск инструкций" icon="search" value={search} onChange={(e: any) => setSearch(e.target.value)} placeholder="Поиск инструкций..." />
           <div className="mobileKnowledgeGrid">
