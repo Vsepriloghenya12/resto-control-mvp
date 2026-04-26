@@ -85,14 +85,19 @@ export function publicUser(user) {
 
 export function canUseRestaurant(restaurant) {
   if (!restaurant) return false;
-  if (restaurant.subscription_status === 'active') return true;
-  if (restaurant.subscription_status === 'trial') return new Date(restaurant.trial_ends_at).getTime() >= Date.now();
+  if (restaurant.subscription_status === 'active') {
+    return !restaurant.subscription_ends_at || new Date(restaurant.subscription_ends_at).getTime() >= Date.now();
+  }
+  if (restaurant.subscription_status === 'trial') {
+    return Boolean(restaurant.trial_ends_at) && new Date(restaurant.trial_ends_at).getTime() >= Date.now();
+  }
   return false;
 }
 
 export function restaurantStatus(restaurant) {
   if (!restaurant) return 'missing';
   if (restaurant.subscription_status === 'trial' && !canUseRestaurant(restaurant)) return 'trial_expired';
+  if (restaurant.subscription_status === 'active' && !canUseRestaurant(restaurant)) return 'subscription_expired';
   return restaurant.subscription_status;
 }
 
@@ -163,6 +168,26 @@ function addInventoryTemplate(db, restaurant_id, department, title) {
     db.inventory_template_items.push({ id: uid('invitem'), restaurant_id, template_id: template.id, product_id: p.id, sort_order: idx + 1 });
   });
   return template;
+}
+
+export function syncProductWithInventoryTemplates(db, product) {
+  const templates = db.inventory_templates.filter(t => t.restaurant_id === product.restaurant_id && t.department === product.department);
+  templates.forEach(template => {
+    const exists = db.inventory_template_items.some(i => i.template_id === template.id && i.product_id === product.id);
+    if (exists) return;
+
+    const nextSortOrder = db.inventory_template_items
+      .filter(i => i.template_id === template.id)
+      .reduce((max, i) => Math.max(max, Number(i.sort_order) || 0), 0) + 1;
+
+    db.inventory_template_items.push({
+      id: uid('invitem'),
+      restaurant_id: product.restaurant_id,
+      template_id: template.id,
+      product_id: product.id,
+      sort_order: nextSortOrder
+    });
+  });
 }
 
 function addKnowledge(db, restaurant_id, title, allowed_roles, docs) {

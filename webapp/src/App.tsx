@@ -19,6 +19,14 @@ const departments: Record<string, string> = {
   common: 'Общее'
 };
 
+const subscriptionStatuses: Record<string, string> = {
+  active: 'активна',
+  blocked: 'заблокирована',
+  trial: 'trial',
+  trial_expired: 'trial истёк',
+  subscription_expired: 'подписка истекла'
+};
+
 function fmtDate(value?: string) {
   if (!value) return '—';
   return new Date(value).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
@@ -27,6 +35,11 @@ function fmtDate(value?: string) {
 function daysLeft(value?: string) {
   if (!value) return 0;
   return Math.max(0, Math.ceil((new Date(value).getTime() - Date.now()) / 86400000));
+}
+
+function subscriptionLabel(status?: string) {
+  if (!status) return 'неизвестно';
+  return subscriptionStatuses[status] || status;
 }
 
 function Card({ title, children, right }: { title?: string; children: any; right?: any }) {
@@ -99,6 +112,14 @@ function AuthScreen({ onLogin, error, setError }: any) {
   const [form, setForm] = useState<any>({ login: 'owner', password: 'owner123', restaurantName: '', ownerName: '', phone: '', email: '', city: '' });
   const [busy, setBusy] = useState(false);
 
+  function switchView(next: View) {
+    setError('');
+    setView(next);
+    setForm((current: any) => next === 'login'
+      ? { ...current, login: 'owner', password: 'owner123' }
+      : { ...current, login: '', password: '' });
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     setBusy(true); setError('');
@@ -118,8 +139,8 @@ function AuthScreen({ onLogin, error, setError }: any) {
       <h1>Resto Control</h1>
       <p>Чек-листы, заявки, инвентаризация, задачи и сервис-бук для ресторанов.</p>
       <div className="switcher">
-        <button className={view === 'login' ? 'active' : ''} onClick={() => setView('login')}>Войти</button>
-        <button className={view === 'register' ? 'active' : ''} onClick={() => setView('register')}>14 дней бесплатно</button>
+        <button className={view === 'login' ? 'active' : ''} onClick={() => switchView('login')}>Войти</button>
+        <button className={view === 'register' ? 'active' : ''} onClick={() => switchView('register')}>14 дней бесплатно</button>
       </div>
       <form onSubmit={submit} className="form">
         {view === 'register' && <>
@@ -181,7 +202,7 @@ function SuperAdmin() {
     {tab === 'restaurants' && <Card title="Рестораны платформы">
       <div className="grid cardsGrid">
         {restaurants.map(r => <div className="miniCard" key={r.id}>
-          <div className="rowBetween"><b>{r.name}</b><span className={`badge ${r.computed_status}`}>{r.computed_status}</span></div>
+          <div className="rowBetween"><b>{r.name}</b><span className={`badge ${r.computed_status}`}>{subscriptionLabel(r.computed_status)}</span></div>
           <p>{r.city || 'Город не указан'} · сотрудников: {r.users_count}</p>
           <p>Trial до: {fmtDate(r.trial_ends_at)} · осталось {daysLeft(r.trial_ends_at)} дн.</p>
           <p>Заявки: {r.requests_count} · чек-листы: {r.checklist_runs_count}</p>
@@ -227,7 +248,17 @@ function RestaurantAdmin({ user, restaurant }: any) {
 function SubscriptionBanner({ restaurant }: any) {
   const status = restaurant?.subscription_status;
   const left = daysLeft(restaurant?.trial_ends_at);
-  return <div className={`subBanner ${status}`}>{status === 'trial' ? `Пробный период: осталось ${left} дн. Доступ до ${fmtDate(restaurant.trial_ends_at)}` : `Статус подписки: ${status}`}</div>;
+  const computedStatus = restaurant?.subscription_status === 'active' && daysLeft(restaurant?.subscription_ends_at) === 0 && restaurant?.subscription_ends_at
+    ? 'subscription_expired'
+    : restaurant?.subscription_status === 'trial' && left === 0
+      ? 'trial_expired'
+      : status;
+
+  return <div className={`subBanner ${computedStatus}`}>
+    {computedStatus === 'trial'
+      ? `Пробный период: осталось ${left} дн. Доступ до ${fmtDate(restaurant.trial_ends_at)}`
+      : `Статус подписки: ${subscriptionLabel(computedStatus)}`}
+  </div>;
 }
 
 function AdminOverview() {

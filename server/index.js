@@ -17,7 +17,8 @@ import {
   canUseRestaurant,
   restaurantStatus,
   roleToDepartment,
-  createRestaurantWithDefaults
+  createRestaurantWithDefaults,
+  syncProductWithInventoryTemplates
 } from './db.js';
 
 const app = express();
@@ -89,6 +90,31 @@ function hasRoleAccess(user, allowedRoles = []) {
   if (!allowedRoles || allowedRoles.length === 0) return true;
   if (['owner', 'manager'].includes(user.role)) return true;
   return allowedRoles.includes(user.role);
+}
+
+function normalizeRequestItems(restaurant_id, department, rawItems = []) {
+  const positiveItems = Array.isArray(rawItems) ? rawItems.filter(i => Number(i?.qty_ordered) > 0) : [];
+  if (!positiveItems.length) {
+    return { error: 'Добавьте хотя бы одну позицию' };
+  }
+
+  const items = [];
+  for (const item of positiveItems) {
+    const product = db.products.find(p => p.id === item.product_id && p.restaurant_id === restaurant_id && p.active);
+    if (!product) {
+      return { error: 'Одна или несколько позиций не найдены' };
+    }
+    if (product.department !== department) {
+      return { error: 'В заявке могут быть только товары выбранного отдела' };
+    }
+    items.push({
+      product_id: product.id,
+      qty_ordered: Number(item.qty_ordered),
+      comment: item.comment || ''
+    });
+  }
+
+  return { items };
 }
 
 function makeAssignmentsForTask(task) {
@@ -283,6 +309,7 @@ app.post('/api/admin/products', auth, ensureRestaurantActive, adminOnly, (req, r
   if (!name || !unit || !department) return res.status(400).json({ error: 'Нужны название, единица и отдел' });
   const product = { id: uid('prod'), restaurant_id: req.user.restaurant_id, name, unit, department, category: category || '', active: true, created_at: nowIso() };
   db.products.push(product);
+  syncProductWithInventoryTemplates(db, product);
   persist();
   res.status(201).json(product);
 });
@@ -306,13 +333,12 @@ app.post('/api/requests', auth, ensureRestaurantActive, (req, res) => {
   const rid = req.user.restaurant_id;
   const department = req.body.department || req.user.department;
   if (!['owner', 'manager'].includes(req.user.role) && department !== req.user.department) return res.status(403).json({ error: 'Нельзя создавать заявки другого отдела' });
-  const items = Array.isArray(req.body.items) ? req.body.items.filter(i => Number(i.qty_ordered) > 0) : [];
-  if (!items.length) return res.status(400).json({ error: 'Добавьте хотя бы одну позицию' });
+  const normalized = normalizeRequestItems(rid, department, req.body.items);
+  if (normalized.error) return res.status(400).json({ error: normalized.error });
   const request = { id: uid('req'), restaurant_id: rid, department, created_by: req.user.id, status: 'sent', comment: req.body.comment || '', created_at: nowIso(), updated_at: nowIso() };
   db.product_requests.push(request);
-  items.forEach(i => {
-    const product = db.products.find(p => p.id === i.product_id && p.restaurant_id === rid);
-    if (product) db.request_items.push({ id: uid('reqi'), restaurant_id: rid, request_id: request.id, product_id: product.id, qty_ordered: Number(i.qty_ordered), qty_received: 0, status: 'ordered', comment: i.comment || '' });
+  normalized.items.forEach(i => {
+    db.request_items.push({ id: uid('reqi'), restaurant_id: rid, request_id: request.id, product_id: i.product_id, qty_ordered: i.qty_ordered, qty_received: 0, status: 'ordered', comment: i.comment });
   });
   persist();
   res.status(201).json(request);
