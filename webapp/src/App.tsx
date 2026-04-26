@@ -27,6 +27,8 @@ const subscriptionStatuses: Record<string, string> = {
   subscription_expired: 'подписка истекла'
 };
 
+const brandLogoSrc = '/resto-control-logo.png';
+
 function fmtDate(value?: string) {
   if (!value) return '—';
   return new Date(value).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
@@ -180,15 +182,22 @@ export default function App() {
     setSession(null);
   }
 
-  if (loading) return <div className="splash"><div className="logo">✓</div><b>Resto Control</b><span>Загружаем приложение</span></div>;
+  if (loading) return <div className="splash">
+    <img className="splashLogo" src={brandLogoSrc} alt="Resto Control" />
+    <b>Загружаем Resto Control</b>
+    <span>Подготавливаем рабочее пространство</span>
+  </div>;
   if (!session) return <AuthScreen onLogin={(data: any) => { setToken(data.token); setSession(data); }} error={error} setError={setError} />;
 
   const user = session.user;
   return <div className="appShell">
     <header className="topbar">
-      <div>
-        <div className="brand">Resto Control</div>
-        <div className="muted">{user.is_super_admin ? 'Супер-админ создателя' : session.restaurant?.name}</div>
+      <div className="topbarBrand">
+        <img className="topbarLogo" src={brandLogoSrc} alt="Resto Control" />
+        <div className="topbarMeta">
+          <div className="topbarContext">{user.is_super_admin ? 'Супер-админ создателя' : session.restaurant?.name}</div>
+          <div className="muted">{user.is_super_admin ? 'Управление платформой' : `${roles[user.role] || user.role} в рабочем кабинете`}</div>
+        </div>
       </div>
       <button className="logout" onClick={onLogout}>Выйти</button>
     </header>
@@ -223,9 +232,10 @@ function AuthScreen({ onLogin, error, setError }: any) {
 
   return <main className="authPage">
     <div className="authCard">
-      <div className="authLogo">✓</div>
-      <h1>Resto Control</h1>
-      <p>Чек-листы, заявки, инвентаризация, задачи и сервис-бук для ресторанов.</p>
+      <div className="authBrandLockup">
+        <img className="authLogoImage" src={brandLogoSrc} alt="Resto Control" />
+      </div>
+      <p className="authLead">Чек-листы, заявки, инвентаризация, задачи и сервис-бук для ресторанов.</p>
       <div className="switcher">
         <button className={view === 'login' ? 'active' : ''} onClick={() => switchView('login')}>Войти</button>
         <button className={view === 'register' ? 'active' : ''} onClick={() => switchView('register')}>14 дней бесплатно</button>
