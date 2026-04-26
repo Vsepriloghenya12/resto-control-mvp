@@ -168,6 +168,21 @@ create table if not exists task_assignments (
   completed_at timestamptz
 );
 
+create table if not exists tech_requests (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  created_by text not null references users(id),
+  title text not null,
+  description text,
+  category text not null default 'other',
+  status text not null default 'new',
+  manager_comment text,
+  started_at timestamptz,
+  resolved_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists knowledge_categories (
   id text primary key,
   restaurant_id text not null references restaurants(id) on delete cascade,
@@ -215,4 +230,5 @@ create index if not exists idx_users_restaurant on users(restaurant_id);
 create index if not exists idx_requests_restaurant on product_requests(restaurant_id);
 create index if not exists idx_inventory_runs_restaurant on inventory_runs(restaurant_id);
 create index if not exists idx_tasks_restaurant on tasks(restaurant_id);
+create index if not exists idx_tech_requests_restaurant on tech_requests(restaurant_id);
 create index if not exists idx_knowledge_restaurant on knowledge_documents(restaurant_id);

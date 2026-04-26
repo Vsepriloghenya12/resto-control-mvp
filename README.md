@@ -12,8 +12,8 @@ npm run dev
 
 Открой:
 
-- webapp: http://localhost:5173
-- backend: http://localhost:8080
+- webapp: http://localhost:4173
+- backend: http://localhost:8090
 
 ## Первичный доступ
 

@@ -19,11 +19,12 @@ import {
   restaurantStatus,
   roleToDepartment,
   createRestaurantWithDefaults,
-  syncProductWithInventoryTemplates
+  syncProductWithInventoryTemplates,
+  moveProductBetweenInventoryTemplates
 } from './db.js';
 
 const app = express();
-const PORT = Number(process.env.PORT || 8080);
+const PORT = Number(process.env.PORT || 8090);
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -436,6 +437,30 @@ app.post('/api/admin/products', auth, ensureRestaurantActive, adminOnly, runAsyn
   res.status(201).json(product);
 }));
 
+app.patch('/api/admin/products/:id', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
+  const product = db.products.find(p => p.id === req.params.id && p.restaurant_id === req.user.restaurant_id);
+  if (!product) return res.status(404).json({ error: 'Товар не найден' });
+
+  const nextName = req.body.name !== undefined ? String(req.body.name).trim() : product.name;
+  const nextUnit = req.body.unit !== undefined ? String(req.body.unit).trim() : product.unit;
+  const nextDepartment = req.body.department !== undefined ? String(req.body.department).trim() : product.department;
+  const nextCategory = req.body.category !== undefined ? String(req.body.category).trim() : product.category;
+
+  if (!nextName || !nextUnit || !nextDepartment) {
+    return res.status(400).json({ error: 'Нужны название, единица и отдел' });
+  }
+
+  const previousDepartment = product.department;
+  product.name = nextName;
+  product.unit = nextUnit;
+  product.department = nextDepartment;
+  product.category = nextCategory;
+
+  moveProductBetweenInventoryTemplates(db, product, previousDepartment);
+  await persist();
+  res.json(product);
+}));
+
 // REQUESTS
 app.get('/api/requests', auth, ensureRestaurantActive, (req, res) => {
   const rid = req.user.restaurant_id;
@@ -584,6 +609,78 @@ app.patch('/api/tasks/:id/done', auth, ensureRestaurantActive, runAsync(async (r
   res.json(assignment);
 }));
 
+// TECH REQUESTS
+app.get('/api/tech-requests', auth, ensureRestaurantActive, (req, res) => {
+  const rid = req.user.restaurant_id;
+  const isAdmin = ['owner', 'manager'].includes(req.user.role);
+  const rows = sameRestaurant(db.tech_requests, rid)
+    .filter(request => isAdmin || request.created_by === req.user.id)
+    .map(request => ({
+      ...request,
+      created_by_user: publicUser(db.users.find(user => user.id === request.created_by))
+    }))
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  res.json(rows);
+});
+
+app.post('/api/tech-requests', auth, ensureRestaurantActive, runAsync(async (req, res) => {
+  const rid = req.user.restaurant_id;
+  const title = String(req.body.title || '').trim();
+  const description = String(req.body.description || '').trim();
+  const category = String(req.body.category || 'other').trim() || 'other';
+
+  if (!title) return res.status(400).json({ error: 'Нужно указать тему заявки' });
+
+  const request = {
+    id: uid('tech'),
+    restaurant_id: rid,
+    created_by: req.user.id,
+    title,
+    description,
+    category,
+    status: 'new',
+    manager_comment: '',
+    started_at: null,
+    resolved_at: null,
+    created_at: nowIso(),
+    updated_at: nowIso()
+  };
+  db.tech_requests.push(request);
+  await persist();
+  res.status(201).json(request);
+}));
+
+app.patch('/api/tech-requests/:id', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
+  const request = db.tech_requests.find(item => item.id === req.params.id && item.restaurant_id === req.user.restaurant_id);
+  if (!request) return res.status(404).json({ error: 'Техзаявка не найдена' });
+
+  const allowedStatuses = ['new', 'in_progress', 'done', 'cancelled'];
+  const nextStatus = req.body.status !== undefined ? String(req.body.status).trim() : request.status;
+  if (!allowedStatuses.includes(nextStatus)) return res.status(400).json({ error: 'Некорректный статус' });
+
+  request.status = nextStatus;
+  if (req.body.manager_comment !== undefined) {
+    request.manager_comment = String(req.body.manager_comment || '').trim();
+  }
+  if (nextStatus === 'in_progress' && !request.started_at) {
+    request.started_at = nowIso();
+  }
+  if (nextStatus === 'done') {
+    request.started_at = request.started_at || nowIso();
+    request.resolved_at = nowIso();
+  }
+  if (nextStatus !== 'done') {
+    request.resolved_at = null;
+  }
+  request.updated_at = nowIso();
+
+  await persist();
+  res.json({
+    ...request,
+    created_by_user: publicUser(db.users.find(user => user.id === request.created_by))
+  });
+}));
+
 // KNOWLEDGE BASE
 app.get('/api/knowledge', auth, ensureRestaurantActive, (req, res) => {
   const rid = req.user.restaurant_id;
@@ -653,6 +750,7 @@ app.get('*', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`✅ Resto Control MVP started on port ${PORT}`);
+  console.log(`Local API: http://localhost:${PORT}`);
   console.log(`Trial days: ${process.env.TRIAL_DAYS || 14}`);
   console.log(`Super admin: ${process.env.SUPER_ADMIN_LOGIN || 'admin'}`);
 });

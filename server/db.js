@@ -33,6 +33,7 @@ const SNAPSHOT_TABLES = [
   { name: 'inventory_values', columns: ['id', 'restaurant_id', 'inventory_run_id', 'product_id', 'qty', 'comment'] },
   { name: 'tasks', columns: ['id', 'restaurant_id', 'title', 'description', 'target_type', 'target_role', 'target_user_id', 'due_at', 'created_by', 'created_at', 'active'] },
   { name: 'task_assignments', columns: ['id', 'restaurant_id', 'task_id', 'user_id', 'done', 'comment', 'completed_at'] },
+  { name: 'tech_requests', columns: ['id', 'restaurant_id', 'created_by', 'title', 'description', 'category', 'status', 'manager_comment', 'started_at', 'resolved_at', 'created_at', 'updated_at'] },
   { name: 'knowledge_categories', columns: ['id', 'restaurant_id', 'title', 'allowed_roles', 'sort_order'], jsonColumns: ['allowed_roles'] },
   { name: 'knowledge_documents', columns: ['id', 'restaurant_id', 'category_id', 'title', 'type', 'content', 'file_url', 'allowed_roles', 'requires_acknowledgement', 'version', 'is_active', 'created_by', 'created_at', 'updated_at', 'sort_order'], jsonColumns: ['allowed_roles'] },
   { name: 'knowledge_acknowledgements', columns: ['id', 'restaurant_id', 'document_id', 'user_id', 'version', 'acknowledged_at'] },
@@ -163,6 +164,7 @@ function emptyDb() {
     inventory_values: [],
     tasks: [],
     task_assignments: [],
+    tech_requests: [],
     knowledge_categories: [],
     knowledge_documents: [],
     knowledge_acknowledgements: [],
@@ -181,7 +183,7 @@ export function loadDb() {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
     return db;
   }
-  return readJsonDb();
+  return { ...emptyDb(), ...readJsonDb() };
 }
 
 export function saveDb(db) {
@@ -329,6 +331,19 @@ export function syncProductWithInventoryTemplates(db, product) {
       sort_order: nextSortOrder
     });
   });
+}
+
+export function moveProductBetweenInventoryTemplates(db, product, previousDepartment) {
+  const templates = db.inventory_templates.filter(t => t.restaurant_id === product.restaurant_id);
+  const staleTemplateIds = templates
+    .filter(t => t.department !== product.department && (!previousDepartment || t.department === previousDepartment))
+    .map(t => t.id);
+
+  if (staleTemplateIds.length) {
+    db.inventory_template_items = db.inventory_template_items.filter(item => !(item.product_id === product.id && staleTemplateIds.includes(item.template_id)));
+  }
+
+  syncProductWithInventoryTemplates(db, product);
 }
 
 function addKnowledge(db, restaurant_id, title, allowed_roles, docs) {
