@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { api, clearToken, download, getToken, setToken } from './api';
 import {
   AppIcon,
@@ -28,8 +28,8 @@ type Tab = string;
 type WorkspaceModalKind = 'notifications' | 'support' | 'billing' | null;
 type MobileSheetKind = 'menu' | 'create' | 'profile' | null;
 type MobileWorkspaceConfig = {
-  title: string;
-  subtitle?: string;
+  title: ReactNode;
+  subtitle?: ReactNode;
   isOverview?: boolean;
   navItems: MobileNavItem[];
   menuItems: MobileActionItem[];
@@ -96,6 +96,10 @@ const subscriptionStatuses: Record<string, string> = {
 };
 
 const brandLogoSrc = '/resto-control-logo.png';
+
+function cx(...parts: Array<string | false | null | undefined>) {
+  return parts.filter(Boolean).join(' ');
+}
 
 function fmtDate(value?: string) {
   if (!value) return '—';
@@ -512,6 +516,7 @@ function RestaurantWorkspace({
   children: any;
 }) {
   const [modalKind, setModalKind] = useState<WorkspaceModalKind>(null);
+  const [sheet, setSheet] = useState<MobileSheetKind>(null);
 
   function openNotifications() {
     setModalKind('notifications');
@@ -559,6 +564,33 @@ function RestaurantWorkspace({
           }
         : null;
 
+  const mobileNavItems: MobileNavItem[] = [
+    { id: 'overview', title: 'Обзор', icon: 'overview', active: active === 'overview', onClick: () => setActive('overview') },
+    { id: 'checklists', title: 'Чек-листы', icon: 'checklists', active: active === 'checklists', onClick: () => setActive('checklists') },
+    { id: 'tasks', title: 'Задачи', icon: 'tasks', active: active === 'tasks', onClick: () => setActive('tasks') },
+    { id: 'knowledge', title: 'Профиль', icon: 'user', active: active === 'knowledge', onClick: () => setActive('knowledge') }
+  ];
+
+  const mobileMenuItems: MobileActionItem[] = tabs.map((tab) => ({
+    id: tab.id,
+    title: tab.title,
+    subtitle: restaurant?.name,
+    icon: tab.icon || 'overview',
+    onClick: () => setActive(tab.id)
+  }));
+
+  const mobileCreateItems: MobileActionItem[] = [
+    { id: 'users', title: 'Сотрудники', subtitle: 'Добавить и управлять доступами', icon: 'users', onClick: () => setActive('users') },
+    { id: 'requests', title: 'Заявки', subtitle: 'Открыть закупки и приёмку', icon: 'requests', onClick: () => setActive('requests') },
+    { id: 'inventory', title: 'Инвентаризация', subtitle: 'Проверить остатки и Excel-отчёты', icon: 'inventory', onClick: () => setActive('inventory') }
+  ];
+
+  const mobileProfileItems: MobileActionItem[] = [
+    { id: 'support', title: 'Поддержка', subtitle: 'База знаний и сопровождение', icon: 'support', onClick: openSupport },
+    { id: 'billing', title: 'Тарифы и оплата', subtitle: 'Статус подписки и продление', icon: 'trial', onClick: openBilling },
+    { id: 'logout', title: 'Выйти', subtitle: 'Завершить рабочую сессию', icon: 'logout', onClick: onLogout }
+  ];
+
   return <main className="workspaceLayout">
     <SidebarNav
       logoSrc={brandLogoSrc}
@@ -569,20 +601,44 @@ function RestaurantWorkspace({
       onSupportClick={openSupport}
     />
     <section className="workspaceMain">
-      <WorkspaceHeader
-        userName={user.name}
-        roleLabel={`${roles[user.role]} в рабочем кабинете`}
-        onLogout={onLogout}
-        onNotifications={openNotifications}
-      />
-      <div className="workspaceSubline">{restaurant?.name}</div>
-      {banner(openBilling)}
-      <div className="mobileTabsWrap">
-        <Nav tabs={tabs} active={active} setActive={setActive} />
+      <div className="mobileWorkspaceChrome">
+        <MobileHeader
+          mode={active === 'overview' ? 'overview' : 'page'}
+          title={active === 'overview' ? <>Добро пожаловать, <em>{user.name}</em></> : mobileTabTitle(active, tabs)}
+          subtitle={active === 'overview' ? `${roles[user.role]} в рабочем кабинете` : restaurant?.name}
+          logoSrc={brandLogoSrc}
+          userInitials={userInitials(user.name)}
+          notificationCount={0}
+          onMenu={() => setSheet('menu')}
+          onBack={() => setActive('overview')}
+          onNotifications={() => setActive('tasks')}
+          onAction={() => setSheet('profile')}
+        />
       </div>
-      <div className="workspaceContent">{children}</div>
+
+      <div className="desktopWorkspaceChrome">
+        <WorkspaceHeader
+          userName={user.name}
+          roleLabel={`${roles[user.role]} в рабочем кабинете`}
+          onLogout={onLogout}
+          onNotifications={openNotifications}
+        />
+        <div className="workspaceSubline">{restaurant?.name}</div>
+        <div className="mobileTabsWrap">
+          <Nav tabs={tabs} active={active} setActive={setActive} />
+        </div>
+      </div>
+
+      <div className="pageContainer workspacePageContainer">
+        {banner(openBilling)}
+        <div className="workspaceContent">{children}</div>
+      </div>
     </section>
     {modal && <WorkspaceInfoModal title={modal.title} text={modal.text} actions={modal.actions} onClose={closeModal} />}
+    <BottomNavigation items={mobileNavItems} onCreate={() => setSheet('create')} />
+    <BottomSheet open={sheet === 'menu'} title="Разделы кабинета" items={mobileMenuItems} onClose={() => setSheet(null)} />
+    <BottomSheet open={sheet === 'create'} title="Быстрые действия" items={mobileCreateItems} onClose={() => setSheet(null)} />
+    <BottomSheet open={sheet === 'profile'} title="Профиль и доступ" items={mobileProfileItems} onClose={() => setSheet(null)} />
   </main>;
 }
 
@@ -761,10 +817,46 @@ function UsersAdmin() {
 
 function EmployeeApp({ user, restaurant, onLogout }: any) {
   const [tab, setTab] = useState<Tab>('today');
+  const [notificationCount, setNotificationCount] = useState(0);
   const tabs = withIcons([
     { id: 'today', title: 'Сегодня' }, { id: 'checklists', title: 'Чек-лист' }, { id: 'requests', title: 'Заявки' },
     { id: 'inventory', title: 'Инвент.' }, { id: 'tasks', title: 'Задачи' }, { id: 'knowledge', title: 'База' }
   ]);
+
+  useEffect(() => {
+    api('/api/tasks')
+      .then((rows) => setNotificationCount(rows.filter((task: any) => !task.assignment?.done).length))
+      .catch(() => setNotificationCount(0));
+  }, [tab]);
+
+  const mobileNavItems: MobileNavItem[] = [
+    { id: 'today', title: 'Обзор', icon: 'overview', active: tab === 'today', onClick: () => setTab('today') },
+    { id: 'checklists', title: 'Чек-листы', icon: 'checklists', active: tab === 'checklists', onClick: () => setTab('checklists') },
+    { id: 'tasks', title: 'Задачи', icon: 'tasks', active: tab === 'tasks', onClick: () => setTab('tasks') },
+    { id: 'profile', title: 'Профиль', icon: 'user', onClick: () => setTab('knowledge') }
+  ];
+
+  const mobileMenuItems: MobileActionItem[] = [
+    { id: 'today', title: 'Обзор', subtitle: 'Главная сводка по смене', icon: 'overview', onClick: () => setTab('today') },
+    { id: 'checklists', title: 'Чек-листы', subtitle: 'Открытие, закрытие и фотоотчёты', icon: 'checklists', onClick: () => setTab('checklists') },
+    { id: 'requests', title: 'Заявки', subtitle: 'Запросы по товарам и сервису', icon: 'requests', onClick: () => setTab('requests') },
+    { id: 'inventory', title: 'Инвентаризация', subtitle: 'Остатки и позиции отдела', icon: 'inventory', onClick: () => setTab('inventory') },
+    { id: 'tasks', title: 'Задачи', subtitle: 'Личные задачи и техзаявки', icon: 'tasks', onClick: () => setTab('tasks') },
+    { id: 'knowledge', title: 'База знаний', subtitle: 'Инструкции и сервис-бук', icon: 'knowledge', onClick: () => setTab('knowledge') }
+  ];
+
+  const mobileCreateItems: MobileActionItem[] = [
+    { id: 'request', title: 'Создать заявку', subtitle: 'Открыть запросы и отправить новую заявку', icon: 'requests', onClick: () => setTab('requests') },
+    { id: 'inventory', title: 'Открыть инвентаризацию', subtitle: 'Быстро заполнить остатки', icon: 'inventory', onClick: () => setTab('inventory') },
+    { id: 'tech', title: 'Сообщить о проблеме', subtitle: 'Техзаявка для менеджера', icon: 'tasks', onClick: () => setTab('tasks') }
+  ];
+
+  const mobileProfileItems: MobileActionItem[] = [
+    { id: 'knowledge', title: 'База знаний', subtitle: 'Инструкции и документы', icon: 'knowledge', onClick: () => setTab('knowledge') },
+    { id: 'profile', title: `${roles[user.role]} · ${restaurant?.name}`, subtitle: 'Ваш рабочий кабинет', icon: 'user', onClick: () => setTab('today') },
+    { id: 'logout', title: 'Выйти из аккаунта', subtitle: 'Завершить сессию', icon: 'logout', onClick: onLogout }
+  ];
+
   return <BasicWorkspace
     user={user}
     subtitle={`${roles[user.role]} · ${restaurant?.name}`}
@@ -772,9 +864,20 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     active={tab}
     setActive={setTab}
     onLogout={onLogout}
+    mobile={{
+      title: tab === 'today' ? <>Добро пожаловать, <em>{user.name}</em></> : mobileTabTitle(tab, tabs),
+      subtitle: tab === 'today' ? roles[user.role] : restaurant?.name,
+      isOverview: tab === 'today',
+      navItems: mobileNavItems,
+      menuItems: mobileMenuItems,
+      createItems: mobileCreateItems,
+      profileItems: mobileProfileItems,
+      notificationCount,
+      onNotifications: () => setTab('tasks')
+    }}
   >
     <div className="hello"><b>{user.name}</b><span>{roles[user.role]} · {restaurant?.name}</span></div>
-    {tab === 'today' && <Today user={user} />}
+    {tab === 'today' && <Today user={user} onOpenTasks={() => setTab('tasks')} onOpenChecklists={() => setTab('checklists')} onOpenRequests={() => setTab('requests')} />}
     {tab === 'checklists' && <Checklists user={user} />}
     {tab === 'requests' && <Requests user={user} />}
     {tab === 'inventory' && <Inventory user={user} />}
@@ -783,10 +886,139 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
   </BasicWorkspace>;
 }
 
-function Today({ user }: any) {
-  return <div className="grid">
-    <Card title="Ваш день"><p>Роль: <b>{roles[user.role]}</b></p><p>Отдел: <b>{departments[user.department]}</b></p><p>Откройте чек-лист, создайте заявку, заполните инвентаризацию или посмотрите сервис-бук.</p></Card>
-    <Card title="Что важно"><ul className="cleanList"><li>Чек-листы сохраняют дату, время и автора.</li><li>Заявки коллег видны внутри отдела.</li><li>Документы можно подтвердить кнопкой «Ознакомился».</li></ul></Card>
+function Today({
+  user,
+  onOpenTasks,
+  onOpenChecklists,
+  onOpenRequests
+}: {
+  user: any;
+  onOpenTasks: () => void;
+  onOpenChecklists: () => void;
+  onOpenRequests: () => void;
+}) {
+  const [overview, setOverview] = useState<any | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    Promise.all([
+      api('/api/checklists/templates').catch(() => []),
+      api('/api/tasks').catch(() => []),
+      api('/api/requests').catch(() => []),
+      api('/api/inventory/templates').catch(() => [])
+    ]).then(([checklists, tasks, requests, templates]) => {
+      if (!active) return;
+      setOverview({
+        checklists,
+        tasks,
+        requests,
+        templates
+      });
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (!overview) {
+    return <div className="mobileSectionStack">
+      <div className="mobileStatsGrid">
+        {Array.from({ length: 4 }).map((_, index) => <div key={index} className="mobileSkeletonCard" />)}
+      </div>
+      <Card className="mobileCard">
+        <Empty text="Собираем обзор смены" />
+      </Card>
+    </div>;
+  }
+
+  const openTasks = overview.tasks.filter((task: any) => !task.assignment?.done);
+  const completedTasks = overview.tasks.filter((task: any) => task.assignment?.done);
+  const openRequests = overview.requests.filter((request: any) => !['received', 'done', 'cancelled'].includes(request.status));
+  const inventoryItems = overview.templates.reduce((total: number, template: any) => total + (template.items?.length || 0), 0);
+  const recentEvents = [
+    ...overview.requests.slice(0, 2).map((request: any) => ({
+      id: `request-${request.id}`,
+      icon: 'requests' as IconName,
+      title: `Заявка ${departments[request.department] || 'отдела'}`,
+      subtitle: `${request.items?.length || 0} позиций · ${fmtDate(request.created_at)}`
+    })),
+    ...overview.tasks.slice(0, 2).map((task: any) => ({
+      id: `task-${task.id}`,
+      icon: 'tasks' as IconName,
+      title: task.title,
+      subtitle: task.assignment?.done ? 'Выполнено' : 'В работе'
+    }))
+  ].slice(0, 4);
+
+  return <div className="mobileSectionStack">
+    <SectionTitle
+      title="Сегодня"
+      subtitle="Быстрый обзор по смене, задачам и рабочим действиям"
+      action={<button type="button" className="sectionLink" onClick={onOpenTasks}>Смотреть всё</button>}
+    />
+
+    <div className="mobileStatsGrid">
+      <article className="mobileStatCard">
+        <div className="mobileStatBadge blue"><AppIcon name="checklists" className="navIcon" /></div>
+        <strong>{overview.checklists.length}</strong>
+        <span>Чек-листа</span>
+        <small>на сегодня</small>
+      </article>
+      <article className="mobileStatCard">
+        <div className="mobileStatBadge green"><AppIcon name="tasks" className="navIcon" /></div>
+        <strong>{openTasks.length}</strong>
+        <span>Задачи</span>
+        <small>в работе</small>
+      </article>
+      <article className="mobileStatCard">
+        <div className="mobileStatBadge amber"><AppIcon name="requests" className="navIcon" /></div>
+        <strong>{openRequests.length}</strong>
+        <span>Заявки</span>
+        <small>в обработке</small>
+      </article>
+      <article className="mobileStatCard">
+        <div className="mobileStatBadge purple"><AppIcon name="inventory" className="navIcon" /></div>
+        <strong>{inventoryItems}</strong>
+        <span>Товаров</span>
+        <small>в наличии</small>
+      </article>
+    </div>
+
+    <Card title="Приоритетные задачи" className="mobileCard">
+      <div className="mobileTaskList">
+        {openTasks.slice(0, 3).map((task: any) => <button key={task.id} type="button" className="mobileTaskRow" onClick={onOpenTasks}>
+          <span className="mobileTaskStatus" />
+          <div className="mobileTaskCopy">
+            <strong>{task.title}</strong>
+            <span>{task.description || 'Откройте задачу, чтобы посмотреть детали.'}</span>
+          </div>
+          <span className="badge sent">{task.assignment?.done ? 'готово' : 'важно'}</span>
+        </button>)}
+        {openTasks.length === 0 && <Empty text="Нет открытых задач на эту смену" />}
+      </div>
+      <div className="mobileQuickActions">
+        <Button type="button" kind="soft" className="mobileGhostButton" onClick={onOpenChecklists}>Открыть чек-листы</Button>
+        <Button type="button" className="mobilePrimaryButton" onClick={onOpenRequests}>Создать заявку</Button>
+      </div>
+    </Card>
+
+    <Card title="Недавняя активность" className="mobileCard">
+      <div className="mobileActivityList">
+        {recentEvents.length === 0 && <Empty text="Пока нет новых событий" />}
+        {recentEvents.map((event) => <div key={event.id} className="mobileActivityItem">
+          <div className="mobileActivityIcon">
+            <AppIcon name={event.icon} className="navIcon" />
+          </div>
+          <div className="mobileActivityCopy">
+            <strong>{event.title}</strong>
+            <span>{event.subtitle}</span>
+          </div>
+        </div>)}
+      </div>
+      {completedTasks.length > 0 && <div className="mobileInlineHint">Выполнено задач за смену: {completedTasks.length}</div>}
+    </Card>
   </div>;
 }
 
@@ -798,6 +1030,8 @@ function Checklists({ user, admin = false }: any) {
   const [editorMsg, setEditorMsg] = useState('');
   const [cameraTarget, setCameraTarget] = useState<{ itemId: string; title: string } | null>(null);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [selectedType, setSelectedType] = useState<string>('all');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [templateForm, setTemplateForm] = useState<any>({
     title: '',
     role: 'manager',
@@ -898,6 +1132,162 @@ function Checklists({ user, admin = false }: any) {
     await api('/api/checklists/runs', { method: 'POST', body: JSON.stringify({ template_id: template.id, answers: templateAnswers }) });
     setRunMsg('Чек-лист сохранён'); setAnswers({}); load();
   }
+
+  const availableTemplates = admin
+    ? templates
+    : templates.filter((template) => !template.role || template.role === user.role);
+
+  const filteredTemplates = selectedType === 'all'
+    ? availableTemplates
+    : availableTemplates.filter((template) => template.type === selectedType);
+
+  useEffect(() => {
+    if (admin) return;
+    if (!filteredTemplates.length) {
+      setSelectedTemplateId('');
+      return;
+    }
+    if (!filteredTemplates.some((template) => template.id === selectedTemplateId)) {
+      setSelectedTemplateId(filteredTemplates[0].id);
+    }
+  }, [admin, filteredTemplates, selectedTemplateId]);
+
+  const selectedTemplate = !admin
+    ? filteredTemplates.find((template) => template.id === selectedTemplateId) || filteredTemplates[0]
+    : null;
+
+  const completedChecklistItems = selectedTemplate
+    ? selectedTemplate.items.filter((item: any) => answers[item.id]?.done).length
+    : 0;
+
+  const checklistRequiresPhoto = selectedTemplate?.items.some((item: any) => answers[item.id]?.done && !answers[item.id]?.photo_url);
+
+  if (!admin) {
+    return <div className="mobileSectionStack">
+      <SectionTitle title="Чек-листы" subtitle="Выполняйте задачи и отмечайте прогресс по смене" />
+
+      <div className="mobileChipRow">
+        <button type="button" className={cx('mobileChip', selectedType === 'all' && 'active')} onClick={() => setSelectedType('all')}>
+          <span>Все</span>
+          <b>{availableTemplates.length}</b>
+        </button>
+        {Object.entries(checklistTypes).map(([type, label]) => {
+          const count = availableTemplates.filter((template) => template.type === type).length;
+          return <button key={type} type="button" className={cx('mobileChip', selectedType === type && 'active')} onClick={() => setSelectedType(type)}>
+            <span>{label}</span>
+            <b>{count}</b>
+          </button>;
+        })}
+      </div>
+
+      {!filteredTemplates.length && <Card className="mobileCard">
+        <Empty text="Для вашей роли пока нет активных чек-листов" />
+      </Card>}
+
+      {!!filteredTemplates.length && <div className="mobileChecklistRail">
+        {filteredTemplates.map((template) => <button
+          key={template.id}
+          type="button"
+          className={cx('mobileChecklistTab', selectedTemplate?.id === template.id && 'active')}
+          onClick={() => setSelectedTemplateId(template.id)}
+        >
+          <strong>{template.title}</strong>
+          <span>{checklistTypes[template.type] || template.type} · {template.items.length} пунктов</span>
+        </button>)}
+      </div>}
+
+      {selectedTemplate && <Card className="mobileCard mobileProgressCard">
+        <div className="mobileProgressCardCopy">
+          <div>
+            <h3>{selectedTemplate.title}</h3>
+            <p>Прогресс выполнения</p>
+          </div>
+          <CircularProgress value={completedChecklistItems} max={selectedTemplate.items.length} />
+        </div>
+        <ProgressBar value={completedChecklistItems} max={selectedTemplate.items.length} />
+        <div className="mobileProgressMeta">
+          <span>{completedChecklistItems} / {selectedTemplate.items.length} выполнено</span>
+          <span>{roles[user.role]}</span>
+        </div>
+      </Card>}
+
+      {selectedTemplate && <div className="mobileChecklistTasks">
+        {selectedTemplate.items.map((item: any, index: number) => {
+          const itemAnswer = answers[item.id] || {};
+          return <div key={item.id} className={cx('mobileChecklistItem', itemAnswer.done && 'done')}>
+            <button
+              type="button"
+              className={cx('mobileChecklistToggle', itemAnswer.done && 'done')}
+              onClick={() => updateAnswer(item.id, { done: !itemAnswer.done, photo_url: itemAnswer.done ? '' : itemAnswer.photo_url })}
+              aria-label={itemAnswer.done ? 'Снять отметку' : 'Отметить выполненным'}
+            >
+              {itemAnswer.done && <span>✓</span>}
+            </button>
+            <div className="mobileChecklistBody">
+              <div className="mobileChecklistHead">
+                <div>
+                  <strong>{item.text}</strong>
+                  <span>Пункт {index + 1} из {selectedTemplate.items.length}</span>
+                </div>
+                <button
+                  type="button"
+                  className={cx('mobileCameraButton', itemAnswer.photo_url && 'ready')}
+                  onClick={() => setCameraTarget({ itemId: item.id, title: item.text })}
+                >
+                  <AppIcon name="camera" className="navIcon" />
+                </button>
+              </div>
+              {itemAnswer.done && <Textarea
+                label="Комментарий (необязательно)"
+                value={itemAnswer.comment || ''}
+                onChange={(e: any) => updateAnswer(item.id, { comment: e.target.value })}
+                placeholder="Напишите комментарий..."
+              />}
+              {itemAnswer.photo_url && <img className="mobileChecklistPhoto" src={itemAnswer.photo_url} alt={`Фото: ${item.text}`} />}
+            </div>
+          </div>;
+        })}
+      </div>}
+
+      {selectedTemplate && <div className="mobileChecklistActions">
+        <Button
+          type="button"
+          kind="soft"
+          className="mobileGhostButton"
+          onClick={() => setRunMsg('Дополнительные пункты добавляет менеджер в шаблон чек-листа.')}
+        >
+          + Добавить задачу
+        </Button>
+        <Button
+          type="button"
+          kind="soft"
+          className="mobileGhostButton"
+          onClick={() => {
+            const nextTarget = selectedTemplate.items.find((item: any) => answers[item.id]?.done && !answers[item.id]?.photo_url) || selectedTemplate.items[0];
+            if (nextTarget) setCameraTarget({ itemId: nextTarget.id, title: nextTarget.text });
+          }}
+        >
+          Сделать фото
+        </Button>
+        <Button
+          type="button"
+          className="mobilePrimaryButton"
+          disabled={!selectedTemplate || !!checklistRequiresPhoto}
+          onClick={() => submit(selectedTemplate)}
+        >
+          Завершить чек-лист
+        </Button>
+      </div>}
+
+      {runMsg && <div className={runMsg.includes('сохранён') ? 'notice mobileInlineNotice' : 'error mobileInlineNotice'}>{runMsg}</div>}
+      {cameraTarget && <CameraCapture
+        title={cameraTarget.title}
+        onClose={() => setCameraTarget(null)}
+        onCapture={(photo) => updateAnswer(cameraTarget.itemId, { done: true, photo_url: photo })}
+      />}
+    </div>;
+  }
+
   return <>
     {admin && <Card title="Редактор чек-листов" right={<span className="badge active">Менеджер и владелец</span>}>
       <form className="form" onSubmit={saveTemplate}>
@@ -977,6 +1367,7 @@ function Requests({ user, admin = false }: any) {
   const [qty, setQty] = useState<any>({});
   const [received, setReceived] = useState<any>({});
   const [msg, setMsg] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
   async function load() { setProducts(await api('/api/products')); setRequests(await api('/api/requests')); }
   useEffect(() => { load(); }, []);
   async function submit() {
@@ -988,6 +1379,70 @@ function Requests({ user, admin = false }: any) {
     await api(`/api/requests/${req.id}/receive`, { method: 'PATCH', body: JSON.stringify({ received: received[req.id] || {} }) });
     setMsg('Приход товара обновлён'); load();
   }
+
+  const visibleRequests = statusFilter === 'all'
+    ? requests
+    : requests.filter((request) => {
+      if (statusFilter === 'processing') return !['received', 'done', 'cancelled'].includes(request.status);
+      if (statusFilter === 'done') return ['received', 'done'].includes(request.status);
+      if (statusFilter === 'rejected') return ['not_received', 'cancelled'].includes(request.status);
+      return true;
+    });
+
+  if (!admin) {
+    return <div className="mobileSectionStack">
+      <SectionTitle title="Заявки" subtitle="Создавайте запросы и отслеживайте статус поставок" />
+
+      <Card title="Создать заявку" className="mobileCard">
+        <div className="mobileProductsList">
+          {products.map((product) => <label className="mobileProductRow" key={product.id}>
+            <div>
+              <strong>{product.name}</strong>
+              <span>{departments[product.department] || 'Отдел'} · {product.unit}</span>
+            </div>
+            <input
+              type="number"
+              min="0"
+              value={qty[product.id] || ''}
+              onChange={(e) => setQty({ ...qty, [product.id]: e.target.value })}
+              placeholder="0"
+            />
+          </label>)}
+        </div>
+        <Button type="button" className="mobilePrimaryButton" onClick={submit}>Отправить заявку</Button>
+        {msg && <div className="notice mobileInlineNotice">{msg}</div>}
+      </Card>
+
+      <div className="mobileChipRow">
+        <button type="button" className={cx('mobileChip', statusFilter === 'all' && 'active')} onClick={() => setStatusFilter('all')}><span>Все</span><b>{requests.length}</b></button>
+        <button type="button" className={cx('mobileChip', statusFilter === 'processing' && 'active')} onClick={() => setStatusFilter('processing')}><span>В обработке</span><b>{requests.filter((request) => !['received', 'done', 'cancelled'].includes(request.status)).length}</b></button>
+        <button type="button" className={cx('mobileChip', statusFilter === 'done' && 'active')} onClick={() => setStatusFilter('done')}><span>Выполнено</span><b>{requests.filter((request) => ['received', 'done'].includes(request.status)).length}</b></button>
+        <button type="button" className={cx('mobileChip', statusFilter === 'rejected' && 'active')} onClick={() => setStatusFilter('rejected')}><span>Отклонено</span><b>{requests.filter((request) => ['not_received', 'cancelled'].includes(request.status)).length}</b></button>
+      </div>
+
+      <Card title="История заявок" className="mobileCard">
+        {visibleRequests.length === 0 && <Empty text="Под выбранный статус заявок пока нет" />}
+        <div className="mobileRequestList">
+          {visibleRequests.map((request) => <article key={request.id} className="mobileRequestCard">
+            <div className="rowBetween">
+              <div>
+                <strong>{departments[request.department] || 'Отдел'}</strong>
+                <span>{fmtDate(request.created_at)}</span>
+              </div>
+              <span className={`badge ${request.status}`}>{request.status}</span>
+            </div>
+            <div className="mobileRequestItems">
+              {request.items.map((item: any) => <div key={item.id} className="mobileRequestItem">
+                <span>{item.product?.name}</span>
+                <strong>{item.qty_ordered} {item.product?.unit}</strong>
+              </div>)}
+            </div>
+          </article>)}
+        </div>
+      </Card>
+    </div>;
+  }
+
   return <>
     {!admin && <Card title="Создать заявку">
       <div className="productsGrid">{products.map(p => <label className="productQty" key={p.id}><span>{p.name}<em>{p.unit}</em></span><input type="number" min="0" value={qty[p.id] || ''} onChange={(e) => setQty({ ...qty, [p.id]: e.target.value })} placeholder="0" /></label>)}</div>
@@ -1016,6 +1471,8 @@ function Inventory({ user, admin = false }: any) {
   const [msg, setMsg] = useState('');
   const [productMsg, setProductMsg] = useState('');
   const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [inventoryFilter, setInventoryFilter] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [productForm, setProductForm] = useState<any>({
     section: 'bar',
     name: '',
@@ -1104,6 +1561,86 @@ function Inventory({ user, admin = false }: any) {
     t.items.forEach((i: any) => { payload[i.product_id] = { qty: Number(values[i.product_id] || 0), comment: '' }; });
     await api('/api/inventory/runs', { method: 'POST', body: JSON.stringify({ template_id: t.id, values: payload }) });
     setValues({}); setMsg('Инвентаризация сохранена'); load();
+  }
+
+  useEffect(() => {
+    if (admin) return;
+    if (!templates.length) {
+      setSelectedTemplateId('');
+      return;
+    }
+    if (!templates.some((template) => template.id === selectedTemplateId)) {
+      setSelectedTemplateId(templates[0].id);
+    }
+  }, [admin, templates, selectedTemplateId]);
+
+  if (!admin) {
+    const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) || templates[0];
+    const filteredItems = selectedTemplate?.items.filter((item: any) => {
+      if (!inventoryFilter.trim()) return true;
+      return String(item.product?.name || '').toLowerCase().includes(inventoryFilter.trim().toLowerCase());
+    }) || [];
+
+    function inventoryBadge(rawValue: any) {
+      if (rawValue === '' || rawValue === undefined || rawValue === null) return { text: 'Не указано', tone: '' };
+      const qty = Number(rawValue);
+      if (Number.isNaN(qty)) return { text: 'Не указано', tone: '' };
+      if (qty <= 0) return { text: 'Нет', tone: 'cancelled' };
+      if (qty <= 2) return { text: 'Мало', tone: 'trial' };
+      return { text: 'Норма', tone: 'active' };
+    }
+
+    return <div className="mobileSectionStack">
+      <SectionTitle title="Инвентаризация" subtitle="Заполняйте остатки быстро и без лишних шагов" />
+
+      <Card className="mobileCard">
+        <Field
+          label="Поиск товара"
+          icon="search"
+          value={inventoryFilter}
+          onChange={(e: any) => setInventoryFilter(e.target.value)}
+          placeholder="Например: салфетки"
+        />
+        <div className="mobileChipRow">
+          {templates.map((template) => <button
+            key={template.id}
+            type="button"
+            className={cx('mobileChip', selectedTemplate?.id === template.id && 'active')}
+            onClick={() => setSelectedTemplateId(template.id)}
+          >
+            <span>{template.title}</span>
+            <b>{template.items.length}</b>
+          </button>)}
+        </div>
+      </Card>
+
+      <Card title={selectedTemplate?.title || 'Бланк инвентаризации'} className="mobileCard">
+        {filteredItems.length === 0 && <Empty text="Нет товаров по этому фильтру" />}
+        <div className="mobileInventoryList">
+          {filteredItems.map((item: any) => {
+            const state = inventoryBadge(values[item.product_id]);
+            return <label key={item.product_id} className={cx('mobileInventoryItem', state.tone === 'cancelled' && 'danger')}>
+              <div className="mobileInventoryCopy">
+                <strong>{item.product?.name}</strong>
+                <span>{item.product?.unit || 'шт.'}</span>
+              </div>
+              <div className="mobileInventoryActions">
+                <span className={cx('badge', state.tone)}>{state.text}</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={values[item.product_id] || ''}
+                  onChange={(e) => setValues({ ...values, [item.product_id]: e.target.value })}
+                  placeholder="0"
+                />
+              </div>
+            </label>;
+          })}
+        </div>
+        {selectedTemplate && <Button type="button" className="mobilePrimaryButton" onClick={() => submit(selectedTemplate)}>Сохранить остатки</Button>}
+        {msg && <div className="notice mobileInlineNotice">{msg}</div>}
+      </Card>
+    </div>;
   }
 
   return <>
@@ -1256,6 +1793,82 @@ function Tasks({ user, admin = false }: any) {
     load();
   }
 
+  if (!admin) {
+    const activeTasks = tasks.filter((task) => !task.assignment?.done);
+    const completedTasks = tasks.filter((task) => task.assignment?.done);
+    const activeTechRequests = techRequests.filter((request) => !['done', 'cancelled'].includes(request.status));
+    const finishedTechRequests = techRequests.filter((request) => ['done', 'cancelled'].includes(request.status));
+
+    return <div className="mobileSectionStack">
+      <SectionTitle title="Задачи" subtitle="Управляйте поручениями и техзаявками по смене" />
+
+      <Card title="Сообщить о техпроблеме" className="mobileCard">
+        <form className="form" onSubmit={createTechRequest}>
+          <Field label="Тема заявки" value={techForm.title} onChange={(e: any) => setTechForm({ ...techForm, title: e.target.value })} placeholder="Например: вызвать мастера по холодильнику" />
+          <Select label="Тип проблемы" value={techForm.category} onChange={(e: any) => setTechForm({ ...techForm, category: e.target.value })}>
+            {Object.entries(techRequestCategories).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+          </Select>
+          <Textarea label="Что случилось" value={techForm.description} onChange={(e: any) => setTechForm({ ...techForm, description: e.target.value })} placeholder="Опишите проблему, где она находится и что нужно сделать" />
+          <Button className="mobilePrimaryButton">Отправить техзаявку</Button>
+        </form>
+        {techMsg && <div className="notice mobileInlineNotice">{techMsg}</div>}
+      </Card>
+
+      <Card title="Сегодня" className="mobileCard">
+        <div className="mobileTaskList">
+          {activeTasks.length === 0 && <Empty text="Нет активных задач на текущую смену" />}
+          {activeTasks.map((task) => <div key={task.id} className="mobileTaskRow static">
+            <span className="mobileTaskStatus" />
+            <div className="mobileTaskCopy">
+              <strong>{task.title}</strong>
+              <span>{task.description || 'Без описания'}</span>
+            </div>
+            <Button type="button" kind="soft" onClick={() => done(task.id)}>Выполнено</Button>
+          </div>)}
+        </div>
+      </Card>
+
+      <Card title="Срочно" className="mobileCard">
+        <div className="mobileRequestList">
+          {activeTechRequests.length === 0 && <Empty text="Нет срочных техзаявок" />}
+          {activeTechRequests.map((request) => <article key={request.id} className="mobileRequestCard">
+            <div className="rowBetween">
+              <div>
+                <strong>{request.title}</strong>
+                <span>{techRequestCategories[request.category] || request.category}</span>
+              </div>
+              <span className={`badge ${request.status}`}>{techRequestStatuses[request.status] || request.status}</span>
+            </div>
+            <p>{request.description || 'Без описания'}</p>
+            <div className="mobileInlineHint">{request.manager_comment || 'Комментарий менеджера появится здесь'}</div>
+          </article>)}
+        </div>
+      </Card>
+
+      <Card title="Выполнено" className="mobileCard">
+        <div className="mobileTaskList">
+          {completedTasks.length === 0 && finishedTechRequests.length === 0 && <Empty text="Пока нет завершённых задач" />}
+          {completedTasks.map((task) => <div key={task.id} className="mobileTaskRow static done">
+            <span className="mobileTaskStatus done" />
+            <div className="mobileTaskCopy">
+              <strong>{task.title}</strong>
+              <span>{task.description || 'Задача выполнена'}</span>
+            </div>
+            <span className="badge active">Готово</span>
+          </div>)}
+          {finishedTechRequests.map((request) => <div key={request.id} className="mobileTaskRow static done">
+            <span className="mobileTaskStatus done" />
+            <div className="mobileTaskCopy">
+              <strong>{request.title}</strong>
+              <span>{techRequestStatuses[request.status] || request.status}</span>
+            </div>
+            <span className={`badge ${request.status}`}>{request.manager_comment || 'Без комментария'}</span>
+          </div>)}
+        </div>
+      </Card>
+    </div>;
+  }
+
   return <>
     {admin && <Card title="Создать задачу">
       <form className="form two" onSubmit={create}>
@@ -1340,6 +1953,7 @@ function Knowledge({ user, admin = false }: any) {
   const [categories, setCategories] = useState<any[]>([]);
   const [stats, setStats] = useState<any[]>([]);
   const [openDoc, setOpenDoc] = useState<any>(null);
+  const [search, setSearch] = useState('');
   const [catForm, setCatForm] = useState<any>({ title: '', allowed_roles: ['waiter'] });
   const [docForm, setDocForm] = useState<any>({ category_id: '', title: '', content: '', allowed_roles: ['waiter'], requires_acknowledgement: true });
   async function load() { const cats = await api('/api/knowledge'); setCategories(cats); if (admin) setStats(await api('/api/admin/knowledge/stats')); }
@@ -1348,6 +1962,60 @@ function Knowledge({ user, admin = false }: any) {
   async function ack(doc: any) { await api(`/api/knowledge/${doc.id}/ack`, { method: 'POST', body: '{}' }); setOpenDoc({ ...doc, acknowledged: true }); load(); }
   async function createCat(e: FormEvent) { e.preventDefault(); await api('/api/admin/knowledge/categories', { method: 'POST', body: JSON.stringify(catForm) }); setCatForm({ title: '', allowed_roles: ['waiter'] }); load(); }
   async function createDoc(e: FormEvent) { e.preventDefault(); await api('/api/admin/knowledge/documents', { method: 'POST', body: JSON.stringify(docForm) }); setDocForm({ ...docForm, title: '', content: '' }); load(); }
+
+  if (!admin) {
+    const visibleCategories = categories
+      .map((category) => ({
+        ...category,
+        documents: category.documents.filter((document: any) => {
+          const haystack = `${document.title} ${document.content || ''}`.toLowerCase();
+          return !search.trim() || haystack.includes(search.trim().toLowerCase());
+        })
+      }))
+      .filter((category) => category.documents.length || !search.trim());
+
+    return <>
+      <div className="mobileSectionStack">
+        <SectionTitle title="База знаний" subtitle="Инструкции, сервис-бук и документы для смены" />
+        <Card className="mobileCard">
+          <Field label="Поиск инструкций" icon="search" value={search} onChange={(e: any) => setSearch(e.target.value)} placeholder="Поиск инструкций..." />
+          <div className="mobileKnowledgeGrid">
+            {visibleCategories.map((category) => <article key={category.id} className="mobileKnowledgeFolder">
+              <div className="mobileKnowledgeFolderHead">
+                <div className="mobileStatBadge blue"><AppIcon name="folder" className="navIcon" /></div>
+                <div>
+                  <strong>{category.title}</strong>
+                  <span>{category.documents.length} документов</span>
+                </div>
+              </div>
+              <div className="mobileKnowledgeDocs">
+                {category.documents.map((document: any) => <button key={document.id} type="button" className="mobileKnowledgeDoc" onClick={() => viewDoc(document)}>
+                  <div className="mobileKnowledgeDocIcon"><AppIcon name="file" className="navIcon" /></div>
+                  <div className="mobileKnowledgeDocCopy">
+                    <strong>{document.title}</strong>
+                    <span>{document.acknowledged ? 'Ознакомлен' : document.requires_acknowledgement ? 'Нужно ознакомиться' : 'Документ'}</span>
+                  </div>
+                  <AppIcon name="chevron" className="navIcon" />
+                </button>)}
+              </div>
+            </article>)}
+            {visibleCategories.length === 0 && <Empty text="Ничего не найдено по этому запросу" />}
+          </div>
+        </Card>
+      </div>
+      {openDoc && <div className="modal" onClick={() => setOpenDoc(null)}>
+        <div className="modalCard mobileDocModal" onClick={(e) => e.stopPropagation()}>
+          <div className="rowBetween">
+            <h2>{openDoc.title}</h2>
+            <button className="iconBtn" onClick={() => setOpenDoc(null)}>×</button>
+          </div>
+          <pre>{openDoc.content}</pre>
+          {openDoc.requires_acknowledgement && !openDoc.acknowledged && <Button onClick={() => ack(openDoc)}>Ознакомился</Button>}
+        </div>
+      </div>}
+    </>;
+  }
+
   return <>
     {admin && <Card title="Добавить документацию">
       <form className="form two" onSubmit={createCat}>

@@ -27,7 +27,12 @@ export type IconName =
   | 'role'
   | 'restaurant'
   | 'document'
-  | 'spark';
+  | 'spark'
+  | 'camera'
+  | 'search'
+  | 'filter'
+  | 'folder'
+  | 'file';
 
 export type NavTab = {
   id: string;
@@ -102,6 +107,16 @@ export function AppIcon({ name, className }: { name: IconName; className?: strin
       return <svg className={className} viewBox="0 0 24 24" aria-hidden="true"><path d="M7.25 4.25h6.1l3.4 3.4v11a2 2 0 0 1-2 2h-7.5a2 2 0 0 1-2-2v-12.4a2 2 0 0 1 2-2Z" {...common} /><path d="M13.25 4.25v3.8h3.8" {...common} /><path d="M9.4 12h5.2" {...common} /><path d="M9.4 15.4h5.2" {...common} /></svg>;
     case 'spark':
       return <svg className={className} viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.5 1.5 4.1 4.1 1.5-4.1 1.5L12 14.7l-1.5-4.1-4.1-1.5 4.1-1.5L12 3.5Z" {...common} /><path d="m18.25 12.75.8 2.1 2.1.8-2.1.8-.8 2.1-.8-2.1-2.1-.8 2.1-.8.8-2.1Z" {...common} /><path d="m6.5 14.5.9 2.35 2.35.9-2.35.9-.9 2.35-.9-2.35-2.35-.9 2.35-.9.9-2.35Z" {...common} /></svg>;
+    case 'camera':
+      return <svg className={className} viewBox="0 0 24 24" aria-hidden="true"><path d="M6.25 8.25h2.5l1.2-2h4.1l1.2 2h2.5a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-11.5a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2Z" {...common} /><circle cx="12" cy="13" r="3.2" {...common} /></svg>;
+    case 'search':
+      return <svg className={className} viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.75" cy="10.75" r="5.75" {...common} /><path d="m15 15 4.25 4.25" {...common} /></svg>;
+    case 'filter':
+      return <svg className={className} viewBox="0 0 24 24" aria-hidden="true"><path d="M4.75 7.25h14.5" {...common} /><path d="M7.75 12h8.5" {...common} /><path d="M10.75 16.75h2.5" {...common} /></svg>;
+    case 'folder':
+      return <svg className={className} viewBox="0 0 24 24" aria-hidden="true"><path d="M4.75 7.25a2 2 0 0 1 2-2H10l1.6 1.75h5.65a2 2 0 0 1 2 2v7.75a2 2 0 0 1-2 2H6.75a2 2 0 0 1-2-2V7.25Z" {...common} /></svg>;
+    case 'file':
+      return <svg className={className} viewBox="0 0 24 24" aria-hidden="true"><path d="M7.25 4.75h6.6l3.15 3.15v11.35a2 2 0 0 1-2 2h-7.75a2 2 0 0 1-2-2V6.75a2 2 0 0 1 2-2Z" {...common} /><path d="M13.85 4.75v3.35h3.15" {...common} /><path d="M8.95 12.2h6.1" {...common} /><path d="M8.95 15.2h4.4" {...common} /></svg>;
     default:
       return null;
   }

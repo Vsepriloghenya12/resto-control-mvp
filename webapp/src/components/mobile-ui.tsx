@@ -77,8 +77,8 @@ export function MobileHeader({
   actionIcon = 'more'
 }: {
   mode?: 'overview' | 'page';
-  title: string;
-  subtitle?: string;
+  title: ReactNode;
+  subtitle?: ReactNode;
   logoSrc: string;
   userInitials: string;
   notificationCount?: number;
