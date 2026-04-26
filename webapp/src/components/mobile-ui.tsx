@@ -70,6 +70,8 @@ export function MobileHeader({
   logoSrc,
   userInitials,
   notificationCount = 0,
+  showMenuButton = true,
+  showNotifications = true,
   onMenu,
   onBack,
   onNotifications,
@@ -82,6 +84,8 @@ export function MobileHeader({
   logoSrc: string;
   userInitials: string;
   notificationCount?: number;
+  showMenuButton?: boolean;
+  showNotifications?: boolean;
   onMenu?: () => void;
   onBack?: () => void;
   onNotifications?: () => void;
@@ -91,19 +95,19 @@ export function MobileHeader({
   return <header className="mobileHeader">
     <div className="mobileTopbar">
       <div className="mobileTopbarLeft">
-        <button type="button" className="mobileIconButton" onClick={mode === 'overview' ? onMenu : onBack} aria-label={mode === 'overview' ? 'Открыть меню' : 'Назад'}>
+        {(mode !== 'overview' || showMenuButton) && <button type="button" className="mobileIconButton" onClick={mode === 'overview' ? onMenu : onBack} aria-label={mode === 'overview' ? 'Открыть меню' : 'Назад'}>
           <AppIcon name={mode === 'overview' ? 'menu' : 'back'} className="navIcon" />
-        </button>
+        </button>}
         <div className="mobileBrand">
           <img src={logoSrc} alt="Resto Control" className="mobileLogo" />
         </div>
       </div>
 
       <div className="mobileTopbarRight">
-        <button type="button" className="mobileIconButton notificationButton" onClick={onNotifications} aria-label="Уведомления">
+        {showNotifications && <button type="button" className="mobileIconButton notificationButton" onClick={onNotifications} aria-label="Уведомления">
           <AppIcon name="notification" className="navIcon" />
           {notificationCount > 0 && <span className="mobileNotificationBadge">{notificationCount > 9 ? '9+' : notificationCount}</span>}
-        </button>
+        </button>}
         {mode === 'overview'
           ? <button type="button" className="mobileAvatarButton" onClick={onAction} aria-label="Профиль">
             <span>{userInitials}</span>

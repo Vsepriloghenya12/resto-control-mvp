@@ -1121,6 +1121,7 @@ input[type='checkbox'] {
   color: var(--text-soft);
   font-size: 0.76rem;
   font-weight: 800;
+  white-space: nowrap;
 }
 
 .badge.active,
@@ -1382,6 +1383,12 @@ input[type='checkbox'] {
 .mobileInlineHint {
   font-size: 0.9rem;
   line-height: 1.5;
+}
+
+.mobileProgressBadge {
+  min-width: 62px;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .compactMobileCard {
