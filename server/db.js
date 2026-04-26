@@ -111,7 +111,7 @@ export function roleToDepartment(role) {
 function createRestaurant(db, overrides = {}) {
   const restaurant = {
     id: overrides.id || uid('rest'),
-    name: overrides.name || 'Демо ресторан',
+    name: overrides.name || 'Новый ресторан',
     city: overrides.city || 'Москва',
     owner_name: overrides.owner_name || 'Владелец',
     phone: overrides.phone || '+79999999999',
@@ -201,12 +201,19 @@ function addKnowledge(db, restaurant_id, title, allowed_roles, docs) {
 }
 
 export function createRestaurantWithDefaults(db, data) {
+  const ownerLogin = String(data.login || '').trim();
+  const ownerPassword = String(data.password || '');
+  if (!ownerLogin || !ownerPassword) {
+    throw new Error('Нужны логин и пароль владельца');
+  }
+
   const restaurant = createRestaurant(db, data);
-  const demoPrefix = data.loginPrefix ?? ((data.login || 'owner') === 'owner' ? '' : `${data.login}_`);
-  createUser(db, restaurant.id, { name: data.owner_name || 'Владелец ресторана', login: data.login || 'owner', password: data.password || 'owner123', role: 'owner' });
-  createUser(db, restaurant.id, { name: 'Официант демо', login: `${demoPrefix}waiter`, password: 'waiter123', role: 'waiter' });
-  createUser(db, restaurant.id, { name: 'Бармен демо', login: `${demoPrefix}bar`, password: 'bar123', role: 'bartender' });
-  createUser(db, restaurant.id, { name: 'Повар демо', login: `${demoPrefix}cook`, password: 'cook123', role: 'cook' });
+  createUser(db, restaurant.id, {
+    name: data.owner_name || 'Владелец ресторана',
+    login: ownerLogin,
+    password: ownerPassword,
+    role: 'owner'
+  });
 
   addChecklist(db, restaurant.id, 'waiter', 'open', 'Открытие смены официанта', [
     'Проверить чистоту столов и посадочных мест', 'Проверить наличие меню', 'Проверить салфетки и приборы', 'Проверить терминал оплаты', 'Сообщить управляющему о готовности зала'
@@ -269,7 +276,6 @@ export function seed(db) {
     role: 'owner',
     is_super_admin: true
   });
-  createRestaurantWithDefaults(db, { name: 'Демо ресторан', city: 'Москва', owner_name: 'Владелец ресторана', email: 'owner@example.com', login: 'owner', password: 'owner123' });
 }
 
 export { uid, nowIso, addDays };

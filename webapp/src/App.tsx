@@ -199,15 +199,13 @@ export default function App() {
 
 function AuthScreen({ onLogin, error, setError }: any) {
   const [view, setView] = useState<View>('login');
-  const [form, setForm] = useState<any>({ login: 'owner', password: 'owner123', restaurantName: '', ownerName: '', phone: '', email: '', city: '' });
+  const [form, setForm] = useState<any>({ login: '', password: '', restaurantName: '', ownerName: '', phone: '', email: '', city: '' });
   const [busy, setBusy] = useState(false);
 
   function switchView(next: View) {
     setError('');
     setView(next);
-    setForm((current: any) => next === 'login'
-      ? { ...current, login: 'owner', password: 'owner123' }
-      : { ...current, login: '', password: '' });
+    setForm((current: any) => ({ ...current, login: '', password: '' }));
   }
 
   async function submit(e: FormEvent) {
@@ -245,9 +243,6 @@ function AuthScreen({ onLogin, error, setError }: any) {
         {error && <div className="error">{error}</div>}
         <Button disabled={busy}>{busy ? 'Проверяем...' : view === 'login' ? 'Войти' : 'Создать ресторан'}</Button>
       </form>
-      <div className="demoBox">
-        <b>Демо:</b> admin/admin123 — супер-админ, owner/owner123 — ресторан, waiter/waiter123, bar/bar123, cook/cook123.
-      </div>
     </div>
   </main>;
 }

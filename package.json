@@ -7,7 +7,7 @@
     "dev": "concurrently \"npm run dev --workspace server\" \"npm run dev --workspace webapp\"",
     "build": "npm run build --workspace webapp",
     "start": "node server/index.js",
-    "seed": "node server/scripts/reset-demo.js"
+    "reset-db": "node server/scripts/reset-db.js"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
