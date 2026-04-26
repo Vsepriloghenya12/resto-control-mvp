@@ -24,7 +24,7 @@ const SNAPSHOT_TABLES = [
   { name: 'checklist_items', columns: ['id', 'restaurant_id', 'template_id', 'text', 'required', 'needs_comment', 'needs_photo', 'sort_order'] },
   { name: 'checklist_runs', columns: ['id', 'restaurant_id', 'template_id', 'user_id', 'status', 'comment', 'created_at', 'completed_at'] },
   { name: 'checklist_answers', columns: ['id', 'restaurant_id', 'run_id', 'item_id', 'done', 'comment', 'photo_url'] },
-  { name: 'products', columns: ['id', 'restaurant_id', 'department', 'name', 'unit', 'category', 'active', 'created_at'] },
+  { name: 'products', columns: ['id', 'restaurant_id', 'department', 'name', 'unit', 'category', 'supplier', 'active', 'created_at'] },
   { name: 'product_requests', columns: ['id', 'restaurant_id', 'department', 'created_by', 'status', 'comment', 'created_at', 'updated_at'] },
   { name: 'request_items', columns: ['id', 'restaurant_id', 'request_id', 'product_id', 'qty_ordered', 'qty_received', 'status', 'comment'] },
   { name: 'inventory_templates', columns: ['id', 'restaurant_id', 'department', 'title', 'active', 'created_at'] },
@@ -71,6 +71,7 @@ function readJsonDb() {
 
 function encodeColumnValue(column, value) {
   if (column === 'allowed_roles') return JSON.stringify(value || []);
+  if (column === 'supplier') return value || 'Без поставщика';
   return value ?? null;
 }
 
@@ -82,6 +83,7 @@ async function ensurePostgresSchema() {
   const sql = fs.readFileSync(SCHEMA_FILE, 'utf8');
   await getPool().query(sql);
   await getPool().query('alter table if exists knowledge_documents add column if not exists sort_order int not null default 0');
+  await getPool().query(`alter table if exists products add column if not exists supplier text not null default 'Без поставщика'`);
 }
 
 async function loadPostgresSnapshot() {
@@ -299,8 +301,8 @@ function addChecklist(db, restaurant_id, role, type, title, items) {
 }
 
 function addProducts(db, restaurant_id, department, list) {
-  list.forEach(([name, unit, category]) => db.products.push({
-    id: uid('prod'), restaurant_id, department, name, unit, category, active: true, created_at: nowIso()
+  list.forEach(([name, unit, category, supplier]) => db.products.push({
+    id: uid('prod'), restaurant_id, department, name, unit, category, supplier: supplier || 'Без поставщика', active: true, created_at: nowIso()
   }));
 }
 
@@ -344,6 +346,10 @@ export function moveProductBetweenInventoryTemplates(db, product, previousDepart
   }
 
   syncProductWithInventoryTemplates(db, product);
+}
+
+export function removeProductFromInventoryTemplates(db, productId) {
+  db.inventory_template_items = db.inventory_template_items.filter(item => item.product_id !== productId);
 }
 
 function addKnowledge(db, restaurant_id, title, allowed_roles, docs) {
@@ -391,13 +397,13 @@ export function createRestaurantWithDefaults(db, data) {
   ]);
 
   addProducts(db, restaurant.id, 'bar', [
-    ['Aperol', 'бут.', 'Алкоголь'], ['Джин', 'бут.', 'Алкоголь'], ['Ром', 'бут.', 'Алкоголь'], ['Сироп клубника', 'шт.', 'Сиропы'], ['Лёд', 'пакет', 'Расходники'], ['Трубочки', 'уп.', 'Расходники']
+    ['Aperol', 'бут.', 'Алкоголь', 'Simple Group'], ['Джин', 'бут.', 'Алкоголь', 'Simple Group'], ['Ром', 'бут.', 'Алкоголь', 'Luding'], ['Сироп клубника', 'шт.', 'Сиропы', 'Barline'], ['Лёд', 'пакет', 'Расходники', 'Локальный поставщик'], ['Трубочки', 'уп.', 'Расходники', 'HoReCa Market']
   ]);
   addProducts(db, restaurant.id, 'kitchen', [
-    ['Курица', 'кг', 'Мясо'], ['Картофель', 'кг', 'Овощи'], ['Сливки', 'л', 'Молочка'], ['Сыр', 'кг', 'Молочка'], ['Зелень', 'кг', 'Овощи'], ['Упаковка', 'шт.', 'Расходники']
+    ['Курица', 'кг', 'Мясо', 'Мясной двор'], ['Картофель', 'кг', 'Овощи', 'Фермерский склад'], ['Сливки', 'л', 'Молочка', 'Молочный мир'], ['Сыр', 'кг', 'Молочка', 'Молочный мир'], ['Зелень', 'кг', 'Овощи', 'Фермерский склад'], ['Упаковка', 'шт.', 'Расходники', 'HoReCa Market']
   ]);
   addProducts(db, restaurant.id, 'hall', [
-    ['Салфетки', 'уп.', 'Расходники'], ['Меню', 'шт.', 'Сервис'], ['Чековая лента', 'шт.', 'Расходники']
+    ['Салфетки', 'уп.', 'Расходники', 'HoReCa Market'], ['Меню', 'шт.', 'Сервис', 'Типография'], ['Чековая лента', 'шт.', 'Расходники', 'Касса Сервис']
   ]);
 
   addInventoryTemplate(db, restaurant.id, 'bar', 'Инвентаризация бара');

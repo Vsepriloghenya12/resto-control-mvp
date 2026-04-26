@@ -81,6 +81,7 @@ create table if not exists products (
   name text not null,
   unit text not null,
   category text,
+  supplier text not null default 'Без поставщика',
   active boolean not null default true,
   created_at timestamptz not null default now()
 );

@@ -20,7 +20,8 @@ import {
   roleToDepartment,
   createRestaurantWithDefaults,
   syncProductWithInventoryTemplates,
-  moveProductBetweenInventoryTemplates
+  moveProductBetweenInventoryTemplates,
+  removeProductFromInventoryTemplates
 } from './db.js';
 
 const app = express();
@@ -32,6 +33,8 @@ const __dirname = path.dirname(__filename);
 const webDist = path.resolve(__dirname, '../webapp/dist');
 const uploadsDir = path.resolve(__dirname, 'data/uploads');
 const checklistUploadsDir = path.join(uploadsDir, 'checklists');
+const MANAGER_ROLES = ['owner', 'manager'];
+const STAFF_ROLES = ['manager', 'waiter', 'bartender', 'cook'];
 
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
@@ -74,7 +77,7 @@ function superOnly(req, res, next) {
 
 function adminOnly(req, res, next) {
   if (req.user?.is_super_admin) return next();
-  if (!['owner', 'manager'].includes(req.user?.role)) return res.status(403).json({ error: 'Доступ только для владельца или управляющего' });
+  if (!MANAGER_ROLES.includes(req.user?.role)) return res.status(403).json({ error: 'Доступ только для владельца или менеджера' });
   next();
 }
 
@@ -96,8 +99,13 @@ function sameRestaurant(items, restaurant_id) {
 
 function hasRoleAccess(user, allowedRoles = []) {
   if (!allowedRoles || allowedRoles.length === 0) return true;
-  if (['owner', 'manager'].includes(user.role)) return true;
+  if (MANAGER_ROLES.includes(user.role)) return true;
   return allowedRoles.includes(user.role);
+}
+
+function normalizeStaffRole(role) {
+  const value = String(role || '').trim();
+  return STAFF_ROLES.includes(value) ? value : '';
 }
 
 function normalizeRequestItems(restaurant_id, department, rawItems = []) {
@@ -281,9 +289,21 @@ app.get('/api/admin/users', auth, ensureRestaurantActive, adminOnly, (req, res) 
 app.post('/api/admin/users', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
   const rid = req.user.restaurant_id || req.body.restaurant_id;
   const { name, login, password, role, department } = req.body;
-  if (!name || !login || !password || !role) return res.status(400).json({ error: 'Заполните имя, логин, пароль и роль' });
+  const normalizedRole = normalizeStaffRole(role);
+  if (!name || !login || !password || !normalizedRole) return res.status(400).json({ error: 'Заполните имя, логин, пароль и выберите роль сотрудника' });
   if (db.users.some(u => u.login === login)) return res.status(409).json({ error: 'Такой логин уже есть' });
-  const user = { id: uid('user'), restaurant_id: rid, name, login, password_hash: hashPassword(password), role, department: department || roleToDepartment(role), active: true, is_super_admin: false, created_at: nowIso() };
+  const user = {
+    id: uid('user'),
+    restaurant_id: rid,
+    name: String(name || '').trim(),
+    login: String(login || '').trim(),
+    password_hash: hashPassword(password),
+    role: normalizedRole,
+    department: department || roleToDepartment(normalizedRole),
+    active: true,
+    is_super_admin: false,
+    created_at: nowIso()
+  };
   db.users.push(user);
   await persist();
   res.status(201).json(publicUser(user));
@@ -292,12 +312,46 @@ app.post('/api/admin/users', auth, ensureRestaurantActive, adminOnly, runAsync(a
 app.patch('/api/admin/users/:id', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
   const user = db.users.find(u => u.id === req.params.id && u.restaurant_id === req.user.restaurant_id);
   if (!user) return res.status(404).json({ error: 'Сотрудник не найден' });
-  ['name', 'role', 'department', 'active'].forEach(k => {
-    if (req.body[k] !== undefined) user[k] = req.body[k];
-  });
+  if (user.is_super_admin || user.role === 'owner') return res.status(403).json({ error: 'Нельзя редактировать владельца через список сотрудников' });
+  if (req.body.login !== undefined) {
+    const nextLogin = String(req.body.login || '').trim();
+    if (!nextLogin) return res.status(400).json({ error: 'Логин не может быть пустым' });
+    if (db.users.some(existing => existing.id !== user.id && existing.login === nextLogin)) {
+      return res.status(409).json({ error: 'Такой логин уже есть' });
+    }
+    user.login = nextLogin;
+  }
+  if (req.body.name !== undefined) {
+    const nextName = String(req.body.name || '').trim();
+    if (!nextName) return res.status(400).json({ error: 'Имя не может быть пустым' });
+    user.name = nextName;
+  }
+  if (req.body.role !== undefined) {
+    const nextRole = normalizeStaffRole(req.body.role);
+    if (!nextRole) return res.status(400).json({ error: 'Выберите корректную роль сотрудника' });
+    user.role = nextRole;
+    if (req.body.department === undefined) user.department = roleToDepartment(nextRole);
+  }
+  if (req.body.department !== undefined) user.department = String(req.body.department || '').trim() || roleToDepartment(user.role);
+  if (req.body.active !== undefined) {
+    if (user.id === req.user.id && !req.body.active) return res.status(400).json({ error: 'Нельзя отключить собственный аккаунт' });
+    user.active = Boolean(req.body.active);
+  }
   if (req.body.password) user.password_hash = hashPassword(req.body.password);
   await persist();
   res.json(publicUser(user));
+}));
+
+app.delete('/api/admin/users/:id', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
+  const user = db.users.find(u => u.id === req.params.id && u.restaurant_id === req.user.restaurant_id);
+  if (!user) return res.status(404).json({ error: 'Сотрудник не найден' });
+  if (user.is_super_admin || user.role === 'owner') return res.status(403).json({ error: 'Нельзя удалить владельца через список сотрудников' });
+  if (user.id === req.user.id) return res.status(400).json({ error: 'Нельзя удалить собственный аккаунт' });
+  user.active = false;
+  user.login = `${user.login}__deleted__${Date.now()}`;
+  user.name = `${user.name} (удален)`;
+  await persist();
+  res.json({ ok: true });
 }));
 
 // CHECKLISTS
@@ -428,9 +482,19 @@ app.get('/api/products', auth, ensureRestaurantActive, (req, res) => {
 });
 
 app.post('/api/admin/products', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
-  const { name, unit, department, category } = req.body;
+  const { name, unit, department, category, supplier } = req.body;
   if (!name || !unit || !department) return res.status(400).json({ error: 'Нужны название, единица и отдел' });
-  const product = { id: uid('prod'), restaurant_id: req.user.restaurant_id, name, unit, department, category: category || '', active: true, created_at: nowIso() };
+  const product = {
+    id: uid('prod'),
+    restaurant_id: req.user.restaurant_id,
+    name: String(name || '').trim(),
+    unit: String(unit || '').trim(),
+    department,
+    category: category || '',
+    supplier: String(supplier || '').trim() || 'Без поставщика',
+    active: true,
+    created_at: nowIso()
+  };
   db.products.push(product);
   syncProductWithInventoryTemplates(db, product);
   await persist();
@@ -445,6 +509,7 @@ app.patch('/api/admin/products/:id', auth, ensureRestaurantActive, adminOnly, ru
   const nextUnit = req.body.unit !== undefined ? String(req.body.unit).trim() : product.unit;
   const nextDepartment = req.body.department !== undefined ? String(req.body.department).trim() : product.department;
   const nextCategory = req.body.category !== undefined ? String(req.body.category).trim() : product.category;
+  const nextSupplier = req.body.supplier !== undefined ? String(req.body.supplier).trim() || 'Без поставщика' : product.supplier || 'Без поставщика';
 
   if (!nextName || !nextUnit || !nextDepartment) {
     return res.status(400).json({ error: 'Нужны название, единица и отдел' });
@@ -455,10 +520,20 @@ app.patch('/api/admin/products/:id', auth, ensureRestaurantActive, adminOnly, ru
   product.unit = nextUnit;
   product.department = nextDepartment;
   product.category = nextCategory;
+  product.supplier = nextSupplier;
 
   moveProductBetweenInventoryTemplates(db, product, previousDepartment);
   await persist();
   res.json(product);
+}));
+
+app.delete('/api/admin/products/:id', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
+  const product = db.products.find(p => p.id === req.params.id && p.restaurant_id === req.user.restaurant_id);
+  if (!product) return res.status(404).json({ error: 'Товар не найден' });
+  product.active = false;
+  removeProductFromInventoryTemplates(db, product.id);
+  await persist();
+  res.json({ ok: true });
 }));
 
 // REQUESTS
