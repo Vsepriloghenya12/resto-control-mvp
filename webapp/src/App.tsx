@@ -19,6 +19,13 @@ const departments: Record<string, string> = {
   common: 'Общее'
 };
 
+const checklistTypes: Record<string, string> = {
+  open: 'Открытие',
+  close: 'Закрытие',
+  routine: 'Смена',
+  custom: 'Произвольный'
+};
+
 const subscriptionStatuses: Record<string, string> = {
   active: 'активна',
   blocked: 'заблокирована',
@@ -427,8 +434,27 @@ function Checklists({ user, admin = false }: any) {
   const [templates, setTemplates] = useState<any[]>([]);
   const [runs, setRuns] = useState<any[]>([]);
   const [answers, setAnswers] = useState<any>({});
-  const [msg, setMsg] = useState('');
+  const [runMsg, setRunMsg] = useState('');
+  const [editorMsg, setEditorMsg] = useState('');
   const [cameraTarget, setCameraTarget] = useState<{ itemId: string; title: string } | null>(null);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [templateForm, setTemplateForm] = useState<any>({
+    title: '',
+    role: 'manager',
+    type: 'open',
+    items: [{ id: '', text: '' }]
+  });
+
+  function resetTemplateEditor() {
+    setEditingTemplateId(null);
+    setTemplateForm({
+      title: '',
+      role: 'manager',
+      type: 'open',
+      items: [{ id: '', text: '' }]
+    });
+  }
+
   async function load() {
     setTemplates(await api('/api/checklists/templates'));
     if (admin) setRuns(await api('/api/admin/checklists/runs'));
@@ -437,23 +463,118 @@ function Checklists({ user, admin = false }: any) {
   function updateAnswer(itemId: string, patch: any) {
     setAnswers((current: any) => ({ ...current, [itemId]: { ...(current[itemId] || {}), ...patch } }));
   }
+
+  function updateTemplateItem(index: number, text: string) {
+    setTemplateForm((current: any) => ({
+      ...current,
+      items: current.items.map((item: any, itemIndex: number) => itemIndex === index ? { ...item, text } : item)
+    }));
+  }
+
+  function addTemplateItem() {
+    setTemplateForm((current: any) => ({
+      ...current,
+      items: [...current.items, { id: '', text: '' }]
+    }));
+  }
+
+  function removeTemplateItem(index: number) {
+    setTemplateForm((current: any) => {
+      const nextItems = current.items.filter((_: any, itemIndex: number) => itemIndex !== index);
+      return {
+        ...current,
+        items: nextItems.length ? nextItems : [{ id: '', text: '' }]
+      };
+    });
+  }
+
+  function startTemplateEdit(template: any) {
+    setEditorMsg('');
+    setEditingTemplateId(template.id);
+    setTemplateForm({
+      title: template.title,
+      role: template.role,
+      type: template.type,
+      items: template.items.map((item: any) => ({ id: item.id, text: item.text }))
+    });
+  }
+
+  async function saveTemplate(e: FormEvent) {
+    e.preventDefault();
+    setEditorMsg('');
+    const payload = {
+      title: String(templateForm.title || '').trim(),
+      role: templateForm.role,
+      type: templateForm.type,
+      items: templateForm.items
+        .map((item: any) => ({ id: item.id || undefined, text: String(item.text || '').trim() }))
+        .filter((item: any) => item.text)
+    };
+
+    try {
+      if (editingTemplateId) {
+        await api(`/api/admin/checklists/templates/${editingTemplateId}`, { method: 'PATCH', body: JSON.stringify(payload) });
+        setEditorMsg('Чек-лист обновлён');
+      } else {
+        await api('/api/admin/checklists/templates', { method: 'POST', body: JSON.stringify(payload) });
+        setEditorMsg('Чек-лист создан');
+      }
+      resetTemplateEditor();
+      load();
+    } catch (error: any) {
+      setEditorMsg(error.message);
+    }
+  }
+
   async function submit(template: any) {
-    setMsg('');
+    setRunMsg('');
     const templateAnswers: any = {};
     template.items.forEach((i: any) => { templateAnswers[i.id] = answers[i.id] || { done: false, comment: '' }; });
     const missingPhoto = template.items.find((i: any) => templateAnswers[i.id]?.done && !templateAnswers[i.id]?.photo_url);
     if (missingPhoto) {
-      setMsg(`Для пункта "${missingPhoto.text}" нужно сделать фото`);
+      setRunMsg(`Для пункта "${missingPhoto.text}" нужно сделать фото`);
       return;
     }
     await api('/api/checklists/runs', { method: 'POST', body: JSON.stringify({ template_id: template.id, answers: templateAnswers }) });
-    setMsg('Чек-лист сохранён'); setAnswers({}); load();
+    setRunMsg('Чек-лист сохранён'); setAnswers({}); load();
   }
   return <>
-    <Card title={admin ? 'Шаблоны чек-листов' : 'Мои чек-листы'}>
+    {admin && <Card title="Редактор чек-листов" right={<span className="badge active">Менеджер и владелец</span>}>
+      <form className="form" onSubmit={saveTemplate}>
+        <div className="form two">
+          <Field label="Название чек-листа" value={templateForm.title} onChange={(e: any) => setTemplateForm({ ...templateForm, title: e.target.value })} placeholder="Например: Проверка открытия зала" />
+          <Select label="Для роли" value={templateForm.role} onChange={(e: any) => setTemplateForm({ ...templateForm, role: e.target.value })}>
+            {Object.entries(roles).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+          </Select>
+          <Select label="Тип" value={templateForm.type} onChange={(e: any) => setTemplateForm({ ...templateForm, type: e.target.value })}>
+            {Object.entries(checklistTypes).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+          </Select>
+        </div>
+
+        <div className="editorItems">
+          {templateForm.items.map((item: any, index: number) => <div className="editorItemRow" key={item.id || `new-${index}`}>
+            <input
+              value={item.text}
+              onChange={(e) => updateTemplateItem(index, e.target.value)}
+              placeholder={`Пункт ${index + 1}`}
+            />
+            <button type="button" className="iconBtn" onClick={() => removeTemplateItem(index)}>×</button>
+          </div>)}
+        </div>
+
+        <div className="actions">
+          <Button kind="soft" type="button" onClick={addTemplateItem}>Добавить пункт</Button>
+          {editingTemplateId && <Button kind="soft" type="button" onClick={resetTemplateEditor}>Отмена</Button>}
+          <Button>{editingTemplateId ? 'Сохранить изменения' : 'Создать чек-лист'}</Button>
+        </div>
+      </form>
+      {editorMsg && <div className={editorMsg.includes('обновл') || editorMsg.includes('создан') ? 'notice' : 'error'}>{editorMsg}</div>}
+    </Card>}
+
+    <Card title={admin ? 'Шаблоны и выполнение чек-листов' : 'Мои чек-листы'}>
       {templates.length === 0 && <Empty text="Нет чек-листов" />}
       <div className="grid">{templates.map(t => <div className="miniCard" key={t.id}>
-        <div className="rowBetween"><b>{t.title}</b><span className="badge">{roles[t.role]} · {t.type}</span></div>
+        <div className="rowBetween"><b>{t.title}</b><span className="badge">{roles[t.role]} · {checklistTypes[t.type] || t.type}</span></div>
         <div className="checkItems">{t.items.map((i: any) => <div className="checkRow" key={i.id}>
           <input type="checkbox" checked={!!answers[i.id]?.done} onChange={(e) => updateAnswer(i.id, { done: e.target.checked })} />
           <div className="checkContent">
@@ -466,12 +587,15 @@ function Checklists({ user, admin = false }: any) {
             </div>}
           </div>
         </div>)}</div>
-        <Button onClick={() => submit(t)}>Сохранить выполнение</Button>
+        <div className="actions">
+          {admin && <Button kind="soft" onClick={() => startTemplateEdit(t)}>Редактировать</Button>}
+          <Button onClick={() => submit(t)}>Сохранить выполнение</Button>
+        </div>
       </div>)}</div>
-      {msg && <div className="notice">{msg}</div>}
+      {runMsg && <div className="notice">{runMsg}</div>}
     </Card>
-    {admin && <Card title="История выполнения"><div className="list">{runs.map(r => <div className="miniCard" key={r.id}>
-      <div className="rowBetween"><div><b>{r.template?.title}</b><span>{r.user?.name} · {fmtDate(r.created_at)}</span></div><span className="badge active">{r.status}</span></div>
+    {admin && <Card title="Отчёты по выполнению чек-листов" right={<span className="badge active">Доступно менеджеру</span>}><div className="list">{runs.map(r => <div className="miniCard" key={r.id}>
+      <div className="rowBetween"><div><b>{r.template?.title}</b><span>{r.user?.name} · {roles[r.user?.role] || 'Сотрудник'} · {fmtDate(r.created_at)}</span></div><span className="badge active">{r.status}</span></div>
       <div className="thumbRow">
         {r.answers?.filter((answer: any) => answer.photo_url).map((answer: any) => <a key={answer.id} className="thumbLink" href={answer.photo_url} target="_blank" rel="noreferrer">
           <img src={answer.photo_url} alt="Фото подтверждения" />

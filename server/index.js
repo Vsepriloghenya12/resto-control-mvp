@@ -120,6 +120,32 @@ function normalizeRequestItems(restaurant_id, department, rawItems = []) {
   return { items };
 }
 
+function normalizeChecklistTemplateItems(rawItems = []) {
+  if (!Array.isArray(rawItems)) {
+    return { error: 'Передайте массив пунктов чек-листа' };
+  }
+
+  const items = rawItems.map((item, index) => {
+    const text = String(typeof item === 'string' ? item : item?.text || '').trim();
+    if (!text) return null;
+
+    return {
+      id: typeof item === 'object' && item?.id ? String(item.id) : uid('cli'),
+      text,
+      required: item?.required !== undefined ? Boolean(item.required) : true,
+      needs_comment: Boolean(item?.needs_comment),
+      needs_photo: Boolean(item?.needs_photo),
+      sort_order: index + 1
+    };
+  }).filter(Boolean);
+
+  if (!items.length) {
+    return { error: 'Добавьте хотя бы один пункт чек-листа' };
+  }
+
+  return { items };
+}
+
 function saveChecklistPhoto(dataUrl, restaurant_id, run_id, item_id) {
   const match = String(dataUrl || '').match(/^data:image\/(jpeg|jpg|png|webp);base64,(.+)$/);
   if (!match) {
@@ -282,12 +308,67 @@ app.get('/api/checklists/templates', auth, ensureRestaurantActive, (req, res) =>
 app.post('/api/admin/checklists/templates', auth, ensureRestaurantActive, adminOnly, (req, res) => {
   const rid = req.user.restaurant_id;
   const { title, role, type, items } = req.body;
-  if (!title || !role || !type || !Array.isArray(items) || !items.length) return res.status(400).json({ error: 'Нужны title, role, type и items' });
+  if (!title || !role || !type) return res.status(400).json({ error: 'Нужны title, role и type' });
+  const normalized = normalizeChecklistTemplateItems(items);
+  if (normalized.error) return res.status(400).json({ error: normalized.error });
   const template = { id: uid('cltpl'), restaurant_id: rid, title, role, type, active: true, created_at: nowIso() };
   db.checklist_templates.push(template);
-  items.forEach((it, idx) => db.checklist_items.push({ id: uid('cli'), restaurant_id: rid, template_id: template.id, text: typeof it === 'string' ? it : it.text, required: true, needs_comment: false, needs_photo: false, sort_order: idx + 1 }));
+  normalized.items.forEach(item => db.checklist_items.push({ ...item, restaurant_id: rid, template_id: template.id }));
   persist();
   res.status(201).json({ ...template, items: db.checklist_items.filter(i => i.template_id === template.id) });
+});
+
+app.patch('/api/admin/checklists/templates/:id', auth, ensureRestaurantActive, adminOnly, (req, res) => {
+  const rid = req.user.restaurant_id;
+  const template = db.checklist_templates.find(t => t.id === req.params.id && t.restaurant_id === rid);
+  if (!template) return res.status(404).json({ error: 'Чек-лист не найден' });
+
+  const nextTitle = req.body.title !== undefined ? String(req.body.title || '').trim() : template.title;
+  const nextRole = req.body.role !== undefined ? String(req.body.role || '').trim() : template.role;
+  const nextType = req.body.type !== undefined ? String(req.body.type || '').trim() : template.type;
+  if (!nextTitle || !nextRole || !nextType) {
+    return res.status(400).json({ error: 'Нужны title, role и type' });
+  }
+
+  template.title = nextTitle;
+  template.role = nextRole;
+  template.type = nextType;
+  if (req.body.active !== undefined) template.active = Boolean(req.body.active);
+
+  if (req.body.items !== undefined) {
+    const normalized = normalizeChecklistTemplateItems(req.body.items);
+    if (normalized.error) return res.status(400).json({ error: normalized.error });
+
+    const existingItems = db.checklist_items.filter(item => item.template_id === template.id);
+    const nextIds = new Set(normalized.items.map(item => item.id));
+
+    normalized.items.forEach(item => {
+      const current = existingItems.find(existing => existing.id === item.id);
+      if (current) {
+        current.text = item.text;
+        current.required = item.required;
+        current.needs_comment = item.needs_comment;
+        current.needs_photo = item.needs_photo;
+        current.sort_order = item.sort_order;
+      } else {
+        db.checklist_items.push({
+          ...item,
+          restaurant_id: rid,
+          template_id: template.id
+        });
+      }
+    });
+
+    db.checklist_items = db.checklist_items.filter(item => item.template_id !== template.id || nextIds.has(item.id));
+  }
+
+  persist();
+  res.json({
+    ...template,
+    items: db.checklist_items
+      .filter(item => item.template_id === template.id)
+      .sort((a, b) => a.sort_order - b.sort_order)
+  });
 });
 
 app.post('/api/checklists/runs', auth, ensureRestaurantActive, (req, res) => {

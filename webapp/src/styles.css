@@ -68,6 +68,8 @@ input:focus, textarea:focus, select:focus { border-color: #22c55e; box-shadow: 0
 .checkRow input { width: 18px; height: 18px; margin-top: 2px; accent-color: #22c55e; }
 .checkContent { display: grid; gap: 10px; width: 100%; }
 .checkExtras { display: grid; gap: 10px; }
+.editorItems { display: grid; gap: 10px; }
+.editorItemRow { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
 .photoPreview, .thumbLink img { width: 100%; max-width: 220px; border-radius: 16px; border: 1px solid rgba(148, 163, 184, .16); object-fit: cover; background: rgba(255,255,255,.04); }
 .productsGrid { display: grid; gap: 8px; }
 .productQty { display: grid; grid-template-columns: 1fr 88px; gap: 8px; align-items: center; padding: 10px; background: rgba(15,23,42,.52); border-radius: 14px; }
@@ -90,6 +92,7 @@ input:focus, textarea:focus, select:focus { border-color: #22c55e; box-shadow: 0
   .topbar { align-items: flex-start; }
   .topbarBrand { flex-direction: column; align-items: flex-start; gap: 10px; }
   .topbarLogo { width: min(190px, 62vw); max-width: none; }
+  .editorItemRow { grid-template-columns: 1fr; }
   .listRow { align-items: flex-start; flex-direction: column; }
   .productQty, .receiveRow { grid-template-columns: 1fr; }
 }
