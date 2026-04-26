@@ -7,8 +7,6 @@ MVP SaaS-приложения для ресторанов: электронны�
 ```bash
 cp .env.example .env
 npm install
-npm install --prefix server
-npm install --prefix webapp
 npm run dev
 ```
 
@@ -40,9 +38,20 @@ npm run dev
 - подтверждение ознакомления;
 - PWA-установка на телефон.
 
-## Railway
+## Хранилище данных
 
-Для MVP сервер может хранить данные в JSON-файле. Для боевого режима лучше подключить PostgreSQL. Схема для Postgres лежит в `docs/schema.sql`.
+- если `DATABASE_URL` не задан, сервер продолжает работать на локальном `server/data/db.json`;
+- если `DATABASE_URL` задан, сервер автоматически поднимает PostgreSQL-схему из `docs/schema.sql` и начинает сохранять данные в Postgres;
+- при первом запуске с пустым Postgres сервер подтянет существующие данные из `server/data/db.json`, если они есть.
+
+Пример env для Postgres:
+
+```env
+DATABASE_URL=postgresql://user:password@host:5432/resto_control
+PGSSL=require
+```
+
+## Railway
 
 Команда запуска:
 
@@ -70,4 +79,6 @@ JWT_SECRET=replace-with-long-secret
 SUPER_ADMIN_LOGIN=admin
 SUPER_ADMIN_PASSWORD=admin123
 TRIAL_DAYS=14
+DATABASE_URL=postgresql://user:password@host:5432/resto_control
+PGSSL=require
 ```

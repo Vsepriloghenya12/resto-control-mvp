@@ -1,4 +1,4 @@
 import { resetDb } from '../db.js';
 
-resetDb();
+await resetDb();
 console.log('Database reset');

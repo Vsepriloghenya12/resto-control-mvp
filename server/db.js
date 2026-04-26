@@ -2,14 +2,132 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
+import pg from 'pg';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DATA_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
+const SCHEMA_FILE = path.resolve(__dirname, '../docs/schema.sql');
+
+const { Pool, types } = pg;
+
+// Keep temporal values as ISO-like strings because the app compares and formats them as strings.
+types.setTypeParser(1114, value => value);
+types.setTypeParser(1184, value => value);
+types.setTypeParser(1700, value => Number(value));
+
+const SNAPSHOT_TABLES = [
+  { name: 'restaurants', columns: ['id', 'name', 'city', 'owner_name', 'phone', 'email', 'status', 'plan', 'subscription_status', 'trial_started_at', 'trial_ends_at', 'subscription_started_at', 'subscription_ends_at', 'created_at'] },
+  { name: 'users', columns: ['id', 'restaurant_id', 'name', 'login', 'password_hash', 'role', 'department', 'active', 'is_super_admin', 'created_at'] },
+  { name: 'checklist_templates', columns: ['id', 'restaurant_id', 'role', 'type', 'title', 'active', 'created_at'] },
+  { name: 'checklist_items', columns: ['id', 'restaurant_id', 'template_id', 'text', 'required', 'needs_comment', 'needs_photo', 'sort_order'] },
+  { name: 'checklist_runs', columns: ['id', 'restaurant_id', 'template_id', 'user_id', 'status', 'comment', 'created_at', 'completed_at'] },
+  { name: 'checklist_answers', columns: ['id', 'restaurant_id', 'run_id', 'item_id', 'done', 'comment', 'photo_url'] },
+  { name: 'products', columns: ['id', 'restaurant_id', 'department', 'name', 'unit', 'category', 'active', 'created_at'] },
+  { name: 'product_requests', columns: ['id', 'restaurant_id', 'department', 'created_by', 'status', 'comment', 'created_at', 'updated_at'] },
+  { name: 'request_items', columns: ['id', 'restaurant_id', 'request_id', 'product_id', 'qty_ordered', 'qty_received', 'status', 'comment'] },
+  { name: 'inventory_templates', columns: ['id', 'restaurant_id', 'department', 'title', 'active', 'created_at'] },
+  { name: 'inventory_template_items', columns: ['id', 'restaurant_id', 'template_id', 'product_id', 'sort_order'] },
+  { name: 'inventory_runs', columns: ['id', 'restaurant_id', 'template_id', 'user_id', 'department', 'comment', 'status', 'created_at'] },
+  { name: 'inventory_values', columns: ['id', 'restaurant_id', 'inventory_run_id', 'product_id', 'qty', 'comment'] },
+  { name: 'tasks', columns: ['id', 'restaurant_id', 'title', 'description', 'target_type', 'target_role', 'target_user_id', 'due_at', 'created_by', 'created_at', 'active'] },
+  { name: 'task_assignments', columns: ['id', 'restaurant_id', 'task_id', 'user_id', 'done', 'comment', 'completed_at'] },
+  { name: 'knowledge_categories', columns: ['id', 'restaurant_id', 'title', 'allowed_roles', 'sort_order'], jsonColumns: ['allowed_roles'] },
+  { name: 'knowledge_documents', columns: ['id', 'restaurant_id', 'category_id', 'title', 'type', 'content', 'file_url', 'allowed_roles', 'requires_acknowledgement', 'version', 'is_active', 'created_by', 'created_at', 'updated_at', 'sort_order'], jsonColumns: ['allowed_roles'] },
+  { name: 'knowledge_acknowledgements', columns: ['id', 'restaurant_id', 'document_id', 'user_id', 'version', 'acknowledged_at'] },
+  { name: 'knowledge_views', columns: ['id', 'restaurant_id', 'document_id', 'user_id', 'viewed_at'] }
+];
+
+let pool;
 
 export const ROLES = ['owner', 'manager', 'waiter', 'bartender', 'cook'];
 export const DEPARTMENTS = ['hall', 'bar', 'kitchen', 'common'];
+
+function hasPostgres() {
+  return Boolean(process.env.DATABASE_URL);
+}
+
+function getPool() {
+  if (!hasPostgres()) return null;
+  if (pool) return pool;
+
+  const useSsl = process.env.PGSSL === 'require'
+    || (process.env.PGSSL !== 'disable' && !/localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL || ''));
+
+  pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: useSsl ? { rejectUnauthorized: false } : false
+  });
+
+  return pool;
+}
+
+function readJsonDb() {
+  if (!fs.existsSync(DB_FILE)) return null;
+  return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+}
+
+function encodeColumnValue(column, value) {
+  if (column === 'allowed_roles') return JSON.stringify(value || []);
+  return value ?? null;
+}
+
+function hasMeaningfulData(db) {
+  return Array.isArray(db?.users) && db.users.length > 0;
+}
+
+async function ensurePostgresSchema() {
+  const sql = fs.readFileSync(SCHEMA_FILE, 'utf8')
+    .replace(/create table\s+/gi, 'create table if not exists ')
+    .replace(/create index\s+/gi, 'create index if not exists ');
+  await getPool().query(sql);
+  await getPool().query('alter table if exists knowledge_documents add column if not exists sort_order int not null default 0');
+}
+
+async function loadPostgresSnapshot() {
+  const db = emptyDb();
+  for (const table of SNAPSHOT_TABLES) {
+    const { rows } = await getPool().query(`select * from ${table.name}`);
+    db[table.name] = rows;
+  }
+  return db;
+}
+
+async function savePostgresSnapshot(db) {
+  const client = await getPool().connect();
+  try {
+    await client.query('begin');
+    await client.query(`truncate ${SNAPSHOT_TABLES.map(table => table.name).join(', ')} cascade`);
+
+    for (const table of SNAPSHOT_TABLES) {
+      const rows = Array.isArray(db[table.name]) ? db[table.name] : [];
+      if (!rows.length) continue;
+
+      const columnList = table.columns.join(', ');
+      const values = [];
+      const tuples = rows.map((row, rowIndex) => {
+        const placeholders = table.columns.map((column, columnIndex) => {
+          values.push(encodeColumnValue(column, row[column]));
+          return `$${rowIndex * table.columns.length + columnIndex + 1}`;
+        });
+        return `(${placeholders.join(', ')})`;
+      });
+
+      await client.query(
+        `insert into ${table.name} (${columnList}) values ${tuples.join(', ')}`,
+        values
+      );
+    }
+
+    await client.query('commit');
+  } catch (error) {
+    await client.query('rollback');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 
 function uid(prefix = 'id') {
   return `${prefix}_${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
@@ -56,24 +174,49 @@ function emptyDb() {
 
 export function loadDb() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (hasPostgres()) {
+    return loadDbFromPostgres();
+  }
   if (!fs.existsSync(DB_FILE)) {
     const db = emptyDb();
     seed(db);
-    saveDb(db);
+    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
     return db;
   }
-  return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+  return readJsonDb();
 }
 
 export function saveDb(db) {
+  if (hasPostgres()) {
+    return savePostgresSnapshot(db);
+  }
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+  return Promise.resolve();
 }
 
 export function resetDb() {
   const db = emptyDb();
   seed(db);
-  saveDb(db);
+  return Promise.resolve(saveDb(db)).then(() => db);
+}
+
+async function loadDbFromPostgres() {
+  await ensurePostgresSchema();
+  const pgDb = await loadPostgresSnapshot();
+  if (hasMeaningfulData(pgDb)) {
+    return pgDb;
+  }
+
+  const jsonDb = readJsonDb();
+  if (hasMeaningfulData(jsonDb)) {
+    await savePostgresSnapshot(jsonDb);
+    return jsonDb;
+  }
+
+  const db = emptyDb();
+  seed(db);
+  await savePostgresSnapshot(db);
   return db;
 }
 
