@@ -78,9 +78,7 @@ function hasMeaningfulData(db) {
 }
 
 async function ensurePostgresSchema() {
-  const sql = fs.readFileSync(SCHEMA_FILE, 'utf8')
-    .replace(/create table\s+/gi, 'create table if not exists ')
-    .replace(/create index\s+/gi, 'create index if not exists ');
+  const sql = fs.readFileSync(SCHEMA_FILE, 'utf8');
   await getPool().query(sql);
   await getPool().query('alter table if exists knowledge_documents add column if not exists sort_order int not null default 0');
 }
