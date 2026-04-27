@@ -34,9 +34,10 @@ const webDist = path.resolve(__dirname, '../webapp/dist');
 const uploadsDir = path.resolve(__dirname, 'data/uploads');
 const checklistUploadsDir = path.join(uploadsDir, 'checklists');
 const MANAGER_ROLES = ['owner', 'manager'];
-const STAFF_ROLES = ['manager', 'waiter', 'bartender', 'cook'];
+const STAFF_ROLES = ['manager', 'hostess', 'waiter', 'bartender', 'cook'];
 const departments = { hall: 'Зал', bar: 'Бар', kitchen: 'Кухня', common: 'Общее' };
 const techRequestStatuses = { new: 'новая', in_progress: 'в работе', done: 'выполнена', cancelled: 'отклонена' };
+const bookingStatuses = { booked: 'забронирован', seated: 'гости пришли', completed: 'завершён', cancelled: 'отменён' };
 
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
@@ -164,6 +165,95 @@ function normalizeChecklistTemplateItems(rawItems = []) {
   }
 
   return { items };
+}
+
+function activeFloorTables(restaurant_id) {
+  return sameRestaurant(collection('floor_tables'), restaurant_id)
+    .filter(table => table.active)
+    .sort((a, b) => Number(a.sort_order || 0) - Number(b.sort_order || 0) || String(a.label || '').localeCompare(String(b.label || ''), 'ru'));
+}
+
+function reservationInterval(reservation) {
+  const start = new Date(reservation.reserved_for).getTime();
+  const duration = Math.max(30, Number(reservation.duration_minutes || 120));
+  return {
+    start,
+    end: start + duration * 60000
+  };
+}
+
+function intervalsOverlap(a, b) {
+  return a.start < b.end && b.start < a.end;
+}
+
+function serializeReservation(reservation) {
+  return {
+    ...reservation,
+    created_by_user: publicUser(db.users.find(user => user.id === reservation.created_by)),
+    tables: (Array.isArray(reservation.table_ids) ? reservation.table_ids : [])
+      .map(tableId => collection('floor_tables').find(table => table.id === tableId))
+      .filter(Boolean)
+  };
+}
+
+function normalizeReservationPayload(restaurant_id, rawBody = {}, currentReservationId = null) {
+  const tableIds = Array.from(new Set((Array.isArray(rawBody.table_ids) ? rawBody.table_ids : []).map(value => String(value || '').trim()).filter(Boolean)));
+  if (!tableIds.length) return { error: 'Выберите хотя бы один стол' };
+
+  const reservedFor = String(rawBody.reserved_for || '').trim();
+  const reservedAt = new Date(reservedFor);
+  if (!reservedFor || Number.isNaN(reservedAt.getTime())) {
+    return { error: 'Укажите корректную дату и время брони' };
+  }
+
+  const guestsCount = Number(rawBody.guests_count);
+  if (!Number.isFinite(guestsCount) || guestsCount <= 0) {
+    return { error: 'Укажите количество гостей' };
+  }
+
+  const guestPhone = String(rawBody.guest_phone || '').trim();
+  if (!guestPhone) return { error: 'Укажите номер телефона гостя' };
+
+  const durationMinutes = Math.max(30, Math.min(600, Number(rawBody.duration_minutes || 120) || 120));
+  const tables = tableIds.map(tableId => collection('floor_tables').find(table => table.id === tableId && table.restaurant_id === restaurant_id && table.active)).filter(Boolean);
+  if (tables.length !== tableIds.length) return { error: 'Один или несколько столов не найдены' };
+
+  const nextInterval = {
+    start: reservedAt.getTime(),
+    end: reservedAt.getTime() + durationMinutes * 60000
+  };
+  const conflictingReservation = sameRestaurant(collection('table_reservations'), restaurant_id)
+    .filter(reservation => reservation.id !== currentReservationId)
+    .filter(reservation => ['booked', 'seated'].includes(reservation.status))
+    .find(reservation => {
+      const reservationTableIds = Array.isArray(reservation.table_ids) ? reservation.table_ids : [];
+      return reservationTableIds.some(tableId => tableIds.includes(tableId)) && intervalsOverlap(nextInterval, reservationInterval(reservation));
+    });
+
+  if (conflictingReservation) {
+    const busyLabels = (Array.isArray(conflictingReservation.table_ids) ? conflictingReservation.table_ids : [])
+      .filter(tableId => tableIds.includes(tableId))
+      .map(tableId => collection('floor_tables').find(table => table.id === tableId)?.label)
+      .filter(Boolean)
+      .join(', ');
+    return { error: `Столы уже заняты на это время${busyLabels ? `: ${busyLabels}` : ''}` };
+  }
+
+  const rawStatus = String(rawBody.status || 'booked').trim();
+  const status = ['booked', 'seated', 'completed', 'cancelled'].includes(rawStatus) ? rawStatus : 'booked';
+
+  return {
+    payload: {
+      table_ids: tableIds,
+      reserved_for: reservedAt.toISOString(),
+      duration_minutes: durationMinutes,
+      guests_count: Math.round(guestsCount),
+      guest_name: String(rawBody.guest_name || '').trim(),
+      guest_phone: guestPhone,
+      comment: String(rawBody.comment || '').trim(),
+      status
+    }
+  };
 }
 
 function saveChecklistPhoto(dataUrl, restaurant_id, run_id, item_id) {
@@ -855,6 +945,134 @@ app.get('/api/admin/inventory/runs/:id/export.xlsx', auth, ensureRestaurantActiv
   res.setHeader('Content-Disposition', `attachment; filename=inventory-${run.id}.xlsx`);
   await workbook.xlsx.write(res);
   res.end();
+}));
+
+// BOOKINGS / FLOOR PLAN
+app.get('/api/bookings/tables', auth, ensureRestaurantActive, (req, res) => {
+  res.json(activeFloorTables(req.user.restaurant_id));
+});
+
+app.post('/api/admin/bookings/tables/bulk', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
+  const count = Math.max(0, Number(req.body.count || 0));
+  if (!count) return res.status(400).json({ error: 'Укажите количество столов' });
+
+  const seats = Math.max(1, Number(req.body.seats || 4) || 4);
+  const zone = String(req.body.zone || '').trim() || 'Основной зал';
+  const prefix = String(req.body.prefix || '').trim() || 'Стол';
+  const tables = activeFloorTables(req.user.restaurant_id);
+  let nextSortOrder = tables.reduce((max, table) => Math.max(max, Number(table.sort_order) || 0), 0) + 1;
+  let nextIndex = tables.length + 1;
+
+  const created = Array.from({ length: count }).map(() => {
+    const table = {
+      id: uid('tbl'),
+      restaurant_id: req.user.restaurant_id,
+      label: `${prefix} ${nextIndex++}`,
+      seats,
+      zone,
+      sort_order: nextSortOrder++,
+      active: true,
+      created_at: nowIso()
+    };
+    collection('floor_tables').push(table);
+    return table;
+  });
+
+  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'floor_plan_updated', title: `${req.user.name} добавил столы в план зала`, entity_type: 'floor_table', entity_id: created[0]?.id || '', metadata: { count, zone } });
+  await persist();
+  res.status(201).json(created);
+}));
+
+app.patch('/api/admin/bookings/tables/:id', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
+  const table = collection('floor_tables').find(item => item.id === req.params.id && item.restaurant_id === req.user.restaurant_id);
+  if (!table) return res.status(404).json({ error: 'Стол не найден' });
+
+  const nextLabel = req.body.label !== undefined ? String(req.body.label || '').trim() : table.label;
+  const nextSeats = req.body.seats !== undefined ? Number(req.body.seats) : table.seats;
+  const nextZone = req.body.zone !== undefined ? String(req.body.zone || '').trim() : table.zone;
+
+  if (!nextLabel) return res.status(400).json({ error: 'Название стола не может быть пустым' });
+  if (!Number.isFinite(nextSeats) || nextSeats <= 0) return res.status(400).json({ error: 'Укажите корректную вместимость стола' });
+
+  table.label = nextLabel;
+  table.seats = Math.round(nextSeats);
+  table.zone = nextZone || 'Основной зал';
+  if (req.body.sort_order !== undefined && Number.isFinite(Number(req.body.sort_order))) table.sort_order = Number(req.body.sort_order);
+  if (req.body.active !== undefined) table.active = Boolean(req.body.active);
+
+  await persist();
+  res.json(table);
+}));
+
+app.delete('/api/admin/bookings/tables/:id', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
+  const table = collection('floor_tables').find(item => item.id === req.params.id && item.restaurant_id === req.user.restaurant_id);
+  if (!table) return res.status(404).json({ error: 'Стол не найден' });
+  table.active = false;
+  await persist();
+  res.json({ ok: true });
+}));
+
+app.get('/api/bookings', auth, ensureRestaurantActive, (req, res) => {
+  const rid = req.user.restaurant_id;
+  const rows = sameRestaurant(collection('table_reservations'), rid)
+    .map(serializeReservation)
+    .sort((a, b) => String(a.reserved_for || '').localeCompare(String(b.reserved_for || '')));
+  res.json(rows);
+});
+
+app.post('/api/bookings', auth, ensureRestaurantActive, runAsync(async (req, res) => {
+  const normalized = normalizeReservationPayload(req.user.restaurant_id, req.body);
+  if (normalized.error) return res.status(400).json({ error: normalized.error });
+
+  const reservation = {
+    id: uid('book'),
+    restaurant_id: req.user.restaurant_id,
+    created_by: req.user.id,
+    ...normalized.payload,
+    created_at: nowIso(),
+    updated_at: nowIso()
+  };
+
+  collection('table_reservations').push(reservation);
+  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'booking_created', title: `${req.user.name} создал бронь`, entity_type: 'booking', entity_id: reservation.id, metadata: { tables: reservation.table_ids.length, reserved_for: reservation.reserved_for, guests_count: reservation.guests_count } });
+  notifyManagers(req.user.restaurant_id, { title: 'Новая бронь', body: `${req.user.name}: ${reservation.guests_count} гостей`, entity_type: 'booking', entity_id: reservation.id });
+  await persist();
+  res.status(201).json(serializeReservation(reservation));
+}));
+
+app.patch('/api/bookings/:id', auth, ensureRestaurantActive, runAsync(async (req, res) => {
+  const reservation = collection('table_reservations').find(item => item.id === req.params.id && item.restaurant_id === req.user.restaurant_id);
+  if (!reservation) return res.status(404).json({ error: 'Бронь не найдена' });
+  if (!MANAGER_ROLES.includes(req.user.role) && reservation.created_by !== req.user.id) return res.status(403).json({ error: 'Можно редактировать только свои брони' });
+
+  const mergedPayload = {
+    table_ids: req.body.table_ids !== undefined ? req.body.table_ids : reservation.table_ids,
+    reserved_for: req.body.reserved_for !== undefined ? req.body.reserved_for : reservation.reserved_for,
+    duration_minutes: req.body.duration_minutes !== undefined ? req.body.duration_minutes : reservation.duration_minutes,
+    guests_count: req.body.guests_count !== undefined ? req.body.guests_count : reservation.guests_count,
+    guest_name: req.body.guest_name !== undefined ? req.body.guest_name : reservation.guest_name,
+    guest_phone: req.body.guest_phone !== undefined ? req.body.guest_phone : reservation.guest_phone,
+    comment: req.body.comment !== undefined ? req.body.comment : reservation.comment,
+    status: req.body.status !== undefined ? req.body.status : reservation.status
+  };
+  const normalized = normalizeReservationPayload(req.user.restaurant_id, mergedPayload, reservation.id);
+  if (normalized.error) return res.status(400).json({ error: normalized.error });
+
+  Object.assign(reservation, normalized.payload, { updated_at: nowIso() });
+  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'booking_updated', title: `${req.user.name} обновил бронь`, entity_type: 'booking', entity_id: reservation.id, metadata: { status: reservation.status, guests_count: reservation.guests_count } });
+  await persist();
+  res.json(serializeReservation(reservation));
+}));
+
+app.delete('/api/bookings/:id', auth, ensureRestaurantActive, runAsync(async (req, res) => {
+  const reservation = collection('table_reservations').find(item => item.id === req.params.id && item.restaurant_id === req.user.restaurant_id);
+  if (!reservation) return res.status(404).json({ error: 'Бронь не найдена' });
+  if (!MANAGER_ROLES.includes(req.user.role) && reservation.created_by !== req.user.id) return res.status(403).json({ error: 'Можно отменять только свои брони' });
+  reservation.status = 'cancelled';
+  reservation.updated_at = nowIso();
+  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'booking_cancelled', title: `${req.user.name} отменил бронь`, entity_type: 'booking', entity_id: reservation.id, metadata: { guest_phone: reservation.guest_phone } });
+  await persist();
+  res.json({ ok: true });
 }));
 
 // TASKS

@@ -145,6 +145,33 @@ create table if not exists inventory_values (
   comment text
 );
 
+create table if not exists floor_tables (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  label text not null,
+  seats int not null default 4,
+  zone text,
+  sort_order int not null default 0,
+  active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists table_reservations (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  created_by text not null references users(id),
+  table_ids jsonb not null default '[]',
+  reserved_for timestamptz not null,
+  duration_minutes int not null default 120,
+  guests_count int not null default 1,
+  guest_name text,
+  guest_phone text not null,
+  comment text,
+  status text not null default 'booked',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists tasks (
   id text primary key,
   restaurant_id text not null references restaurants(id) on delete cascade,
@@ -230,6 +257,8 @@ create table if not exists knowledge_views (
 create index if not exists idx_users_restaurant on users(restaurant_id);
 create index if not exists idx_requests_restaurant on product_requests(restaurant_id);
 create index if not exists idx_inventory_runs_restaurant on inventory_runs(restaurant_id);
+create index if not exists idx_floor_tables_restaurant on floor_tables(restaurant_id);
+create index if not exists idx_table_reservations_restaurant on table_reservations(restaurant_id);
 create index if not exists idx_tasks_restaurant on tasks(restaurant_id);
 create index if not exists idx_tech_requests_restaurant on tech_requests(restaurant_id);
 create index if not exists idx_knowledge_restaurant on knowledge_documents(restaurant_id);

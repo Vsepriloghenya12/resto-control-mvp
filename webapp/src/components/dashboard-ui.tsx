@@ -5,6 +5,7 @@ export type IconName =
   | 'users'
   | 'checklists'
   | 'requests'
+  | 'bookings'
   | 'inventory'
   | 'tasks'
   | 'knowledge'
@@ -62,6 +63,8 @@ export function AppIcon({ name, className }: { name: IconName; className?: strin
       return <svg className={className} viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="4.5" width="15" height="15" rx="3" {...common} /><path d="m8 8.25 1.4 1.4 2.2-2.4" {...common} /><path d="M12.5 8.6h3.75" {...common} /><path d="m8 12.15 1.4 1.4 2.2-2.4" {...common} /><path d="M12.5 12.5h3.75" {...common} /><path d="m8 16.05 1.4 1.4 2.2-2.4" {...common} /><path d="M12.5 16.4h3.75" {...common} /></svg>;
     case 'requests':
       return <svg className={className} viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 8.25h9l2 2.3v6.95a2 2 0 0 1-2 2h-9a2 2 0 0 1-2-2v-6.95l2-2.3Z" {...common} /><path d="M7.5 8.25 8.9 5.5h6.2l1.4 2.75" {...common} /><path d="M8.5 12h7" {...common} /><path d="M10.25 14.75h3.5" {...common} /></svg>;
+    case 'bookings':
+      return <svg className={className} viewBox="0 0 24 24" aria-hidden="true"><rect x="4.75" y="5.25" width="14.5" height="13.5" rx="2.4" {...common} /><path d="M8 3.75v3" {...common} /><path d="M16 3.75v3" {...common} /><path d="M4.75 9.5h14.5" {...common} /><path d="M8 13.25h3.25" {...common} /><path d="M12.95 15.1 14.7 16.85 18.1 12.95" {...common} /></svg>;
     case 'inventory':
       return <svg className={className} viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.75 7 3.9v8.7l-7 3.9-7-3.9v-8.7l7-3.9Z" {...common} /><path d="m5 7.65 7 3.85 7-3.85" {...common} /><path d="M12 11.55v8.7" {...common} /></svg>;
     case 'tasks':

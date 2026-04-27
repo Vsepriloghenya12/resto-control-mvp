@@ -31,6 +31,8 @@ const SNAPSHOT_TABLES = [
   { name: 'inventory_template_items', columns: ['id', 'restaurant_id', 'template_id', 'product_id', 'sort_order'] },
   { name: 'inventory_runs', columns: ['id', 'restaurant_id', 'template_id', 'user_id', 'department', 'comment', 'status', 'created_at'] },
   { name: 'inventory_values', columns: ['id', 'restaurant_id', 'inventory_run_id', 'product_id', 'qty', 'comment'] },
+  { name: 'floor_tables', columns: ['id', 'restaurant_id', 'label', 'seats', 'zone', 'sort_order', 'active', 'created_at'] },
+  { name: 'table_reservations', columns: ['id', 'restaurant_id', 'created_by', 'table_ids', 'reserved_for', 'duration_minutes', 'guests_count', 'guest_name', 'guest_phone', 'comment', 'status', 'created_at', 'updated_at'], jsonColumns: ['table_ids'] },
   { name: 'tasks', columns: ['id', 'restaurant_id', 'title', 'description', 'target_type', 'target_role', 'target_user_id', 'due_at', 'created_by', 'created_at', 'active'] },
   { name: 'task_assignments', columns: ['id', 'restaurant_id', 'task_id', 'user_id', 'done', 'comment', 'completed_at'] },
   { name: 'tech_requests', columns: ['id', 'restaurant_id', 'created_by', 'title', 'description', 'category', 'status', 'manager_comment', 'started_at', 'resolved_at', 'created_at', 'updated_at'] },
@@ -46,7 +48,7 @@ const SNAPSHOT_TABLES = [
 
 let pool;
 
-export const ROLES = ['owner', 'manager', 'waiter', 'bartender', 'cook'];
+export const ROLES = ['owner', 'manager', 'hostess', 'waiter', 'bartender', 'cook'];
 export const DEPARTMENTS = ['hall', 'bar', 'kitchen', 'common'];
 
 function hasPostgres() {
@@ -74,7 +76,10 @@ function readJsonDb() {
 }
 
 function encodeColumnValue(column, value) {
-  if (column === 'allowed_roles' || column === 'metadata') return JSON.stringify(value || (column === 'metadata' ? {} : []));
+  if (column === 'allowed_roles' || column === 'metadata' || column === 'table_ids') {
+    if (column === 'metadata') return JSON.stringify(value || {});
+    return JSON.stringify(value || []);
+  }
   if (column === 'supplier') return value || 'Без поставщика';
   return value ?? null;
 }
@@ -168,6 +173,8 @@ function emptyDb() {
     inventory_template_items: [],
     inventory_runs: [],
     inventory_values: [],
+    floor_tables: [],
+    table_reservations: [],
     tasks: [],
     task_assignments: [],
     tech_requests: [],
@@ -255,6 +262,7 @@ export function restaurantStatus(restaurant) {
 }
 
 export function roleToDepartment(role) {
+  if (role === 'hostess') return 'hall';
   if (role === 'bartender') return 'bar';
   if (role === 'cook') return 'kitchen';
   if (role === 'waiter') return 'hall';
@@ -418,7 +426,7 @@ export function createRestaurantWithDefaults(db, data) {
   addInventoryTemplate(db, restaurant.id, 'kitchen', 'Инвентаризация кухни');
   addInventoryTemplate(db, restaurant.id, 'hall', 'Инвентаризация зала');
 
-  addKnowledge(db, restaurant.id, 'Сервис-бук', ['waiter', 'manager', 'owner'], [
+  addKnowledge(db, restaurant.id, 'Сервис-бук', ['waiter', 'hostess', 'manager', 'owner'], [
     { title: 'Стандарт приветствия гостя', content: 'Гость должен получить приветствие в течение 30 секунд. Улыбка, зрительный контакт, предложение помочь с посадкой.' },
     { title: 'Работа с жалобой', content: 'Выслушать гостя, не спорить, извиниться, позвать управляющего, зафиксировать ситуацию.' }
   ]);
