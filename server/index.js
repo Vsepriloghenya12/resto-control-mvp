@@ -37,6 +37,8 @@ const MANAGER_ROLES = ['owner', 'manager'];
 const STAFF_ROLES = ['manager', 'hostess', 'waiter', 'bartender', 'cook'];
 const departments = { hall: 'Зал', bar: 'Бар', kitchen: 'Кухня', common: 'Общее' };
 const techRequestStatuses = { new: 'новая', in_progress: 'в работе', done: 'выполнена', cancelled: 'отклонена' };
+const productRequestStatuses = { sent: 'отправлена', ordered: 'заказано', partial: 'частично пришло', received: 'получено', done: 'завершена', not_received: 'не получено', cancelled: 'отменена' };
+const problemTypeLabels = { task: 'Задача', tech_request: 'Техзаявка', product_request: 'Заявка' };
 const bookingStatuses = { booked: 'забронирован', seated: 'гости пришли', completed: 'завершён', cancelled: 'отменён' };
 
 app.use(cors());
@@ -274,7 +276,7 @@ function saveChecklistPhoto(dataUrl, restaurant_id, run_id, item_id) {
 }
 
 function makeAssignmentsForTask(task) {
-  const candidates = db.users.filter(u => u.restaurant_id === task.restaurant_id && u.active && !u.is_super_admin);
+  const candidates = db.users.filter(u => u.restaurant_id === task.restaurant_id && u.active && STAFF_ROLES.includes(u.role));
   const selected = candidates.filter(u => {
     if (task.target_type === 'all') return true;
     if (task.target_type === 'role') return u.role === task.target_role;
@@ -423,10 +425,10 @@ app.get('/api/admin/problems', auth, ensureRestaurantActive, adminOnly, (req, re
     ...overdueAssignments.slice(0, 8).map(a => {
       const task = db.tasks.find(t => t.id === a.task_id);
       const user = db.users.find(u => u.id === a.user_id);
-      return { id: `task-${a.id}`, tone: 'danger', title: task?.title || 'Просроченная задача', subtitle: `${user?.name || 'Сотрудник'} · дедлайн ${fmtDate(task?.due_at)}`, type: 'task', entity_id: task?.id || a.task_id };
+      return { id: `task-${a.id}`, tone: 'danger', title: task?.title || 'Просроченная задача', subtitle: `${user?.name || 'Сотрудник'} · дедлайн ${fmtDate(task?.due_at)}`, type: 'task', type_label: problemTypeLabels.task, entity_id: task?.id || a.task_id };
     }),
-    ...openTech.slice(0, 8).map(t => ({ id: `tech-${t.id}`, tone: t.status === 'new' ? 'warning' : 'info', title: t.title, subtitle: `Техзаявка · ${techRequestStatuses[t.status] || t.status}`, type: 'tech_request', entity_id: t.id })),
-    ...openRequests.slice(0, 8).map(r => ({ id: `request-${r.id}`, tone: 'warning', title: `Заявка ${departments[r.department] || r.department}`, subtitle: `${r.status} · ${fmtDate(r.created_at)}`, type: 'product_request', entity_id: r.id }))
+    ...openTech.slice(0, 8).map(t => ({ id: `tech-${t.id}`, tone: t.status === 'new' ? 'warning' : 'info', title: t.title, subtitle: `Техзаявка · ${techRequestStatuses[t.status] || t.status}`, type: 'tech_request', type_label: problemTypeLabels.tech_request, entity_id: t.id })),
+    ...openRequests.slice(0, 8).map(r => ({ id: `request-${r.id}`, tone: 'warning', title: `Заявка ${departments[r.department] || r.department}`, subtitle: `${productRequestStatuses[r.status] || r.status} · ${fmtDate(r.created_at)}`, type: 'product_request', type_label: problemTypeLabels.product_request, entity_id: r.id }))
   ];
   res.json({ metrics: { open_shifts: collection('shifts').filter(s => s.restaurant_id === rid && s.status === 'open').length, open_tasks: openAssignments.length, overdue_tasks: overdueAssignments.length, open_tech_requests: openTech.length, open_product_requests: openRequests.length, checklist_runs_today: sameRestaurant(db.checklist_runs, rid).filter(r => String(r.created_at||'').slice(0,10) === today).length, pending_acknowledgements: pendingAck }, problems: problems.slice(0,20) });
 });
@@ -655,7 +657,8 @@ app.get('/api/checklists/templates', auth, ensureRestaurantActive, (req, res) =>
 app.post('/api/admin/checklists/templates', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
   const rid = req.user.restaurant_id;
   const { title, role, type, items } = req.body;
-  if (!title || !role || !type) return res.status(400).json({ error: 'Нужны title, role и type' });
+  if (!title || !role || !type) return res.status(400).json({ error: 'Нужны название, роль и тип' });
+  if (!STAFF_ROLES.includes(String(role))) return res.status(400).json({ error: 'Чек-лист можно назначить только рабочей роли, не владельцу' });
   const normalized = normalizeChecklistTemplateItems(items);
   if (normalized.error) return res.status(400).json({ error: normalized.error });
   const template = { id: uid('cltpl'), restaurant_id: rid, title, role, type, active: true, created_at: nowIso() };
@@ -674,7 +677,10 @@ app.patch('/api/admin/checklists/templates/:id', auth, ensureRestaurantActive, a
   const nextRole = req.body.role !== undefined ? String(req.body.role || '').trim() : template.role;
   const nextType = req.body.type !== undefined ? String(req.body.type || '').trim() : template.type;
   if (!nextTitle || !nextRole || !nextType) {
-    return res.status(400).json({ error: 'Нужны title, role и type' });
+    return res.status(400).json({ error: 'Нужны название, роль и тип' });
+  }
+  if (!STAFF_ROLES.includes(nextRole)) {
+    return res.status(400).json({ error: 'Чек-лист можно назначить только рабочей роли, не владельцу' });
   }
 
   template.title = nextTitle;
@@ -723,7 +729,8 @@ app.post('/api/checklists/runs', auth, ensureRestaurantActive, runAsync(async (r
   const { template_id, answers, comment } = req.body;
   const template = db.checklist_templates.find(t => t.id === template_id && t.restaurant_id === rid);
   if (!template) return res.status(404).json({ error: 'Чек-лист не найден' });
-  if (!['owner', 'manager', template.role].includes(req.user.role)) return res.status(403).json({ error: 'Этот чек-лист не для вашей роли' });
+  if (req.user.role === 'owner') return res.status(403).json({ error: 'Владелец редактирует чек-листы, но не выполняет их' });
+  if (!['manager', template.role].includes(req.user.role)) return res.status(403).json({ error: 'Этот чек-лист не для вашей роли' });
   const templateItems = db.checklist_items.filter(i => i.template_id === template.id);
   const missingRequiredItem = templateItems.find(item => item.required && !answers?.[item.id]?.done);
   if (missingRequiredItem) return res.status(400).json({ error: `Обязательный пункт "${missingRequiredItem.text}" не выполнен` });

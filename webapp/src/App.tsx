@@ -21,6 +21,31 @@ import {
   type MobileActionItem,
   type MobileNavItem
 } from './components/mobile-ui';
+import { Field, Select, Textarea, Empty } from './components/form-controls';
+import { MobileSheetModal } from './components/mobile-sheet-modal';
+import { Bookings } from './modules/bookings/Bookings';
+import { Requests } from './modules/requests/Requests';
+import { Tasks } from './modules/tasks/Tasks';
+import { cx } from './lib/cx';
+import {
+  checklistRunStatuses,
+  checklistTypes,
+  departments,
+  executableRoles,
+  inventorySections,
+  problemTypeLabels,
+  roles,
+  type InventorySectionId
+} from './lib/dictionaries';
+import {
+  daysLeft,
+  fmtDate,
+  inventorySectionMeta,
+  mobileTabTitle,
+  productMatchesInventorySection,
+  subscriptionLabel,
+  userInitials
+} from './lib/format';
 
 type View = 'login' | 'register';
 type Tab = string;
@@ -42,180 +67,7 @@ type MobileWorkspaceConfig = {
   onAction?: () => void;
 };
 
-const roles: Record<string, string> = {
-  owner: 'Владелец',
-  manager: 'Управляющий',
-  hostess: 'Хостес',
-  waiter: 'Официант',
-  bartender: 'Бармен',
-  cook: 'Повар'
-};
-
-const departments: Record<string, string> = {
-  hall: 'Зал',
-  bar: 'Бар',
-  kitchen: 'Кухня',
-  common: 'Общее'
-};
-
-const checklistTypes: Record<string, string> = {
-  open: 'Открытие',
-  close: 'Закрытие',
-  routine: 'Смена',
-  custom: 'Произвольный'
-};
-
-const bookingStatuses: Record<string, string> = {
-  booked: 'забронирован',
-  seated: 'гости пришли',
-  completed: 'завершён',
-  cancelled: 'отменён'
-};
-
-const techRequestCategories: Record<string, string> = {
-  refrigeration: 'Холодильники',
-  plumbing: 'Сантехника / засор',
-  equipment: 'Оборудование',
-  cleaning: 'Уборка и сервис',
-  other: 'Другое'
-};
-
-const techRequestStatuses: Record<string, string> = {
-  new: 'новая',
-  in_progress: 'в работе',
-  done: 'выполнена',
-  cancelled: 'отклонена'
-};
-
-const inventorySections = [
-  { id: 'bar', title: 'Бар', department: 'bar', defaultCategory: 'Бар' },
-  { id: 'kitchen', title: 'Кухня', department: 'kitchen', defaultCategory: 'Кухня' },
-  { id: 'household', title: 'Хозтовары', department: 'hall', defaultCategory: 'Хозтовары' },
-  { id: 'dishes', title: 'Посуда', department: 'hall', defaultCategory: 'Посуда' }
-] as const;
-
-type InventorySectionId = typeof inventorySections[number]['id'];
-
-const subscriptionStatuses: Record<string, string> = {
-  active: 'активна',
-  blocked: 'заблокирована',
-  trial: 'trial',
-  trial_expired: 'trial истёк',
-  subscription_expired: 'подписка истекла'
-};
-
 const brandLogoSrc = '/resto-control-logo.png';
-
-function cx(...parts: Array<string | false | null | undefined>) {
-  return parts.filter(Boolean).join(' ');
-}
-
-function fmtDate(value?: string) {
-  if (!value) return '—';
-  return new Date(value).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
-}
-
-function dayKey(value?: string) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString('sv-SE');
-}
-
-function dateTimeInputValue(value?: string) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  const pad = (part: number) => String(part).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function daysLeft(value?: string) {
-  if (!value) return 0;
-  return Math.max(0, Math.ceil((new Date(value).getTime() - Date.now()) / 86400000));
-}
-
-function subscriptionLabel(status?: string) {
-  if (!status) return 'неизвестно';
-  return subscriptionStatuses[status] || status;
-}
-
-function userInitials(name?: string) {
-  const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return 'RC';
-  return parts.slice(0, 2).map(part => part[0]?.toUpperCase() || '').join('') || 'RC';
-}
-
-function mobileTabTitle(active: string, tabs: NavTab[]) {
-  return tabs.find(tab => tab.id === active)?.title || 'Раздел';
-}
-
-function normalizedProductCategory(value?: string) {
-  return String(value || '').trim().toLowerCase();
-}
-
-function inventorySectionMeta(sectionId: InventorySectionId) {
-  return inventorySections.find(section => section.id === sectionId) || inventorySections[0];
-}
-
-function productMatchesInventorySection(product: any, sectionId: InventorySectionId) {
-  const category = normalizedProductCategory(product?.category);
-  if (sectionId === 'bar') return product?.department === 'bar';
-  if (sectionId === 'kitchen') return product?.department === 'kitchen';
-  if (sectionId === 'dishes') return ['hall', 'common'].includes(product?.department) && category.includes('посуд');
-  return ['hall', 'common'].includes(product?.department) && !category.includes('посуд');
-}
-
-function fieldIcon(label: string, type?: string, explicit?: IconName): IconName | null {
-  if (explicit) return explicit;
-  const value = String(label || '').toLowerCase();
-  if (type === 'password' || value.includes('парол')) return 'password';
-  if (value.includes('логин')) return 'login';
-  if (value.includes('email') || value.includes('почт')) return 'email';
-  if (value.includes('тел')) return 'phone';
-  if (value.includes('город')) return 'city';
-  if (value.includes('роль')) return 'role';
-  if (value.includes('ресторан')) return 'restaurant';
-  if (value.includes('имя') || value.includes('сотрудник') || value.includes('владел')) return 'user';
-  return null;
-}
-
-function Field({ label, icon, ...props }: any) {
-  const resolvedIcon = fieldIcon(label, props.type, icon);
-  return <label className="field">
-    <span>{label}</span>
-    <div className={resolvedIcon ? 'fieldControl hasIcon' : 'fieldControl'}>
-      {resolvedIcon && <AppIcon name={resolvedIcon} className="fieldIcon" />}
-      <input {...props} />
-    </div>
-  </label>;
-}
-
-function Select({ label, children, icon, ...props }: any) {
-  const resolvedIcon = fieldIcon(label, undefined, icon);
-  return <label className="field">
-    <span>{label}</span>
-    <div className={resolvedIcon ? 'fieldControl hasIcon' : 'fieldControl'}>
-      {resolvedIcon && <AppIcon name={resolvedIcon} className="fieldIcon" />}
-      <select {...props}>{children}</select>
-    </div>
-  </label>;
-}
-
-function Textarea({ label, icon, ...props }: any) {
-  const resolvedIcon = fieldIcon(label, undefined, icon);
-  return <label className="field">
-    <span>{label}</span>
-    <div className={resolvedIcon ? 'fieldControl hasIcon textareaControl' : 'fieldControl textareaControl'}>
-      {resolvedIcon && <AppIcon name={resolvedIcon} className="fieldIcon" />}
-      <textarea {...props} />
-    </div>
-  </label>;
-}
-
-function Empty({ text }: { text: string }) {
-  return <div className="empty">{text}</div>;
-}
 
 function WorkspaceInfoModal({
   title,
@@ -409,39 +261,6 @@ function useOfflineQueueState() {
 }
 
 
-function MobileSheetModal({
-  title,
-  subtitle,
-  children,
-  footer,
-  onClose,
-  className
-}: {
-  title: string;
-  subtitle?: ReactNode;
-  children: ReactNode;
-  footer?: ReactNode;
-  onClose: () => void;
-  className?: string;
-}) {
-  return <div className="mobileSheetModal" onClick={onClose}>
-    <section className={cx('mobileSheetPanel', className)} onClick={(event) => event.stopPropagation()}>
-      <div className="bottomSheetHandle" />
-      <div className="mobileSheetModalHead">
-        <div>
-          <h3>{title}</h3>
-          {subtitle && <p>{subtitle}</p>}
-        </div>
-        <button type="button" className="mobileIconButton" onClick={onClose} aria-label="Закрыть">
-          <AppIcon name="close" className="navIcon" />
-        </button>
-      </div>
-      <div className="mobileSheetContent">{children}</div>
-      {footer && <div className="mobileSheetFooter">{footer}</div>}
-    </section>
-  </div>;
-}
-
 function OfflineSyncBanner() {
   const { queueCount, online, sync } = useOfflineQueueState();
   if (online && queueCount === 0) return null;
@@ -487,7 +306,7 @@ function ShiftControl({ user }: { user: any }) {
   }
   const current = shiftState.current;
   return <section className={cx('mobileShiftCard', current && 'active')}>
-    <div className="mobileShiftCardHead"><div><span>{roles[user.role]} · {departments[user.department]}</span><strong>{current ? 'Смена идёт' : 'Смена не начата'}</strong></div><span className={cx('badge', current ? 'active' : 'trial')}>{current ? 'online' : 'start'}</span></div>
+    <div className="mobileShiftCardHead"><div><span>{roles[user.role]} · {departments[user.department]}</span><strong>{current ? 'Смена идёт' : 'Смена не начата'}</strong></div><span className={cx('badge', current ? 'active' : 'trial')}>{current ? 'активна' : 'начать'}</span></div>
     <p>{current ? `Начата ${fmtDate(current.opened_at)}` : shiftState.last_closed ? `Последняя смена: ${fmtDate(shiftState.last_closed.closed_at)}` : 'Начните смену перед чек-листами и задачами.'}</p>
     {current && <Textarea label="Комментарий к закрытию" value={comment} onChange={(e: any) => setComment(e.target.value)} placeholder="Что важно передать менеджеру" />}
     <div className="mobileShiftActions">{current ? <><Button type="button" onClick={closeShift}>Закрыть смену</Button><Button type="button" kind="soft" onClick={() => download(`/api/reports/shift/export.csv?shift_id=${current.id}`, `shift-${current.id}.csv`)}>Экспорт</Button></> : <Button type="button" onClick={startShift}>Начать смену</Button>}</div>
@@ -501,30 +320,12 @@ function ActivityFeed({ limit = 6, compact = false }: { limit?: number; compact?
   return <div className={cx('activityFeed', compact && 'compact')}>{events.length === 0 && <Empty text="Событий пока нет" />}{events.map(event => <article key={event.id} className="activityItem"><span className="activityDot" /><div><strong>{event.title}</strong><span>{event.actor?.name || 'Система'} · {fmtDate(event.created_at)}</span></div></article>)}</div>;
 }
 
-function CommentsPanel({ entityType, entityId, title = 'Комментарии' }: { entityType: string; entityId: string; title?: string }) {
-  const [open, setOpen] = useState(false);
-  const [comments, setComments] = useState<any[]>([]);
-  const [body, setBody] = useState('');
-  const [msg, setMsg] = useState('');
-  async function load() { setComments(await api(`/api/comments?entity_type=${encodeURIComponent(entityType)}&entity_id=${encodeURIComponent(entityId)}`)); }
-  async function send() {
-    const value = body.trim();
-    if (!value) return;
-    const result = await api('/api/comments', { method: 'POST', body: JSON.stringify({ entity_type: entityType, entity_id: entityId, body: value }) });
-    setBody('');
-    setMsg(result?.offline ? 'Комментарий сохранён офлайн' : '');
-    load().catch(() => undefined);
-  }
-  useEffect(() => { if (open) load().catch(() => setComments([])); }, [open, entityType, entityId]);
-  return <div className="commentsPanel"><button type="button" className="commentsToggle" onClick={() => setOpen(!open)}>{title} {open ? '↑' : '↓'}</button>{open && <div className="commentsBody">{comments.length === 0 && <span className="muted">Комментариев пока нет</span>}{comments.map(comment => <div className="commentItem" key={comment.id}><strong>{comment.user?.name || 'Сотрудник'}</strong><span>{comment.body}</span><em>{fmtDate(comment.created_at)}</em></div>)}<div className="commentComposer"><input value={body} onChange={(e) => setBody(e.target.value)} placeholder="Написать комментарий" /><Button type="button" kind="soft" onClick={send}>Отправить</Button></div>{msg && <div className="notice">{msg}</div>}</div>}</div>;
-}
-
 function AdminProblemDashboard() {
   const [data, setData] = useState<any>(null);
   useEffect(() => { api('/api/admin/problems').then(setData).catch(() => setData(null)); }, []);
   if (!data) return <Card title="Проблемы"><Empty text="Загружаем проблемный дашборд" /></Card>;
   const metrics = data.metrics || {};
-  return <><Card title="Проблемный дашборд" right={<Button kind="soft" onClick={() => download('/api/admin/reports/operations.csv', 'operations-report.csv')}>Экспорт CSV</Button>}><div className="problemMetrics"><div><strong>{metrics.open_shifts || 0}</strong><span>смен сейчас</span></div><div><strong>{metrics.overdue_tasks || 0}</strong><span>просрочено</span></div><div><strong>{metrics.open_tech_requests || 0}</strong><span>техзаявок</span></div><div><strong>{metrics.pending_acknowledgements || 0}</strong><span>ознакомлений ждут</span></div></div><div className="problemList">{(data.problems || []).length === 0 && <Empty text="Критичных проблем сейчас нет" />}{(data.problems || []).map((problem: any) => <div className={cx('problemRow', problem.tone)} key={problem.id}><div><strong>{problem.title}</strong><span>{problem.subtitle}</span></div><span className="badge">{problem.type}</span></div>)}</div></Card><Card title="Лента событий"><ActivityFeed limit={12} /></Card></>;
+  return <><Card title="Проблемный дашборд" right={<Button kind="soft" onClick={() => download('/api/admin/reports/operations.csv', 'operations-report.csv')}>Экспорт CSV</Button>}><div className="problemMetrics"><div><strong>{metrics.open_shifts || 0}</strong><span>смен сейчас</span></div><div><strong>{metrics.overdue_tasks || 0}</strong><span>просрочено</span></div><div><strong>{metrics.open_tech_requests || 0}</strong><span>техзаявок</span></div><div><strong>{metrics.pending_acknowledgements || 0}</strong><span>ознакомлений ждут</span></div></div><div className="problemList">{(data.problems || []).length === 0 && <Empty text="Критичных проблем сейчас нет" />}{(data.problems || []).map((problem: any) => <div className={cx('problemRow', problem.tone)} key={problem.id}><div><strong>{problem.title}</strong><span>{problem.subtitle}</span></div><span className="badge">{problem.type_label || problemTypeLabels[problem.type] || problem.type}</span></div>)}</div></Card><Card title="Лента событий"><ActivityFeed limit={12} /></Card></>;
 }
 
 
@@ -567,7 +368,7 @@ function AuthScreen({ onLogin, error, setError }: any) {
           <Field label="Название ресторана" value={form.restaurantName} onChange={(e: any) => setForm({ ...form, restaurantName: e.target.value })} placeholder="Например: Мята Lounge" />
           <Field label="Имя владельца" value={form.ownerName} onChange={(e: any) => setForm({ ...form, ownerName: e.target.value })} placeholder="Иван" />
           <Field label="Телефон" value={form.phone} onChange={(e: any) => setForm({ ...form, phone: e.target.value })} />
-          <Field label="Email" value={form.email} onChange={(e: any) => setForm({ ...form, email: e.target.value })} />
+          <Field label="Эл. почта" value={form.email} onChange={(e: any) => setForm({ ...form, email: e.target.value })} />
           <Field label="Город" value={form.city} onChange={(e: any) => setForm({ ...form, city: e.target.value })} />
         </>}
         <Field label="Логин" value={form.login} onChange={(e: any) => setForm({ ...form, login: e.target.value })} />
@@ -870,7 +671,7 @@ function SuperAdmin({ user, onLogout }: any) {
         <Field label="Владелец" value={form.owner_name} onChange={(e: any) => setForm({ ...form, owner_name: e.target.value })} />
         <Field label="Город" value={form.city} onChange={(e: any) => setForm({ ...form, city: e.target.value })} />
         <Field label="Телефон" value={form.phone} onChange={(e: any) => setForm({ ...form, phone: e.target.value })} />
-        <Field label="Email" value={form.email} onChange={(e: any) => setForm({ ...form, email: e.target.value })} />
+        <Field label="Эл. почта" value={form.email} onChange={(e: any) => setForm({ ...form, email: e.target.value })} />
         <Field label="Логин владельца" value={form.login} onChange={(e: any) => setForm({ ...form, login: e.target.value })} />
         <Field label="Пароль" value={form.password} onChange={(e: any) => setForm({ ...form, password: e.target.value })} />
         <Button>Создать ресторан</Button>
@@ -1020,7 +821,7 @@ function UsersAdmin() {
         <Field label="Имя" value={form.name} onChange={(e: any) => setForm({ ...form, name: e.target.value })} />
         <Field label="Логин" value={form.login} onChange={(e: any) => setForm({ ...form, login: e.target.value })} />
         <Field label="Пароль" value={form.password} onChange={(e: any) => setForm({ ...form, password: e.target.value })} />
-        <Select label="Роль" value={form.role} onChange={(e: any) => setForm({ ...form, role: e.target.value })}>{Object.entries(roles).filter(([key]) => key !== 'owner').map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>
+        <Select label="Роль" value={form.role} onChange={(e: any) => setForm({ ...form, role: e.target.value })}>{executableRoles.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>
         <Button>Добавить</Button>
       </form>
       {msg && <div className="notice">{msg}</div>}
@@ -1030,7 +831,7 @@ function UsersAdmin() {
         <Field label="Имя" value={editForm.name} onChange={(e: any) => setEditForm({ ...editForm, name: e.target.value })} />
         <Field label="Логин" value={editForm.login} onChange={(e: any) => setEditForm({ ...editForm, login: e.target.value })} />
         <Field label="Новый пароль" value={editForm.password} onChange={(e: any) => setEditForm({ ...editForm, password: e.target.value })} placeholder="Оставьте пустым, если не меняете" />
-        <Select label="Роль" value={editForm.role} onChange={(e: any) => setEditForm({ ...editForm, role: e.target.value })}>{Object.entries(roles).filter(([key]) => key !== 'owner').map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>
+        <Select label="Роль" value={editForm.role} onChange={(e: any) => setEditForm({ ...editForm, role: e.target.value })}>{executableRoles.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>
         <label className="field">
           <span>Статус</span>
           <div className="checkboxRow">
@@ -1521,7 +1322,7 @@ function Checklists({ user, admin = false }: any) {
         <div className="form two">
           <Field label="Название чек-листа" value={templateForm.title} onChange={(e: any) => setTemplateForm({ ...templateForm, title: e.target.value })} placeholder="Например: Проверка открытия зала" />
           <Select label="Для роли" value={templateForm.role} onChange={(e: any) => setTemplateForm({ ...templateForm, role: e.target.value })}>
-            {Object.entries(roles).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+            {executableRoles.map(([key, value]) => <option key={key} value={key}>{value}</option>)}
           </Select>
           <Select label="Тип" value={templateForm.type} onChange={(e: any) => setTemplateForm({ ...templateForm, type: e.target.value })}>
             {Object.entries(checklistTypes).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
@@ -1549,7 +1350,24 @@ function Checklists({ user, admin = false }: any) {
       {editorMsg && <div className={editorMsg.includes('обновл') || editorMsg.includes('создан') ? 'notice' : 'error'}>{editorMsg}</div>}
     </Card>}
 
-    <Card title={admin ? 'Шаблоны и выполнение чек-листов' : 'Мои чек-листы'}>
+    {admin ? <Card title="Шаблоны чек-листов" right={<span className="badge active">Только редактирование</span>}>
+      {templates.length === 0 && <Empty text="Нет чек-листов" />}
+      <div className="grid adminTemplateGrid">{templates.map(t => <div className="miniCard checklistTemplateCard" key={t.id}>
+        <div className="rowBetween"><b>{t.title}</b><span className="badge">{roles[t.role]} · {checklistTypes[t.type] || t.type}</span></div>
+        <p>{t.items.length} пунктов · {t.items.filter((item: any) => item.required !== false).length} обязательных</p>
+        <div className="checkItems previewOnly">{t.items.slice(0, 6).map((i: any) => <div className="checkRow" key={i.id}>
+          <span className="checkBullet">✓</span>
+          <div className="checkContent">
+            <span>{i.text}</span>
+            <em>{i.needs_photo ? 'нужно фото' : ''}{i.needs_photo && i.needs_comment ? ' · ' : ''}{i.needs_comment ? 'нужен комментарий' : ''}</em>
+          </div>
+        </div>)}</div>
+        {t.items.length > 6 && <p className="muted">Ещё {t.items.length - 6} пунктов</p>}
+        <div className="actions">
+          <Button kind="soft" onClick={() => startTemplateEdit(t)}>Редактировать шаблон</Button>
+        </div>
+      </div>)}</div>
+    </Card> : <Card title="Мои чек-листы">
       {templates.length === 0 && <Empty text="Нет чек-листов" />}
       <div className="grid">{templates.map(t => <div className="miniCard" key={t.id}>
         <div className="rowBetween"><b>{t.title}</b><span className="badge">{roles[t.role]} · {checklistTypes[t.type] || t.type}</span></div>
@@ -1561,19 +1379,18 @@ function Checklists({ user, admin = false }: any) {
               <Button kind="soft" onClick={() => setCameraTarget({ itemId: i.id, title: i.text })}>
                 {answers[i.id]?.photo_url ? 'Переснять фото' : 'Сделать фото'}
               </Button>
-              {answers[i.id]?.photo_url && <img className="photoPreview" src={answers[i.id].photo_url} alt={`Фото: ${i.text}`} />}
+              {answers[i.id]?.photo_url && <img className="photoPreview" src={answers[i.id].photo_url} alt={'Фото: ' + i.text} />}
             </div>}
           </div>
         </div>)}</div>
         <div className="actions">
-          {admin && <Button kind="soft" onClick={() => startTemplateEdit(t)}>Редактировать</Button>}
           <Button onClick={() => submit(t)}>Сохранить выполнение</Button>
         </div>
       </div>)}</div>
       {runMsg && <div className="notice">{runMsg}</div>}
-    </Card>
+    </Card>}
     {admin && <Card title="Отчёты по выполнению чек-листов" right={<span className="badge active">Доступно менеджеру</span>}><div className="list">{runs.map(r => <div className="miniCard" key={r.id}>
-      <div className="rowBetween"><div><b>{r.template?.title}</b><span>{r.user?.name} · {roles[r.user?.role] || 'Сотрудник'} · {fmtDate(r.created_at)}</span></div><span className="badge active">{r.status}</span></div>
+      <div className="rowBetween"><div><b>{r.template?.title}</b><span>{r.user?.name} · {roles[r.user?.role] || 'Сотрудник'} · {fmtDate(r.created_at)}</span></div><span className="badge active">{checklistRunStatuses[r.status] || r.status}</span></div>
       <div className="thumbRow">
         {r.answers?.filter((answer: any) => answer.photo_url).map((answer: any) => <a key={answer.id} className="thumbLink" href={answer.photo_url} target="_blank" rel="noreferrer">
           <img src={answer.photo_url} alt="Фото подтверждения" />
@@ -1586,485 +1403,6 @@ function Checklists({ user, admin = false }: any) {
       onClose={() => setCameraTarget(null)}
       onCapture={(photo) => updateAnswer(cameraTarget.itemId, { done: true, photo_url: photo })}
     />}
-  </>;
-}
-
-function Bookings({ user, admin = false }: any) {
-  const initialDate = dayKey(new Date().toISOString()) || '';
-  const [tables, setTables] = useState<any[]>([]);
-  const [reservations, setReservations] = useState<any[]>([]);
-  const [msg, setMsg] = useState('');
-  const [dateFilter, setDateFilter] = useState(initialDate);
-  const [showForm, setShowForm] = useState(false);
-  const [editingReservationId, setEditingReservationId] = useState('');
-  const [bulkForm, setBulkForm] = useState<any>({ count: 6, seats: 4, zone: 'Основной зал', prefix: 'Стол' });
-  const [tableDrafts, setTableDrafts] = useState<any>({});
-  const [reservationForm, setReservationForm] = useState<any>({ reserved_for: `${initialDate}T19:00`, guests_count: 2, guest_phone: '', guest_name: '', duration_minutes: 120, comment: '', status: 'booked', table_ids: [] });
-
-  async function load() {
-    const [tableRows, reservationRows] = await Promise.all([
-      api('/api/bookings/tables'),
-      api('/api/bookings')
-    ]);
-    setTables(tableRows);
-    setReservations(reservationRows);
-    setTableDrafts(Object.fromEntries(tableRows.map((table: any) => [table.id, { label: table.label, seats: table.seats, zone: table.zone || '' }])));
-  }
-
-  useEffect(() => { load(); }, []);
-
-  function resetReservationForm(nextDate = dateFilter || initialDate) {
-    setEditingReservationId('');
-    setReservationForm({
-      reserved_for: `${nextDate}T19:00`,
-      guests_count: 2,
-      guest_phone: '',
-      guest_name: '',
-      duration_minutes: 120,
-      comment: '',
-      status: 'booked',
-      table_ids: []
-    });
-  }
-
-  function openCreateForm() {
-    if (!tables.length) {
-      setMsg('Менеджер должен сначала настроить план зала');
-      return;
-    }
-    resetReservationForm();
-    setMsg('');
-    setShowForm(true);
-  }
-
-  function startEditReservation(reservation: any) {
-    setEditingReservationId(reservation.id);
-    setReservationForm({
-      reserved_for: dateTimeInputValue(reservation.reserved_for),
-      guests_count: reservation.guests_count || 1,
-      guest_phone: reservation.guest_phone || '',
-      guest_name: reservation.guest_name || '',
-      duration_minutes: reservation.duration_minutes || 120,
-      comment: reservation.comment || '',
-      status: reservation.status || 'booked',
-      table_ids: Array.isArray(reservation.table_ids) ? reservation.table_ids : []
-    });
-    setMsg('');
-    setShowForm(true);
-  }
-
-  async function saveReservation(e?: FormEvent) {
-    e?.preventDefault();
-    setMsg('');
-    try {
-      const payload = {
-        ...reservationForm,
-        guests_count: Number(reservationForm.guests_count),
-        duration_minutes: Number(reservationForm.duration_minutes),
-        table_ids: reservationForm.table_ids
-      };
-      if (editingReservationId) {
-        await api(`/api/bookings/${editingReservationId}`, { method: 'PATCH', body: JSON.stringify(payload) });
-        setMsg('Бронь обновлена');
-      } else {
-        await api('/api/bookings', { method: 'POST', body: JSON.stringify(payload) });
-        setMsg('Бронь создана');
-      }
-      setShowForm(false);
-      resetReservationForm();
-      load();
-    } catch (error: any) {
-      setMsg(error.message);
-    }
-  }
-
-  async function cancelReservation(reservation: any) {
-    if (!window.confirm(`Отменить бронь на ${fmtDate(reservation.reserved_for)}?`)) return;
-    setMsg('');
-    try {
-      await api(`/api/bookings/${reservation.id}`, { method: 'DELETE' });
-      setMsg('Бронь отменена');
-      if (editingReservationId === reservation.id) {
-        setShowForm(false);
-        resetReservationForm();
-      }
-      load();
-    } catch (error: any) {
-      setMsg(error.message);
-    }
-  }
-
-  async function createTables(e: FormEvent) {
-    e.preventDefault();
-    setMsg('');
-    try {
-      await api('/api/admin/bookings/tables/bulk', { method: 'POST', body: JSON.stringify(bulkForm) });
-      setMsg('Столы добавлены в план зала');
-      load();
-    } catch (error: any) {
-      setMsg(error.message);
-    }
-  }
-
-  async function saveTable(tableId: string) {
-    setMsg('');
-    try {
-      await api(`/api/admin/bookings/tables/${tableId}`, { method: 'PATCH', body: JSON.stringify(tableDrafts[tableId]) });
-      setMsg('Стол обновлён');
-      load();
-    } catch (error: any) {
-      setMsg(error.message);
-    }
-  }
-
-  async function removeTable(table: any) {
-    if (!window.confirm(`Удалить ${table.label} из плана зала?`)) return;
-    setMsg('');
-    try {
-      await api(`/api/admin/bookings/tables/${table.id}`, { method: 'DELETE' });
-      setMsg('Стол удалён из плана');
-      load();
-    } catch (error: any) {
-      setMsg(error.message);
-    }
-  }
-
-  const bookingsForDate = reservations
-    .filter((reservation: any) => !dateFilter || dayKey(reservation.reserved_for) === dateFilter)
-    .sort((a: any, b: any) => String(a.reserved_for || '').localeCompare(String(b.reserved_for || '')));
-
-  const selectedStart = reservationForm.reserved_for ? new Date(reservationForm.reserved_for).getTime() : NaN;
-  const selectedDuration = Math.max(30, Number(reservationForm.duration_minutes || 120) || 120);
-  const selectedEnd = Number.isNaN(selectedStart) ? NaN : selectedStart + selectedDuration * 60000;
-  const unavailableTableIds = new Set(
-    reservations
-      .filter((reservation: any) => reservation.id !== editingReservationId)
-      .filter((reservation: any) => ['booked', 'seated'].includes(reservation.status))
-      .filter((reservation: any) => {
-        if (Number.isNaN(selectedStart) || Number.isNaN(selectedEnd)) return false;
-        const currentStart = new Date(reservation.reserved_for).getTime();
-        const currentEnd = currentStart + Math.max(30, Number(reservation.duration_minutes || 120) || 120) * 60000;
-        return selectedStart < currentEnd && currentStart < selectedEnd;
-      })
-      .flatMap((reservation: any) => Array.isArray(reservation.table_ids) ? reservation.table_ids : [])
-  );
-
-  function toggleTable(tableId: string) {
-    setReservationForm((current: any) => {
-      const selected = Array.isArray(current.table_ids) ? current.table_ids : [];
-      if (selected.includes(tableId)) {
-        return { ...current, table_ids: selected.filter((id: string) => id !== tableId) };
-      }
-      if (unavailableTableIds.has(tableId)) return current;
-      return { ...current, table_ids: [...selected, tableId] };
-    });
-  }
-
-  function tablesSummary(reservation: any) {
-    return (reservation.tables || [])
-      .map((table: any) => table.label)
-      .join(', ');
-  }
-
-  function tableStateForDay(table: any) {
-    const tableReservations = bookingsForDate
-      .filter((reservation: any) => (Array.isArray(reservation.table_ids) ? reservation.table_ids : []).includes(table.id))
-      .filter((reservation: any) => ['booked', 'seated'].includes(reservation.status));
-    if (!tableReservations.length) return { tone: 'free', text: 'Свободен' };
-    const nextReservation = tableReservations[0];
-    const time = new Date(nextReservation.reserved_for).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    return {
-      tone: nextReservation.status === 'seated' ? 'occupied' : 'reserved',
-      text: `${time} · ${nextReservation.guests_count} г.`
-    };
-  }
-
-  const bookingForm = <form className="form" id="booking-form" onSubmit={saveReservation}>
-    <div className="form two">
-      <Field label="Дата и время" type="datetime-local" value={reservationForm.reserved_for} onChange={(e: any) => setReservationForm({ ...reservationForm, reserved_for: e.target.value })} />
-      <Field label="Гостей" type="number" min="1" value={reservationForm.guests_count} onChange={(e: any) => setReservationForm({ ...reservationForm, guests_count: e.target.value })} />
-      <Field label="Телефон" value={reservationForm.guest_phone} onChange={(e: any) => setReservationForm({ ...reservationForm, guest_phone: e.target.value })} />
-      <Field label="Имя гостя" value={reservationForm.guest_name} onChange={(e: any) => setReservationForm({ ...reservationForm, guest_name: e.target.value })} />
-      <Field label="Длительность, мин" type="number" min="30" step="30" value={reservationForm.duration_minutes} onChange={(e: any) => setReservationForm({ ...reservationForm, duration_minutes: e.target.value })} />
-      <Select label="Статус" value={reservationForm.status} onChange={(e: any) => setReservationForm({ ...reservationForm, status: e.target.value })}>
-        {Object.entries(bookingStatuses).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
-      </Select>
-    </div>
-    <Textarea label="Комментарий" value={reservationForm.comment} onChange={(e: any) => setReservationForm({ ...reservationForm, comment: e.target.value })} placeholder="Например: детский стул, окно, день рождения" />
-    <div className="bookingPicker">
-      <div className="rowBetween">
-        <strong>Выберите столы</strong>
-        <span className="muted">{reservationForm.table_ids.length} выбрано</span>
-      </div>
-      <div className="bookingTableSelectGrid">
-        {tables.map((table: any) => {
-          const selected = reservationForm.table_ids.includes(table.id);
-          const unavailable = unavailableTableIds.has(table.id) && !selected;
-          return <button key={table.id} type="button" className={cx('bookingTableButton', selected && 'selected', unavailable && 'disabled')} onClick={() => toggleTable(table.id)}>
-            <strong>{table.label}</strong>
-            <span>{table.seats} мест · {table.zone || 'Зал'}</span>
-          </button>;
-        })}
-      </div>
-    </div>
-  </form>;
-
-  if (!admin) {
-    return <>
-      <div className="mobileSectionStack">
-        <SectionTitle title="Брони" action={<button type="button" className="sectionLink" onClick={openCreateForm}>Новая</button>} />
-        <section className="mobileSection">
-          <div className="mobileListSurface mobileFilterSurface">
-            <Field label="Дата" type="date" value={dateFilter} onChange={(e: any) => setDateFilter(e.target.value)} />
-          </div>
-        </section>
-        <section className="mobileSection">
-          <div className="mobileListSectionHead">
-            <h3>План зала</h3>
-            <span className="mobileSectionCount">{tables.length}</span>
-          </div>
-          {!tables.length && <div className="mobileListSurface"><Empty text="Менеджер ещё не настроил план зала" /></div>}
-          {!!tables.length && <div className="bookingTablesGrid">
-            {tables.map((table: any) => {
-              const state = tableStateForDay(table);
-              return <div key={table.id} className={cx('bookingTableButton', 'static', state.tone)}>
-                <strong>{table.label}</strong>
-                <span>{table.seats} мест</span>
-                <em>{state.text}</em>
-              </div>;
-            })}
-          </div>}
-        </section>
-        <section className="mobileSection">
-          <div className="mobileListSectionHead">
-            <h3>Брони на день</h3>
-            <span className="mobileSectionCount">{bookingsForDate.length}</span>
-          </div>
-          <div className="mobileListSurface">
-            {bookingsForDate.length === 0 && <Empty text="На выбранную дату броней пока нет" />}
-            <div className="mobileRequestList">
-              {bookingsForDate.map((reservation: any) => <article key={reservation.id} className="mobileRequestCard bookingReservationCard">
-                <div className="rowBetween">
-                  <div>
-                    <strong>{reservation.guest_name || 'Гость'}</strong>
-                    <span>{fmtDate(reservation.reserved_for)} · {reservation.guests_count} гостей</span>
-                  </div>
-                  <span className={`badge ${reservation.status === 'cancelled' ? 'cancelled' : reservation.status === 'completed' ? 'active' : reservation.status === 'seated' ? 'trial' : 'warning'}`}>{bookingStatuses[reservation.status] || reservation.status}</span>
-                </div>
-                <div className="bookingTablesInline">{tablesSummary(reservation) || 'Столы не выбраны'}</div>
-                <div className="mobileInlineHint">{reservation.guest_phone}{reservation.comment ? ` · ${reservation.comment}` : ''}</div>
-                <div className="actions">
-                  <Button kind="soft" type="button" onClick={() => startEditReservation(reservation)}>Редактировать</Button>
-                  {reservation.status !== 'cancelled' && <Button kind="danger" type="button" onClick={() => cancelReservation(reservation)}>Отменить</Button>}
-                </div>
-              </article>)}
-            </div>
-          </div>
-        </section>
-        {msg && <div className={msg.includes('обнов') || msg.includes('создан') || msg.includes('отмен') ? 'notice mobileInlineNotice' : 'error mobileInlineNotice'}>{msg}</div>}
-      </div>
-      {showForm && <MobileSheetModal
-        title={editingReservationId ? 'Редактировать бронь' : 'Новая бронь'}
-        subtitle="Выберите столы, время и контакты гостя"
-        onClose={() => {
-          setShowForm(false);
-          resetReservationForm();
-        }}
-        className="mobileFormSheet"
-        footer={<div className="bookingSheetActions">
-          <Button kind="soft" type="button" onClick={() => {
-            setShowForm(false);
-            resetReservationForm();
-          }}>Отмена</Button>
-          <Button type="submit" form="booking-form" className="mobilePrimaryButton">Сохранить бронь</Button>
-        </div>}
-      >
-        {bookingForm}
-      </MobileSheetModal>}
-    </>;
-  }
-
-  return <>
-    <Card title="План зала" right={<span className="badge active">Менеджер и владелец</span>}>
-      <form className="form two" onSubmit={createTables}>
-        <Field label="Количество столов" type="number" min="1" value={bulkForm.count} onChange={(e: any) => setBulkForm({ ...bulkForm, count: e.target.value })} />
-        <Field label="Мест за столом" type="number" min="1" value={bulkForm.seats} onChange={(e: any) => setBulkForm({ ...bulkForm, seats: e.target.value })} />
-        <Field label="Зона" value={bulkForm.zone} onChange={(e: any) => setBulkForm({ ...bulkForm, zone: e.target.value })} />
-        <Field label="Префикс" value={bulkForm.prefix} onChange={(e: any) => setBulkForm({ ...bulkForm, prefix: e.target.value })} />
-        <Button>Добавить столы</Button>
-      </form>
-      <div className="bookingAdminTableList">
-        {tables.length === 0 && <Empty text="План зала пока пуст. Добавьте первые столы." />}
-        {tables.map((table: any) => <div key={table.id} className="listRow bookingAdminTableRow">
-          <div className="bookingAdminTableDraft">
-            <input value={tableDrafts[table.id]?.label || ''} onChange={(e) => setTableDrafts({ ...tableDrafts, [table.id]: { ...tableDrafts[table.id], label: e.target.value } })} placeholder="Название стола" />
-            <input type="number" min="1" value={tableDrafts[table.id]?.seats || ''} onChange={(e) => setTableDrafts({ ...tableDrafts, [table.id]: { ...tableDrafts[table.id], seats: e.target.value } })} placeholder="Мест" />
-            <input value={tableDrafts[table.id]?.zone || ''} onChange={(e) => setTableDrafts({ ...tableDrafts, [table.id]: { ...tableDrafts[table.id], zone: e.target.value } })} placeholder="Зона" />
-          </div>
-          <div className="adminUserActions">
-            <Button kind="soft" type="button" onClick={() => saveTable(table.id)}>Сохранить</Button>
-            <Button kind="danger" type="button" onClick={() => removeTable(table)}>Удалить</Button>
-          </div>
-        </div>)}
-      </div>
-    </Card>
-
-    <Card title={editingReservationId ? 'Редактировать бронь' : 'Новая бронь'}>
-      {tables.length === 0
-        ? <Empty text="Сначала настройте столы в плане зала" />
-        : <>
-          {bookingForm}
-          <div className="actions">
-            {editingReservationId && <Button kind="soft" type="button" onClick={() => resetReservationForm()}>Сбросить</Button>}
-            <Button type="button" onClick={() => saveReservation()}>{editingReservationId ? 'Сохранить бронь' : 'Создать бронь'}</Button>
-          </div>
-        </>}
-    </Card>
-
-    <Card title="Список броней" right={<div className="bookingAdminFilter"><input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} /></div>}>
-      <div className="list">
-        {bookingsForDate.length === 0 && <Empty text="На выбранную дату броней пока нет" />}
-        {bookingsForDate.map((reservation: any) => <div className="miniCard bookingAdminReservation" key={reservation.id}>
-          <div className="rowBetween">
-            <div><b>{reservation.guest_name || 'Гость'}</b><span>{fmtDate(reservation.reserved_for)} · {reservation.guests_count} гостей</span></div>
-            <span className={`badge ${reservation.status === 'cancelled' ? 'cancelled' : reservation.status === 'completed' ? 'active' : reservation.status === 'seated' ? 'trial' : 'warning'}`}>{bookingStatuses[reservation.status] || reservation.status}</span>
-          </div>
-          <div className="mobileInlineHint">{reservation.guest_phone} · {tablesSummary(reservation) || 'Без столов'}</div>
-          {reservation.comment && <p>{reservation.comment}</p>}
-          <div className="actions">
-            <Button kind="soft" type="button" onClick={() => startEditReservation(reservation)}>Редактировать</Button>
-            {reservation.status !== 'cancelled' && <Button kind="danger" type="button" onClick={() => cancelReservation(reservation)}>Отменить</Button>}
-          </div>
-        </div>)}
-      </div>
-      {msg && <div className={msg.includes('обнов') || msg.includes('создан') || msg.includes('отмен') || msg.includes('добавлены') || msg.includes('удалён') ? 'notice' : 'error'}>{msg}</div>}
-    </Card>
-  </>;
-}
-
-function Requests({ user, admin = false }: any) {
-  const [products, setProducts] = useState<any[]>([]);
-  const [requests, setRequests] = useState<any[]>([]);
-  const [qty, setQty] = useState<any>({});
-  const [received, setReceived] = useState<any>({});
-  const [msg, setMsg] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [showComposer, setShowComposer] = useState(false);
-  async function load() { setProducts(await api('/api/products')); setRequests(await api('/api/requests')); }
-  useEffect(() => { load(); }, []);
-  async function submit() {
-    const items = Object.entries(qty).map(([product_id, q]) => ({ product_id, qty_ordered: Number(q) })).filter(i => i.qty_ordered > 0);
-    if (items.length === 0) {
-      setMsg('Укажите количество хотя бы одного товара');
-      return;
-    }
-    const result = await api('/api/requests', { method: 'POST', body: JSON.stringify({ department: user.department, items }) });
-    setQty({});
-    setShowComposer(false);
-    setMsg(result?.offline ? 'Заявка сохранена офлайн и отправится после сети' : 'Заявка отправлена');
-    load().catch(() => undefined);
-  }
-  async function receive(req: any) {
-    const result = await api(`/api/requests/${req.id}/receive`, { method: 'PATCH', body: JSON.stringify({ received: received[req.id] || {} }) });
-    setMsg(result?.offline ? 'Приход сохранён офлайн' : 'Приход товара обновлён'); load().catch(() => undefined);
-  }
-
-  const visibleRequests = statusFilter === 'all'
-    ? requests
-    : requests.filter((request) => {
-      if (statusFilter === 'processing') return !['received', 'done', 'cancelled'].includes(request.status);
-      if (statusFilter === 'done') return ['received', 'done'].includes(request.status);
-      if (statusFilter === 'rejected') return ['not_received', 'cancelled'].includes(request.status);
-      return true;
-    });
-
-  if (!admin) {
-    const selectedCount = Object.values(qty).filter((value) => Number(value) > 0).length;
-
-    return <>
-      <div className="mobileSectionStack">
-        <SectionTitle title="Заявки" action={<button type="button" className="sectionLink" onClick={() => setShowComposer(true)}>Новая заявка</button>} />
-        {msg && <div className="notice mobileInlineNotice">{msg}</div>}
-
-        <button type="button" className="mobileOverviewRow" onClick={() => setShowComposer(true)}>
-          <div className="mobileOverviewIcon green"><AppIcon name="requests" className="navIcon" /></div>
-          <div className="mobileOverviewCopy">
-            <strong>Создать заявку</strong>
-            <span>{products.length} товаров доступно для заказа</span>
-          </div>
-          <b>+</b>
-        </button>
-
-        <div className="mobileChipRow">
-          <button type="button" className={cx('mobileChip', statusFilter === 'all' && 'active')} onClick={() => setStatusFilter('all')}><span>Все</span><b>{requests.length}</b></button>
-          <button type="button" className={cx('mobileChip', statusFilter === 'processing' && 'active')} onClick={() => setStatusFilter('processing')}><span>В обработке</span><b>{requests.filter((request) => !['received', 'done', 'cancelled'].includes(request.status)).length}</b></button>
-          <button type="button" className={cx('mobileChip', statusFilter === 'done' && 'active')} onClick={() => setStatusFilter('done')}><span>Выполнено</span><b>{requests.filter((request) => ['received', 'done'].includes(request.status)).length}</b></button>
-          <button type="button" className={cx('mobileChip', statusFilter === 'rejected' && 'active')} onClick={() => setStatusFilter('rejected')}><span>Отклонено</span><b>{requests.filter((request) => ['not_received', 'cancelled'].includes(request.status)).length}</b></button>
-        </div>
-
-        <Card title="История заявок" className="mobileCard">
-          {visibleRequests.length === 0 && <Empty text="Под выбранный статус заявок пока нет" />}
-          <div className="mobileRequestList">
-            {visibleRequests.map((request) => <article key={request.id} className="mobileRequestCard">
-              <div className="rowBetween">
-                <div>
-                  <strong>{departments[request.department] || 'Отдел'}</strong>
-                  <span>{fmtDate(request.created_at)}</span>
-                </div>
-                <span className={`badge ${request.status}`}>{request.status}</span>
-              </div>
-              <div className="mobileRequestItems">
-                {request.items.map((item: any) => <div key={item.id} className="mobileRequestItem">
-                  <span>{item.product?.name}</span>
-                  <strong>{item.qty_ordered} {item.product?.unit}</strong>
-                </div>)}
-              </div>
-              <CommentsPanel entityType="product_request" entityId={request.id} />
-            </article>)}
-          </div>
-        </Card>
-      </div>
-
-      {showComposer && <MobileSheetModal
-        title="Новая заявка"
-        subtitle={selectedCount > 0 ? `Выбрано позиций: ${selectedCount}` : 'Укажите фактическую потребность'}
-        onClose={() => setShowComposer(false)}
-        className="mobileRequestComposer"
-        footer={<Button type="button" className="mobilePrimaryButton" onClick={submit}>Отправить заявку</Button>}
-      >
-        <div className="mobileProductsList">
-          {products.map((product) => <label className="mobileProductRow" key={product.id}>
-            <div>
-              <strong>{product.name}</strong>
-              <span>{departments[product.department] || 'Отдел'} · {product.unit}</span>
-            </div>
-            <input
-              type="number"
-              min="0"
-              value={qty[product.id] || ''}
-              onChange={(e) => setQty({ ...qty, [product.id]: e.target.value })}
-              placeholder="0"
-            />
-          </label>)}
-        </div>
-      </MobileSheetModal>}
-    </>;
-  }
-
-  return <>
-    <Card title={admin ? 'Все заявки ресторана' : 'Заявки коллег'}>
-      {requests.length === 0 && <Empty text="Заявок пока нет" />}
-      <div className="grid">{requests.map(r => <div className="miniCard" key={r.id}>
-        <div className="rowBetween"><b>{departments[r.department]}</b><span className={`badge ${r.status}`}>{r.status}</span></div>
-        <p>{r.created_by_user?.name} · {fmtDate(r.created_at)}</p>
-        {r.items.map((i: any) => <div className="receiveRow" key={i.id}>
-          <span>{i.product?.name}: заказано {i.qty_ordered} {i.product?.unit}, пришло {i.qty_received}</span>
-          <input type="number" min="0" placeholder="пришло" onChange={(e) => setReceived({ ...received, [r.id]: { ...(received[r.id] || {}), [i.id]: e.target.value } })} />
-        </div>)}
-        <Button kind="soft" onClick={() => receive(r)}>Отметить приход</Button>
-        <CommentsPanel entityType="product_request" entityId={r.id} />
-      </div>)}</div>
-    </Card>
   </>;
 }
 
@@ -2331,244 +1669,6 @@ function Inventory({ user, admin = false }: any) {
         </form>
       </div>
     </div>}
-  </>;
-}
-
-function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer }: any) {
-  const [tasks, setTasks] = useState<any[]>([]);
-  const [techRequests, setTechRequests] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
-  const [form, setForm] = useState<any>({ title: '', description: '', target_type: 'all', target_role: 'waiter', target_user_id: '' });
-  const [taskMsg, setTaskMsg] = useState('');
-  const [techMsg, setTechMsg] = useState('');
-  const [showTechForm, setShowTechForm] = useState(false);
-  const [techForm, setTechForm] = useState<any>({ title: '', description: '', category: 'equipment' });
-  const [techDrafts, setTechDrafts] = useState<any>({});
-
-  async function load() {
-    const [taskRows, techRows, userRows] = await Promise.all([
-      api('/api/tasks'),
-      api('/api/tech-requests'),
-      admin ? api('/api/admin/users') : Promise.resolve([])
-    ]);
-    setTasks(taskRows);
-    setTechRequests(techRows);
-    if (admin) setUsers(userRows);
-  }
-  useEffect(() => { load(); }, []);
-  async function create(e: FormEvent) {
-    e.preventDefault();
-    setTaskMsg('');
-    const result = await api('/api/tasks', { method: 'POST', body: JSON.stringify(form) });
-    setForm({ ...form, title: '', description: '' });
-    setTaskMsg(result?.offline ? 'Задача сохранена офлайн' : 'Задача создана');
-    load().catch(() => undefined);
-  }
-  async function done(id: string) {
-    const result = await api(`/api/tasks/${id}/done`, { method: 'PATCH', body: JSON.stringify({ comment: '' }) });
-    setTaskMsg(result?.offline ? 'Выполнение сохранено офлайн' : 'Задача выполнена');
-    load().catch(() => undefined);
-  }
-  async function createTechRequest(e: FormEvent) {
-    e.preventDefault();
-    setTechMsg('');
-    const result = await api('/api/tech-requests', { method: 'POST', body: JSON.stringify(techForm) });
-    setTechForm({ title: '', description: '', category: 'equipment' });
-    setTechMsg(result?.offline ? 'Техзаявка сохранена офлайн' : 'Техзаявка отправлена менеджеру');
-    setShowTechForm(false);
-    onCloseComposer?.();
-    load();
-  }
-  async function updateTechRequest(request: any) {
-    const draft = techDrafts[request.id] || {};
-    const result = await api(`/api/tech-requests/${request.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({
-        status: draft.status || request.status,
-        manager_comment: draft.manager_comment !== undefined ? draft.manager_comment : request.manager_comment || ''
-      })
-    });
-    setTechMsg(result?.offline ? 'Обновление сохранено офлайн' : 'Техзаявка обновлена');
-    load();
-  }
-
-  useEffect(() => {
-    if (!admin && showTechComposer) {
-      setShowTechForm(true);
-    }
-  }, [admin, showTechComposer]);
-
-  if (!admin) {
-    const activeTasks = tasks.filter((task) => !task.assignment?.done);
-    const completedTasks = tasks.filter((task) => task.assignment?.done);
-    const activeTechRequests = techRequests.filter((request) => !['done', 'cancelled'].includes(request.status));
-    const finishedTechRequests = techRequests.filter((request) => ['done', 'cancelled'].includes(request.status));
-
-    return <>
-      <div className="mobileSectionStack">
-        <SectionTitle title="Задачи" action={<button type="button" className="sectionLink" onClick={() => setShowTechForm(true)}>Техзаявка</button>} />
-
-        <Card title="Сегодня" className="mobileCard">
-          <div className="mobileTaskList">
-            {activeTasks.length === 0 && <Empty text="Нет активных задач на текущую смену" />}
-            {activeTasks.map((task) => <div key={task.id} className="mobileTaskRow static">
-              <span className="mobileTaskStatus" />
-              <div className="mobileTaskCopy">
-                <strong>{task.title}</strong>
-                <span>{task.description || 'Без описания'}</span>
-              </div>
-              <Button type="button" kind="soft" onClick={() => done(task.id)}>Выполнено</Button>
-              <CommentsPanel entityType="task" entityId={task.id} />
-            </div>)}
-          </div>
-        </Card>
-
-        <Card title="Техзаявки" className="mobileCard">
-          <div className="mobileRequestList">
-            {activeTechRequests.length === 0 && <Empty text="Нет срочных техзаявок" />}
-            {activeTechRequests.map((request) => <article key={request.id} className="mobileRequestCard">
-              <div className="rowBetween">
-                <div>
-                  <strong>{request.title}</strong>
-                  <span>{techRequestCategories[request.category] || request.category}</span>
-                </div>
-                <span className={`badge ${request.status}`}>{techRequestStatuses[request.status] || request.status}</span>
-              </div>
-              <p>{request.description || 'Без описания'}</p>
-              <div className="mobileInlineHint">{request.manager_comment || 'Комментарий менеджера появится здесь'}</div>
-              <CommentsPanel entityType="tech_request" entityId={request.id} />
-            </article>)}
-          </div>
-          {techMsg && <div className="notice mobileInlineNotice">{techMsg}</div>}
-        </Card>
-
-        <Card title="Выполнено" className="mobileCard">
-          <div className="mobileTaskList">
-            {completedTasks.length === 0 && finishedTechRequests.length === 0 && <Empty text="Пока нет завершённых задач" />}
-            {completedTasks.map((task) => <div key={task.id} className="mobileTaskRow static done">
-              <span className="mobileTaskStatus done" />
-              <div className="mobileTaskCopy">
-                <strong>{task.title}</strong>
-                <span>{task.description || 'Задача выполнена'}</span>
-              </div>
-              <span className="badge active">Готово</span>
-            </div>)}
-            {finishedTechRequests.map((request) => <div key={request.id} className="mobileTaskRow static done">
-              <span className="mobileTaskStatus done" />
-              <div className="mobileTaskCopy">
-                <strong>{request.title}</strong>
-                <span>{techRequestStatuses[request.status] || request.status}</span>
-              </div>
-              <span className={`badge ${request.status}`}>{request.manager_comment || 'Без комментария'}</span>
-            </div>)}
-          </div>
-        </Card>
-      </div>
-
-      {showTechForm && <div className="modal" onClick={() => {
-        setShowTechForm(false);
-        onCloseComposer?.();
-      }}>
-        <div className="modalCard mobileDocModal" onClick={(e) => e.stopPropagation()}>
-          <div className="rowBetween">
-            <h2>Техзаявка</h2>
-            <button className="iconBtn" onClick={() => {
-              setShowTechForm(false);
-              onCloseComposer?.();
-            }}>×</button>
-          </div>
-          <form className="form" onSubmit={createTechRequest}>
-            <Field label="Тема заявки" value={techForm.title} onChange={(e: any) => setTechForm({ ...techForm, title: e.target.value })} placeholder="Например: вызвать мастера по холодильнику" />
-            <Select label="Тип проблемы" value={techForm.category} onChange={(e: any) => setTechForm({ ...techForm, category: e.target.value })}>
-              {Object.entries(techRequestCategories).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
-            </Select>
-            <Textarea label="Что случилось" value={techForm.description} onChange={(e: any) => setTechForm({ ...techForm, description: e.target.value })} placeholder="Опишите проблему" />
-            <Button className="mobilePrimaryButton">Отправить техзаявку</Button>
-          </form>
-        </div>
-      </div>}
-    </>;
-  }
-
-  return <>
-    {admin && <Card title="Создать задачу">
-      <form className="form two" onSubmit={create}>
-        <Field label="Задача" value={form.title} onChange={(e: any) => setForm({ ...form, title: e.target.value })} />
-        <Textarea label="Описание" value={form.description} onChange={(e: any) => setForm({ ...form, description: e.target.value })} />
-        <Select label="Кому" value={form.target_type} onChange={(e: any) => setForm({ ...form, target_type: e.target.value })}><option value="all">Всем</option><option value="role">Роли</option><option value="user">Сотруднику</option></Select>
-        {form.target_type === 'role' && <Select label="Роль" value={form.target_role} onChange={(e: any) => setForm({ ...form, target_role: e.target.value })}>{Object.entries(roles).filter(([k]) => !['owner'].includes(k)).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>}
-        {form.target_type === 'user' && <Select label="Сотрудник" value={form.target_user_id} onChange={(e: any) => setForm({ ...form, target_user_id: e.target.value })}><option value="">Выбрать</option>{users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</Select>}
-        <Button>Создать задачу</Button>
-      </form>
-      {taskMsg && <div className="notice">{taskMsg}</div>}
-    </Card>}
-    {!admin && <Card title="Сообщить о техпроблеме" right={<span className="badge sent">Увидит менеджер</span>}>
-      <form className="form" onSubmit={createTechRequest}>
-        <div className="form two">
-          <Field label="Тема заявки" value={techForm.title} onChange={(e: any) => setTechForm({ ...techForm, title: e.target.value })} placeholder="Например: вызвать мастера по холодильнику" />
-          <Select label="Тип проблемы" value={techForm.category} onChange={(e: any) => setTechForm({ ...techForm, category: e.target.value })}>
-            {Object.entries(techRequestCategories).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
-          </Select>
-        </div>
-        <Textarea label="Что случилось" value={techForm.description} onChange={(e: any) => setTechForm({ ...techForm, description: e.target.value })} placeholder="Опишите проблему, где она находится и что нужно сделать" />
-        <Button>Отправить техзаявку</Button>
-      </form>
-      {techMsg && <div className="notice">{techMsg}</div>}
-    </Card>}
-
-    <Card title={admin ? 'Техзаявки сотрудников' : 'Мои техзаявки'}>
-      {techRequests.length === 0 && <Empty text={admin ? 'Техзаявок пока нет' : 'Вы ещё не отправляли техзаявки'} />}
-      <div className="grid cardsGrid">
-        {techRequests.map((request) => {
-          const draft = techDrafts[request.id] || {};
-          return <div className="miniCard techRequestCard" key={request.id}>
-            <div className="rowBetween">
-              <b>{request.title}</b>
-              <span className={`badge ${request.status}`}>{techRequestStatuses[request.status] || request.status}</span>
-            </div>
-            <div className="techRequestMeta">
-              <span>{techRequestCategories[request.category] || request.category}</span>
-              <span>{fmtDate(request.created_at)}</span>
-              {request.created_by_user?.name && <span>{request.created_by_user.name}</span>}
-            </div>
-            <p>{request.description || 'Без описания'}</p>
-            {admin
-              ? <div className="techRequestAdmin">
-                <Select
-                  label="Статус"
-                  value={draft.status || request.status}
-                  onChange={(e: any) => setTechDrafts({ ...techDrafts, [request.id]: { ...draft, status: e.target.value } })}
-                >
-                  {Object.entries(techRequestStatuses).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
-                </Select>
-                <Textarea
-                  label="Комментарий менеджера"
-                  value={draft.manager_comment !== undefined ? draft.manager_comment : request.manager_comment || ''}
-                  onChange={(e: any) => setTechDrafts({ ...techDrafts, [request.id]: { ...draft, manager_comment: e.target.value } })}
-                  placeholder="Например: мастер вызван, ждём до 18:00"
-                />
-                <Button kind="soft" onClick={() => updateTechRequest(request)}>Сохранить статус</Button>
-              </div>
-              : <div className="techRequestEmployeeView">
-                <div className="techRequestComment">
-                  <span className="muted">Комментарий менеджера</span>
-                  <strong>{request.manager_comment || 'Комментария пока нет'}</strong>
-                </div>
-              </div>}
-              <CommentsPanel entityType="tech_request" entityId={request.id} />
-          </div>;
-        })}
-      </div>
-      {admin && techMsg && <div className="notice">{techMsg}</div>}
-    </Card>
-    <Card title={admin ? 'Задачи ресторана' : 'Мои задачи'}>
-      <div className="grid">{tasks.map(t => <div className="miniCard" key={t.id}>
-        <div className="rowBetween"><b>{t.title}</b>{!admin && <span className={`badge ${t.assignment?.done ? 'active' : ''}`}>{t.assignment?.done ? 'готово' : 'ждёт'}</span>}</div>
-        <p>{t.description}</p>
-        {admin ? <p>Назначено: {t.assignments?.length || 0}, выполнено: {t.assignments?.filter((a: any) => a.done).length || 0}</p> : !t.assignment?.done && <Button onClick={() => done(t.id)}>Выполнено</Button>}
-        <CommentsPanel entityType="task" entityId={t.id} />
-      </div>)}</div>
-    </Card>
   </>;
 }
 

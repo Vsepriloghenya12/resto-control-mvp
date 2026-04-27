@@ -2812,3 +2812,282 @@ input[type='checkbox'] {
     transition-duration: 0.001ms !important;
   }
 }
+
+/* Professional app layout pass */
+html {
+  scrollbar-gutter: stable;
+}
+
+.card,
+.miniCard,
+.statCard,
+.trialBanner,
+.mobileRequestCard,
+.mobileTaskRow,
+.mobileOverviewRow,
+.mobileListSurface {
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+.card {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.94), rgba(9, 15, 28, 0.94));
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.2);
+}
+
+.cardHead {
+  min-height: 38px;
+  align-items: center;
+}
+
+.cardHead h3,
+.sectionTitle h2,
+.mobileListSectionHead h3 {
+  letter-spacing: -0.02em;
+}
+
+.grid,
+.cardsGrid,
+.statsGrid {
+  align-items: stretch;
+}
+
+.miniCard,
+.statCard {
+  height: 100%;
+}
+
+.actions {
+  align-items: center;
+  gap: 10px;
+}
+
+.btn {
+  white-space: nowrap;
+}
+
+.checkItems.previewOnly .checkRow {
+  grid-template-columns: 28px minmax(0, 1fr);
+}
+
+.checkBullet {
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.24);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.checkContent em {
+  display: block;
+  min-height: 1.2em;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-style: normal;
+  margin-top: 4px;
+}
+
+.adminTemplateGrid {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.checklistTemplateCard .actions {
+  margin-top: auto;
+}
+
+.bookingAdminTableList {
+  margin-top: 18px;
+}
+
+.bookingAdminTableRow,
+.adminUserRow {
+  gap: 14px;
+}
+
+.bookingAdminTableDraft {
+  width: 100%;
+}
+
+.bookingTableButton {
+  min-height: 82px;
+}
+
+.bookingTableButton.static {
+  cursor: default;
+}
+
+.bookingTableButton em {
+  font-style: normal;
+}
+
+.mobileTaskRow .commentsPanel,
+.mobileRequestCard .commentsPanel {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.mobileTaskRow.static {
+  align-items: center;
+}
+
+@media (min-width: 981px) {
+  body {
+    overflow: hidden;
+  }
+
+  .appShell {
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow: hidden;
+    padding: 24px;
+  }
+
+  .workspaceLayout,
+  .basicWorkspace {
+    height: calc(100dvh - 48px);
+    min-height: 0;
+  }
+
+  .workspaceLayout {
+    width: min(1760px, 100%);
+    grid-template-columns: 284px minmax(0, 1fr);
+    gap: 28px;
+  }
+
+  .basicWorkspace {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .dashboardSidebar {
+    position: static;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    border-radius: 30px;
+    padding: 18px;
+    border: 1px solid rgba(148, 163, 184, 0.13);
+    background: rgba(8, 14, 26, 0.72);
+  }
+
+  .sidebarNav {
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+
+  .workspaceMain {
+    height: 100%;
+    min-height: 0;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
+  }
+
+  .workspaceHeader {
+    min-height: 72px;
+  }
+
+  .workspacePageContainer,
+  .basicWorkspace > .pageContainer {
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0 4px 32px 0;
+    scrollbar-gutter: stable;
+  }
+
+  .workspaceContent,
+  .contentStack {
+    min-height: 720px;
+  }
+
+  .desktopWorkspaceChrome {
+    gap: 12px;
+  }
+
+  .workspaceSubline {
+    margin-top: -6px;
+  }
+
+  .tabs,
+  .sidebarNavItem,
+  .btn,
+  .iconGhost {
+    will-change: auto;
+  }
+}
+
+@media (max-width: 980px) {
+  body {
+    overflow-x: hidden;
+  }
+
+  .appShell {
+    min-height: 100dvh;
+  }
+
+  .mobileWorkspaceChrome {
+    padding-top: calc(14px + env(safe-area-inset-top));
+  }
+
+  .pageContainer {
+    width: 100%;
+  }
+
+  .mobileSectionStack {
+    gap: 18px;
+  }
+
+  .mobileCard,
+  .mobileRequestCard,
+  .mobileTaskRow,
+  .mobileOverviewRow,
+  .mobileListSurface {
+    border-radius: 24px;
+  }
+
+  .mobileHeaderCopy h1 {
+    letter-spacing: -0.035em;
+  }
+
+  .bottomNavigationRail {
+    max-width: 560px;
+    margin: 0 auto;
+    border-radius: 24px 24px 0 0;
+  }
+
+  input:not([type='checkbox']),
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+.hallSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 14px 0 6px;
+}
+
+.hallSummaryCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid rgba(36, 48, 63, 0.08);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(248,250,252,0.95));
+}
+
+.hallSummaryCard strong {
+  font-size: 14px;
+  color: #162033;
+}
+
+.hallSummaryCard span {
+  font-size: 12px;
+  color: var(--muted);
+}
