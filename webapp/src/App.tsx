@@ -12,7 +12,6 @@ import {
   type NavTab
 } from './components/dashboard-ui';
 import {
-  MobileAppShell,
   BottomNavigation,
   BottomSheet,
   MobileHeader,
@@ -32,7 +31,6 @@ type MobileWorkspaceConfig = {
   subtitle?: ReactNode;
   isOverview?: boolean;
   showMenuButton?: boolean;
-  showBackButton?: boolean;
   showNotifications?: boolean;
   navItems: MobileNavItem[];
   menuItems: MobileActionItem[];
@@ -42,7 +40,6 @@ type MobileWorkspaceConfig = {
   onNotifications?: () => void;
   actionIcon?: IconName;
   onAction?: () => void;
-  pageClassName?: string;
 };
 
 const roles: Record<string, string> = {
@@ -124,31 +121,6 @@ function userInitials(name?: string) {
   const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return 'RC';
   return parts.slice(0, 2).map(part => part[0]?.toUpperCase() || '').join('') || 'RC';
-}
-
-function useIsMobileViewport(maxWidth = 980) {
-  const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.innerWidth <= maxWidth;
-  });
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const query = `(max-width: ${maxWidth}px)`;
-    const media = window.matchMedia(query);
-    const update = () => setIsMobile(media.matches);
-    update();
-
-    if (typeof media.addEventListener === 'function') {
-      media.addEventListener('change', update);
-      return () => media.removeEventListener('change', update);
-    }
-
-    media.addListener(update);
-    return () => media.removeListener(update);
-  }, [maxWidth]);
-
-  return isMobile;
 }
 
 function mobileTabTitle(active: string, tabs: NavTab[]) {
@@ -257,45 +229,6 @@ function WorkspaceInfoModal({
   </div>;
 }
 
-function MobileSheetModal({
-  title,
-  subtitle,
-  onClose,
-  children,
-  footer,
-  fullScreen = false,
-  className
-}: {
-  title: ReactNode;
-  subtitle?: ReactNode;
-  onClose: () => void;
-  children: ReactNode;
-  footer?: ReactNode;
-  fullScreen?: boolean;
-  className?: string;
-}) {
-  return <div className="modal mobileModalBackdrop" onClick={onClose}>
-    <div
-      className={cx('modalCard', fullScreen ? 'mobileFullScreenModal' : 'mobileSheetModal', className)}
-      role="dialog"
-      aria-modal="true"
-      onClick={(e) => e.stopPropagation()}
-    >
-      <div className="mobileModalHead">
-        <div className="mobileModalHeadCopy">
-          <h2>{title}</h2>
-          {subtitle && <p>{subtitle}</p>}
-        </div>
-        <button type="button" className="mobileIconButton" onClick={onClose} aria-label="Закрыть">
-          <AppIcon name="close" className="navIcon" />
-        </button>
-      </div>
-      <div className="mobileModalBody">{children}</div>
-      {footer && <div className="mobileModalFooter">{footer}</div>}
-    </div>
-  </div>;
-}
-
 function CameraCapture({ title, onCapture, onClose }: { title: string; onCapture: (photo: string) => void; onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -369,21 +302,26 @@ function CameraCapture({ title, onCapture, onClose }: { title: string; onCapture
     onClose();
   }
 
-  return <MobileSheetModal
-    title="Фотоотчёт"
-    subtitle={title}
-    onClose={onClose}
-    fullScreen
-    className="mobileCameraModal"
-    footer={<div className="cameraFooterActions">
-      <Button kind="soft" type="button" onClick={onClose}>Отмена</Button>
-      <Button type="button" disabled={busy || !!error} onClick={takePhoto}>Сделать фото</Button>
-    </div>}
-  >
-      {busy && <div className="notice">Подключаем камеру...</div>}
-      {error && <div className="error">{error}</div>}
-      {!error && <video ref={videoRef} className="cameraVideo" autoPlay playsInline muted />}
-  </MobileSheetModal>;
+  return <div className="mobileFullScreenModal mobileCameraModal" onClick={onClose}>
+    <div className="mobileFullScreenPanel mobileCameraPanel" onClick={(e) => e.stopPropagation()}>
+      <div className="mobileSheetTopbar">
+        <button className="mobileSheetCloseButton" type="button" onClick={onClose} aria-label="Закрыть">×</button>
+        <div>
+          <h2>Фото подтверждения</h2>
+          <p>{title}</p>
+        </div>
+      </div>
+      <div className="mobileCameraBody">
+        {busy && <div className="notice">Подключаем камеру...</div>}
+        {error && <div className="error">{error}</div>}
+        {!error && <video ref={videoRef} className="cameraVideo mobileCameraVideo" autoPlay playsInline muted />}
+      </div>
+      <div className="mobileStickyActionBar inModal">
+        <Button kind="soft" type="button" onClick={onClose}>Отмена</Button>
+        <Button type="button" disabled={busy || !!error} onClick={takePhoto}>Сделать фото</Button>
+      </div>
+    </div>
+  </div>;
 }
 
 export default function App() {
@@ -541,7 +479,6 @@ function BasicWorkspace({
         userInitials={userInitials(user.name)}
         notificationCount={mobile.notificationCount || 0}
         showMenuButton={mobile.showMenuButton !== false}
-        showBackButton={mobile.showBackButton !== false}
         showNotifications={mobile.showNotifications !== false}
         onMenu={() => setSheet('menu')}
         onBack={() => setActive(tabs[0]?.id || active)}
@@ -556,7 +493,7 @@ function BasicWorkspace({
       <Nav tabs={tabs} active={active} setActive={setActive} />
     </div>
 
-    <PageContainer className={mobile?.pageClassName}>{children}</PageContainer>
+    <PageContainer>{children}</PageContainer>
 
     {mobile && <>
       <BottomNavigation items={mobile.navItems} onCreate={() => setSheet('create')} />
@@ -890,7 +827,6 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
   const [tab, setTab] = useState<Tab>('today');
   const [notificationCount, setNotificationCount] = useState(0);
   const [openTechComposer, setOpenTechComposer] = useState(false);
-  const isMobileViewport = useIsMobileViewport();
   const tabs = withIcons([
     { id: 'today', title: 'Сегодня' }, { id: 'checklists', title: 'Чек-лист' }, { id: 'requests', title: 'Заявки' },
     { id: 'inventory', title: 'Инвент.' }, { id: 'tasks', title: 'Задачи' }, { id: 'knowledge', title: 'База' }
@@ -932,32 +868,6 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     { id: 'logout', title: 'Выйти из аккаунта', subtitle: 'Завершить сессию', icon: 'logout', onClick: onLogout }
   ];
 
-  const employeeSection = <>
-    {tab === 'today' && <Today user={user} onOpenTasks={() => setTab('tasks')} onOpenChecklists={() => setTab('checklists')} onOpenRequests={() => setTab('requests')} onOpenInventory={() => setTab('inventory')} />}
-    {tab === 'checklists' && <Checklists user={user} />}
-    {tab === 'requests' && <Requests user={user} />}
-    {tab === 'inventory' && <Inventory user={user} />}
-    {tab === 'tasks' && <Tasks user={user} showTechComposer={openTechComposer} onCloseComposer={() => setOpenTechComposer(false)} />}
-    {tab === 'knowledge' && <Knowledge user={user} />}
-  </>;
-
-  if (isMobileViewport) {
-    return <MobileAppShell
-      title={tab === 'today' ? <>Добро пожаловать, <em>{user.name}</em></> : mobileTabTitle(tab, tabs)}
-      subtitle={tab === 'today' ? `${roles[user.role]} · ${restaurant?.name}` : restaurant?.name}
-      brand="Resto Control"
-      userInitials={userInitials(user.name)}
-      navItems={mobileNavItems}
-      createItems={mobileCreateItems}
-      profileItems={mobileProfileItems}
-      notificationCount={notificationCount}
-      showNotifications={false}
-      className="employeeMobileShell"
-    >
-      {employeeSection}
-    </MobileAppShell>;
-  }
-
   return <BasicWorkspace
     user={user}
     subtitle={`${roles[user.role]} · ${restaurant?.name}`}
@@ -970,19 +880,22 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
       subtitle: tab === 'today' ? roles[user.role] : restaurant?.name,
       isOverview: tab === 'today',
       showMenuButton: false,
-      showBackButton: false,
       showNotifications: false,
       navItems: mobileNavItems,
       menuItems: mobileMenuItems,
       createItems: mobileCreateItems,
       profileItems: mobileProfileItems,
       notificationCount,
-      onNotifications: () => setTab('tasks'),
-      pageClassName: 'employeeMobilePage'
+      onNotifications: () => setTab('tasks')
     }}
   >
     <div className="hello"><b>{user.name}</b><span>{roles[user.role]} · {restaurant?.name}</span></div>
-    {employeeSection}
+    {tab === 'today' && <Today user={user} onOpenTasks={() => setTab('tasks')} onOpenChecklists={() => setTab('checklists')} onOpenRequests={() => setTab('requests')} onOpenInventory={() => setTab('inventory')} />}
+    {tab === 'checklists' && <Checklists user={user} />}
+    {tab === 'requests' && <Requests user={user} />}
+    {tab === 'inventory' && <Inventory user={user} />}
+    {tab === 'tasks' && <Tasks user={user} showTechComposer={openTechComposer} onCloseComposer={() => setOpenTechComposer(false)} />}
+    {tab === 'knowledge' && <Knowledge user={user} />}
   </BasicWorkspace>;
 }
 
@@ -1026,9 +939,12 @@ function Today({
 
   if (!overview) {
     return <div className="mobileSectionStack">
-      <div className="mobileListSurface">
-        {Array.from({ length: 4 }).map((_, index) => <div key={index} className="mobileSkeletonRow" />)}
+      <div className="mobileStatsGrid">
+        {Array.from({ length: 4 }).map((_, index) => <div key={index} className="mobileSkeletonCard" />)}
       </div>
+      <Card className="mobileCard">
+        <Empty text="Собираем обзор смены" />
+      </Card>
     </div>;
   }
 
@@ -1038,67 +954,45 @@ function Today({
   const inventoryItems = overview.templates.reduce((total: number, template: any) => total + (template.items?.length || 0), 0);
 
   return <div className="mobileSectionStack">
-    <section className="mobileShiftSnapshot">
-      <div className="mobileShiftSnapshotCopy">
-        <strong>Смена сейчас</strong>
-        <span>{overview.checklists.length} чек-листов, {openTasks.length} задач, {openRequests.length} заявок</span>
-      </div>
-      <span className="badge active">{completedTasks.length} выполнено</span>
-    </section>
+    <SectionTitle title="Сегодня" action={<button type="button" className="sectionLink" onClick={onOpenTasks}>Все задачи</button>} />
 
-    <section className="mobileSection">
-      <SectionTitle title="Разделы" />
-      <div className="mobileListSurface">
-        <button type="button" className="mobileOverviewRow" onClick={onOpenChecklists}>
-          <div className="mobileOverviewIcon blue"><AppIcon name="checklists" className="navIcon" /></div>
-          <div className="mobileOverviewCopy">
-            <strong>Чек-листы</strong>
-            <span>{overview.checklists.length} на сегодня</span>
-          </div>
-          <div className="mobileOverviewTrailing">
-            <b>{overview.checklists.length}</b>
-            <AppIcon name="chevron" className="navIcon" />
-          </div>
-        </button>
-        <button type="button" className="mobileOverviewRow" onClick={onOpenTasks}>
-          <div className="mobileOverviewIcon green"><AppIcon name="tasks" className="navIcon" /></div>
-          <div className="mobileOverviewCopy">
-            <strong>Задачи</strong>
-            <span>{openTasks.length} в работе</span>
-          </div>
-          <div className="mobileOverviewTrailing">
-            <b>{openTasks.length}</b>
-            <AppIcon name="chevron" className="navIcon" />
-          </div>
-        </button>
-        <button type="button" className="mobileOverviewRow" onClick={onOpenRequests}>
-          <div className="mobileOverviewIcon amber"><AppIcon name="requests" className="navIcon" /></div>
-          <div className="mobileOverviewCopy">
-            <strong>Заявки</strong>
-            <span>{openRequests.length} открыто</span>
-          </div>
-          <div className="mobileOverviewTrailing">
-            <b>{openRequests.length}</b>
-            <AppIcon name="chevron" className="navIcon" />
-          </div>
-        </button>
-        <button type="button" className="mobileOverviewRow" onClick={onOpenInventory}>
-          <div className="mobileOverviewIcon purple"><AppIcon name="inventory" className="navIcon" /></div>
-          <div className="mobileOverviewCopy">
-            <strong>Инвентаризация</strong>
-            <span>{inventoryItems} позиций</span>
-          </div>
-          <div className="mobileOverviewTrailing">
-            <b>{inventoryItems}</b>
-            <AppIcon name="chevron" className="navIcon" />
-          </div>
-        </button>
-      </div>
-    </section>
+    <div className="mobileOverviewList">
+      <button type="button" className="mobileOverviewRow" onClick={onOpenChecklists}>
+        <div className="mobileOverviewIcon blue"><AppIcon name="checklists" className="navIcon" /></div>
+        <div className="mobileOverviewCopy">
+          <strong>Чек-листы</strong>
+          <span>{overview.checklists.length} на сегодня</span>
+        </div>
+        <b>{overview.checklists.length}</b>
+      </button>
+      <button type="button" className="mobileOverviewRow" onClick={onOpenTasks}>
+        <div className="mobileOverviewIcon green"><AppIcon name="tasks" className="navIcon" /></div>
+        <div className="mobileOverviewCopy">
+          <strong>Задачи</strong>
+          <span>{openTasks.length} в работе</span>
+        </div>
+        <b>{openTasks.length}</b>
+      </button>
+      <button type="button" className="mobileOverviewRow" onClick={onOpenRequests}>
+        <div className="mobileOverviewIcon amber"><AppIcon name="requests" className="navIcon" /></div>
+        <div className="mobileOverviewCopy">
+          <strong>Заявки</strong>
+          <span>{openRequests.length} открыто</span>
+        </div>
+        <b>{openRequests.length}</b>
+      </button>
+      <button type="button" className="mobileOverviewRow" onClick={onOpenInventory}>
+        <div className="mobileOverviewIcon purple"><AppIcon name="inventory" className="navIcon" /></div>
+        <div className="mobileOverviewCopy">
+          <strong>Инвентаризация</strong>
+          <span>{inventoryItems} позиций</span>
+        </div>
+        <b>{inventoryItems}</b>
+      </button>
+    </div>
 
-    <section className="mobileSection">
-      <SectionTitle title="Приоритетные задачи" />
-      <div className="mobileListSurface">
+    <Card title="Приоритет" className="mobileCard compactMobileCard">
+      <div className="mobileTaskList">
         {openTasks.slice(0, 3).map((task: any) => <button key={task.id} type="button" className="mobileTaskRow compact" onClick={onOpenTasks}>
           <span className="mobileTaskStatus" />
           <div className="mobileTaskCopy">
@@ -1109,7 +1003,8 @@ function Today({
         </button>)}
         {openTasks.length === 0 && <Empty text="Нет открытых задач на эту смену" />}
       </div>
-    </section>
+      {completedTasks.length > 0 && <div className="mobileInlineHint">Выполнено за смену: {completedTasks.length}</div>}
+    </Card>
   </div>;
 }
 
@@ -1247,7 +1142,6 @@ function Checklists({ user, admin = false }: any) {
     : 0;
 
   const checklistRequiresPhoto = selectedTemplate?.items.some((item: any) => answers[item.id]?.done && !answers[item.id]?.photo_url);
-  const nextChecklistItem = selectedTemplate?.items.find((item: any) => !answers[item.id]?.done) || null;
 
   function toggleChecklistItem(item: any) {
     const current = answers[item.id] || {};
@@ -1262,44 +1156,31 @@ function Checklists({ user, admin = false }: any) {
     return <div className="mobileSectionStack">
       <SectionTitle title="Чек-листы" />
 
-      {!availableTemplates.length && <div className="mobileListSurface mobileEmptySurface">
+      {!availableTemplates.length && <Card className="mobileCard compactMobileCard">
         <Empty text="Для вашей роли пока нет активных чек-листов" />
+      </Card>}
+
+      {!!availableTemplates.length && <div className="mobileChecklistPicker">
+        {availableTemplates.map((template) => <button
+          key={template.id}
+          type="button"
+          className={cx('mobileChecklistPickerItem', selectedTemplate?.id === template.id && 'active')}
+          onClick={() => setSelectedTemplateId(template.id)}
+        >
+          <strong>{template.title}</strong>
+          <span>{template.items.length} пунктов</span>
+        </button>)}
       </div>}
 
-      {!!availableTemplates.length && <section className="mobileSection">
-        <div className="mobileChecklistPicker">
-          {availableTemplates.map((template) => <button
-            key={template.id}
-            type="button"
-            className={cx('mobileChecklistPickerItem', selectedTemplate?.id === template.id && 'active')}
-            onClick={() => setSelectedTemplateId(template.id)}
-          >
-            <strong>{template.title}</strong>
-            <span>{template.items.length}</span>
-          </button>)}
-        </div>
-      </section>}
-
-      {selectedTemplate && <section className="mobileChecklistHero">
-        <div className="mobileChecklistHeroCopy">
-          <span>{checklistTypes[selectedTemplate.type] || 'Чек-лист'}</span>
-          <strong>{nextChecklistItem ? `Сейчас: ${nextChecklistItem.text}` : 'Все пункты выполнены'}</strong>
-        </div>
-        <span className={cx('badge', nextChecklistItem ? 'trial' : 'active')}>{nextChecklistItem ? 'В работе' : 'Готово'}</span>
-      </section>}
-
-      {selectedTemplate && <section className="mobileChecklistSummary">
-        <div className="mobileChecklistSummaryHead">
-          <div>
-            <strong>{selectedTemplate.title}</strong>
-            <span>{completedChecklistItems} из {selectedTemplate.items.length} выполнено</span>
-          </div>
+      {selectedTemplate && <Card className="mobileCard compactMobileCard">
+        <div className="mobileProgressCardCopy compact">
+          <h3>{selectedTemplate.title}</h3>
           <span className="badge active mobileProgressBadge">{completedChecklistItems}/{selectedTemplate.items.length}</span>
         </div>
         <ProgressBar value={completedChecklistItems} max={selectedTemplate.items.length} />
-      </section>}
+      </Card>}
 
-      {selectedTemplate && <div className="mobileListSurface mobileChecklistPlainList">
+      {selectedTemplate && <div className="mobileChecklistPlainList">
         {selectedTemplate.items.map((item: any, index: number) => {
           const itemAnswer = answers[item.id] || {};
           return <div key={item.id} className={cx('mobileChecklistLine', itemAnswer.done && 'done')}>
@@ -1319,32 +1200,27 @@ function Checklists({ user, admin = false }: any) {
               {itemAnswer.done && <div className="mobileChecklistLineMeta">
                 <span className="mobileChecklistPhotoStatus">
                   <AppIcon name="camera" className="navIcon" />
-                  {itemAnswer.photo_url ? 'Фото готово' : 'Нужно фото'}
+                  Фото добавлено
                 </span>
                 <button
                   type="button"
                   className="mobileChecklistRetake"
                   onClick={() => setCameraTarget({ itemId: item.id, title: item.text })}
                 >
-                  {itemAnswer.photo_url ? 'Переснять' : 'Снять'}
+                  Переснять
                 </button>
               </div>}
-              {itemAnswer.done && itemAnswer.photo_url && <div className="mobileChecklistAttachment">
-                <img className="mobileChecklistPhoto" src={itemAnswer.photo_url} alt={`Фото: ${item.text}`} />
-                <span className="mobileChecklistAttachmentLabel">Фото прикреплено</span>
-              </div>}
-              {itemAnswer.done && <textarea
-                className="mobileInlineTextarea"
+              {itemAnswer.done && itemAnswer.photo_url && <img className="mobileChecklistPhoto" src={itemAnswer.photo_url} alt={`Фото: ${item.text}`} />}
+              {itemAnswer.done && <Textarea
+                label="Комментарий"
                 value={itemAnswer.comment || ''}
                 onChange={(e: any) => updateAnswer(item.id, { comment: e.target.value })}
-                placeholder="Комментарий (необязательно)"
+                placeholder="Комментарий"
               />}
             </div>
           </div>;
         })}
       </div>}
-
-      {runMsg && <div className={runMsg.includes('сохранён') ? 'notice mobileInlineNotice' : 'error mobileInlineNotice'}>{runMsg}</div>}
 
       {selectedTemplate && <div className="mobileStickyActionBar">
         <Button
@@ -1356,6 +1232,8 @@ function Checklists({ user, admin = false }: any) {
           Завершить чек-лист
         </Button>
       </div>}
+
+      {runMsg && <div className={runMsg.includes('сохранён') ? 'notice mobileInlineNotice' : 'error mobileInlineNotice'}>{runMsg}</div>}
       {cameraTarget && <CameraCapture
         title={cameraTarget.title}
         onClose={() => setCameraTarget(null)}
@@ -1444,13 +1322,13 @@ function Requests({ user, admin = false }: any) {
   const [received, setReceived] = useState<any>({});
   const [msg, setMsg] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [showComposer, setShowComposer] = useState(false);
+  const [showRequestForm, setShowRequestForm] = useState(false);
   async function load() { setProducts(await api('/api/products')); setRequests(await api('/api/requests')); }
   useEffect(() => { load(); }, []);
   async function submit() {
     const items = Object.entries(qty).map(([product_id, q]) => ({ product_id, qty_ordered: Number(q) })).filter(i => i.qty_ordered > 0);
     await api('/api/requests', { method: 'POST', body: JSON.stringify({ department: user.department, items }) });
-    setQty({}); setMsg('Заявка отправлена'); setShowComposer(false); load();
+    setQty({}); setMsg('Заявка отправлена'); setShowRequestForm(false); load();
   }
   async function receive(req: any) {
     await api(`/api/requests/${req.id}/receive`, { method: 'PATCH', body: JSON.stringify({ received: received[req.id] || {} }) });
@@ -1465,27 +1343,40 @@ function Requests({ user, admin = false }: any) {
       if (statusFilter === 'rejected') return ['not_received', 'cancelled'].includes(request.status);
       return true;
     });
-  const selectedProductsCount = Object.values(qty).filter((value) => Number(value) > 0).length;
 
   if (!admin) {
-    return <div className="mobileSectionStack">
-      <SectionTitle title="Заявки" action={<button type="button" className="sectionLink" onClick={() => setShowComposer(true)}>Создать</button>} />
+    const requestItemsCount = Object.values(qty).filter((value) => Number(value) > 0).length;
 
-      <section className="mobileSection">
+    return <>
+      <div className="mobileSectionStack">
+        <SectionTitle
+          title="Заявки"
+          action={<button type="button" className="mobileCompactAction" onClick={() => setShowRequestForm(true)}>Новая заявка</button>}
+        />
+
+        {msg && <div className="notice mobileInlineNotice">{msg}</div>}
+
+        <button type="button" className="mobileCreateListRow" onClick={() => setShowRequestForm(true)}>
+          <div className="mobileOverviewIcon green"><AppIcon name="plus" className="navIcon" /></div>
+          <div className="mobileOverviewCopy">
+            <strong>Создать заявку</strong>
+            <span>{requestItemsCount ? `Выбрано позиций: ${requestItemsCount}` : 'Добавьте товары в компактной форме'}</span>
+          </div>
+          <AppIcon name="chevron" className="navIcon" />
+        </button>
+
         <div className="mobileChipRow">
           <button type="button" className={cx('mobileChip', statusFilter === 'all' && 'active')} onClick={() => setStatusFilter('all')}><span>Все</span><b>{requests.length}</b></button>
-          <button type="button" className={cx('mobileChip', statusFilter === 'processing' && 'active')} onClick={() => setStatusFilter('processing')}><span>В работе</span><b>{requests.filter((request) => !['received', 'done', 'cancelled'].includes(request.status)).length}</b></button>
-          <button type="button" className={cx('mobileChip', statusFilter === 'done' && 'active')} onClick={() => setStatusFilter('done')}><span>Готово</span><b>{requests.filter((request) => ['received', 'done'].includes(request.status)).length}</b></button>
+          <button type="button" className={cx('mobileChip', statusFilter === 'processing' && 'active')} onClick={() => setStatusFilter('processing')}><span>В обработке</span><b>{requests.filter((request) => !['received', 'done', 'cancelled'].includes(request.status)).length}</b></button>
+          <button type="button" className={cx('mobileChip', statusFilter === 'done' && 'active')} onClick={() => setStatusFilter('done')}><span>Выполнено</span><b>{requests.filter((request) => ['received', 'done'].includes(request.status)).length}</b></button>
           <button type="button" className={cx('mobileChip', statusFilter === 'rejected' && 'active')} onClick={() => setStatusFilter('rejected')}><span>Отклонено</span><b>{requests.filter((request) => ['not_received', 'cancelled'].includes(request.status)).length}</b></button>
         </div>
-      </section>
 
-      <section className="mobileSection">
-        <div className="mobileListSectionHead">
-          <h3>История</h3>
-          <span className="mobileSectionCount">{visibleRequests.length}</span>
-        </div>
-        <div className="mobileListSurface">
+        <section className="mobileGroupedSection">
+          <div className="mobileSectionHeader">
+            <h3>История заявок</h3>
+            <span>{visibleRequests.length}</span>
+          </div>
           {visibleRequests.length === 0 && <Empty text="Под выбранный статус заявок пока нет" />}
           <div className="mobileRequestList">
             {visibleRequests.map((request) => <article key={request.id} className="mobileRequestCard">
@@ -1504,22 +1395,22 @@ function Requests({ user, admin = false }: any) {
               </div>
             </article>)}
           </div>
-        </div>
-      </section>
-      {msg && <div className="notice mobileInlineNotice">{msg}</div>}
+        </section>
+      </div>
 
-      {showComposer && <MobileSheetModal
-        title="Новая заявка"
-        subtitle={departments[user.department] || 'Ваш отдел'}
-        onClose={() => setShowComposer(false)}
-        className="mobileFormSheet"
-        footer={<Button type="button" className="mobilePrimaryButton" disabled={selectedProductsCount === 0} onClick={submit}>Отправить заявку</Button>}
-      >
-        <div className="mobileSheetLead">Выберите товары и укажите количество.</div>
-        <div className="mobileListSurface mobileSheetListSurface">
-          <div className="mobileProductsList">
+      {showRequestForm && <div className="mobileSheetModal" onClick={() => setShowRequestForm(false)}>
+        <div className="mobileSheetPanel mobileRequestSheet" onClick={(e) => e.stopPropagation()}>
+          <div className="bottomSheetHandle" />
+          <div className="mobileSheetTopbar">
+            <button className="mobileSheetCloseButton" type="button" onClick={() => setShowRequestForm(false)} aria-label="Закрыть">×</button>
+            <div>
+              <h2>Новая заявка</h2>
+              <p>{departments[user.department] || 'Ваш отдел'} · выберите количество</p>
+            </div>
+          </div>
+          <div className="mobileProductsList mobileSheetScrollArea">
             {products.map((product) => <label className="mobileProductRow" key={product.id}>
-              <div className="mobileInventoryCopy">
+              <div>
                 <strong>{product.name}</strong>
                 <span>{departments[product.department] || 'Отдел'} · {product.unit}</span>
               </div>
@@ -1532,16 +1423,16 @@ function Requests({ user, admin = false }: any) {
               />
             </label>)}
           </div>
+          <div className="mobileStickyActionBar inModal">
+            <Button type="button" kind="soft" onClick={() => setShowRequestForm(false)}>Отмена</Button>
+            <Button type="button" className="mobilePrimaryButton" disabled={!requestItemsCount} onClick={submit}>Отправить</Button>
+          </div>
         </div>
-      </MobileSheetModal>}
-    </div>;
+      </div>}
+    </>;
   }
 
   return <>
-    {!admin && <Card title="Создать заявку">
-      <div className="productsGrid">{products.map(p => <label className="productQty" key={p.id}><span>{p.name}<em>{p.unit}</em></span><input type="number" min="0" value={qty[p.id] || ''} onChange={(e) => setQty({ ...qty, [p.id]: e.target.value })} placeholder="0" /></label>)}</div>
-      <Button onClick={submit}>Отправить заявку</Button>{msg && <div className="notice">{msg}</div>}
-    </Card>}
     <Card title={admin ? 'Все заявки ресторана' : 'Заявки коллег'}>
       {requests.length === 0 && <Empty text="Заявок пока нет" />}
       <div className="grid">{requests.map(r => <div className="miniCard" key={r.id}>
@@ -1674,14 +1565,6 @@ function Inventory({ user, admin = false }: any) {
       if (!inventoryFilter.trim()) return true;
       return String(item.product?.name || '').toLowerCase().includes(inventoryFilter.trim().toLowerCase());
     }) || [];
-    const filledItemsCount = filteredItems.filter((item: any) => {
-      const value = values[item.product_id];
-      return value !== '' && value !== undefined && value !== null;
-    }).length;
-    const lowStockCount = filteredItems.filter((item: any) => {
-      const value = Number(values[item.product_id]);
-      return !Number.isNaN(value) && value >= 0 && value <= 2;
-    }).length;
 
     function inventoryBadge(rawValue: any) {
       if (rawValue === '' || rawValue === undefined || rawValue === null) return { text: 'Не указано', tone: '' };
@@ -1695,16 +1578,7 @@ function Inventory({ user, admin = false }: any) {
     return <div className="mobileSectionStack">
       <SectionTitle title="Инвентаризация" />
 
-      {selectedTemplate && <section className="mobileShiftSnapshot">
-        <div className="mobileShiftSnapshotCopy">
-          <strong>{selectedTemplate.title}</strong>
-          <span>{filledItemsCount} из {filteredItems.length} позиций заполнено</span>
-        </div>
-        <span className={cx('badge', lowStockCount > 0 ? 'trial' : 'active')}>{lowStockCount > 0 ? `${lowStockCount} мало` : 'В норме'}</span>
-      </section>}
-
-      <section className="mobileSection">
-        <div className="mobileListSurface mobileFilterSurface">
+      <Card className="mobileCard">
         <Field
           label="Поиск товара"
           icon="search"
@@ -1723,15 +1597,9 @@ function Inventory({ user, admin = false }: any) {
             <b>{template.items.length}</b>
           </button>)}
         </div>
-        </div>
-      </section>
+      </Card>
 
-      <section className="mobileSection">
-        <div className="mobileListSectionHead">
-          <h3>{selectedTemplate?.title || 'Бланк инвентаризации'}</h3>
-          {selectedTemplate && <span className="mobileSectionCount">{filteredItems.length}</span>}
-        </div>
-        <div className="mobileListSurface">
+      <Card title={selectedTemplate?.title || 'Бланк инвентаризации'} className="mobileCard">
         {filteredItems.length === 0 && <Empty text="Нет товаров по этому фильтру" />}
         <div className="mobileInventoryList">
           {filteredItems.map((item: any) => {
@@ -1754,12 +1622,9 @@ function Inventory({ user, admin = false }: any) {
             </label>;
           })}
         </div>
-        </div>
-      </section>
-      {selectedTemplate && <div className="mobileStickyActionBar">
-        <Button type="button" className="mobilePrimaryButton" onClick={() => submit(selectedTemplate)}>Сохранить остатки</Button>
-      </div>}
-      {msg && <div className="notice mobileInlineNotice">{msg}</div>}
+        {selectedTemplate && <div className="mobileStickyActionBar"><Button type="button" className="mobilePrimaryButton" onClick={() => submit(selectedTemplate)}>Сохранить остатки</Button></div>}
+        {msg && <div className="notice mobileInlineNotice">{msg}</div>}
+      </Card>
     </div>;
   }
 
@@ -1872,7 +1737,6 @@ function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer 
   const [showTechForm, setShowTechForm] = useState(false);
   const [techForm, setTechForm] = useState<any>({ title: '', description: '', category: 'equipment' });
   const [techDrafts, setTechDrafts] = useState<any>({});
-  const [taskView, setTaskView] = useState<'active' | 'done'>('active');
 
   async function load() {
     const [taskRows, techRows, userRows] = await Promise.all([
@@ -1933,28 +1797,7 @@ function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer 
       <div className="mobileSectionStack">
         <SectionTitle title="Задачи" action={<button type="button" className="sectionLink" onClick={() => setShowTechForm(true)}>Техзаявка</button>} />
 
-        <section className="mobileShiftSnapshot">
-          <div className="mobileShiftSnapshotCopy">
-            <strong>{taskView === 'active' ? 'Активная смена' : 'Завершённые задачи'}</strong>
-            <span>{activeTasks.length} задач, {activeTechRequests.length} техзаявок требуют внимания</span>
-          </div>
-          <span className="badge active">{completedTasks.length} готово</span>
-        </section>
-
-        <section className="mobileSection">
-          <div className="mobileSegmentedControl">
-            <button type="button" className={cx('mobileSegmentButton', taskView === 'active' && 'active')} onClick={() => setTaskView('active')}>Активные</button>
-            <button type="button" className={cx('mobileSegmentButton', taskView === 'done' && 'active')} onClick={() => setTaskView('done')}>Завершённые</button>
-          </div>
-        </section>
-
-        {taskView === 'active' && <>
-        <section className="mobileSection">
-          <div className="mobileListSectionHead">
-            <h3>Сегодня</h3>
-            <span className="mobileSectionCount">{activeTasks.length}</span>
-          </div>
-          <div className="mobileListSurface">
+        <Card title="Сегодня" className="mobileCard">
           <div className="mobileTaskList">
             {activeTasks.length === 0 && <Empty text="Нет активных задач на текущую смену" />}
             {activeTasks.map((task) => <div key={task.id} className="mobileTaskRow static">
@@ -1966,15 +1809,9 @@ function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer 
               <Button type="button" kind="soft" onClick={() => done(task.id)}>Выполнено</Button>
             </div>)}
           </div>
-          </div>
-        </section>
+        </Card>
 
-        <section className="mobileSection">
-          <div className="mobileListSectionHead">
-            <h3>Техзаявки</h3>
-            <span className="mobileSectionCount">{activeTechRequests.length}</span>
-          </div>
-          <div className="mobileListSurface">
+        <Card title="Техзаявки" className="mobileCard">
           <div className="mobileRequestList">
             {activeTechRequests.length === 0 && <Empty text="Нет срочных техзаявок" />}
             {activeTechRequests.map((request) => <article key={request.id} className="mobileRequestCard">
@@ -1985,20 +1822,14 @@ function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer 
                 </div>
                 <span className={`badge ${request.status}`}>{techRequestStatuses[request.status] || request.status}</span>
               </div>
-              <p className="mobileRequestDescription">{request.description || 'Без описания'}</p>
+              <p>{request.description || 'Без описания'}</p>
               <div className="mobileInlineHint">{request.manager_comment || 'Комментарий менеджера появится здесь'}</div>
             </article>)}
           </div>
-          </div>
-        </section>
-        </>}
+          {techMsg && <div className="notice mobileInlineNotice">{techMsg}</div>}
+        </Card>
 
-        {taskView === 'done' && <section className="mobileSection">
-          <div className="mobileListSectionHead">
-            <h3>Выполнено</h3>
-            <span className="mobileSectionCount">{completedTasks.length + finishedTechRequests.length}</span>
-          </div>
-          <div className="mobileListSurface">
+        <Card title="Выполнено" className="mobileCard">
           <div className="mobileTaskList">
             {completedTasks.length === 0 && finishedTechRequests.length === 0 && <Empty text="Пока нет завершённых задач" />}
             {completedTasks.map((task) => <div key={task.id} className="mobileTaskRow static done">
@@ -2018,29 +1849,37 @@ function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer 
               <span className={`badge ${request.status}`}>{request.manager_comment || 'Без комментария'}</span>
             </div>)}
           </div>
-          </div>
-        </section>}
-        {techMsg && <div className="notice mobileInlineNotice">{techMsg}</div>}
+        </Card>
       </div>
 
-      {showTechForm && <MobileSheetModal
-        title="Техзаявка"
-        subtitle="Опишите проблему для менеджера"
-        onClose={() => {
-          setShowTechForm(false);
-          onCloseComposer?.();
-        }}
-        className="mobileFormSheet"
-        footer={<Button form="tech-request-form" className="mobilePrimaryButton">Отправить техзаявку</Button>}
-      >
-        <form id="tech-request-form" className="form" onSubmit={createTechRequest}>
-          <Field label="Тема заявки" value={techForm.title} onChange={(e: any) => setTechForm({ ...techForm, title: e.target.value })} placeholder="Например: вызвать мастера по холодильнику" />
-          <Select label="Тип проблемы" value={techForm.category} onChange={(e: any) => setTechForm({ ...techForm, category: e.target.value })}>
-            {Object.entries(techRequestCategories).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
-          </Select>
-          <Textarea label="Что случилось" value={techForm.description} onChange={(e: any) => setTechForm({ ...techForm, description: e.target.value })} placeholder="Опишите проблему" />
-        </form>
-      </MobileSheetModal>}
+      {showTechForm && <div className="mobileSheetModal" onClick={() => {
+        setShowTechForm(false);
+        onCloseComposer?.();
+      }}>
+        <div className="mobileSheetPanel mobileFormSheet" onClick={(e) => e.stopPropagation()}>
+          <div className="bottomSheetHandle" />
+          <div className="mobileSheetTopbar">
+            <button className="mobileSheetCloseButton" type="button" onClick={() => {
+              setShowTechForm(false);
+              onCloseComposer?.();
+            }} aria-label="Закрыть">×</button>
+            <div>
+              <h2>Техзаявка</h2>
+              <p>Опишите проблему, менеджер увидит её в задачах</p>
+            </div>
+          </div>
+          <form className="form mobileSheetForm" onSubmit={createTechRequest}>
+            <Field label="Тема заявки" value={techForm.title} onChange={(e: any) => setTechForm({ ...techForm, title: e.target.value })} placeholder="Например: вызвать мастера по холодильнику" />
+            <Select label="Тип проблемы" value={techForm.category} onChange={(e: any) => setTechForm({ ...techForm, category: e.target.value })}>
+              {Object.entries(techRequestCategories).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+            </Select>
+            <Textarea label="Что случилось" value={techForm.description} onChange={(e: any) => setTechForm({ ...techForm, description: e.target.value })} placeholder="Опишите проблему" />
+            <div className="mobileStickyActionBar inModal single">
+              <Button className="mobilePrimaryButton">Отправить техзаявку</Button>
+            </div>
+          </form>
+        </div>
+      </div>}
     </>;
   }
 
@@ -2143,68 +1982,56 @@ function Knowledge({ user, admin = false }: any) {
       .map((category) => ({
         ...category,
         documents: category.documents.filter((document: any) => {
-          const haystack = `${document.title} ${document.content || ''}`.toLowerCase();
+          const haystack = `${document.title} ${document.content || ""}`.toLowerCase();
           return !search.trim() || haystack.includes(search.trim().toLowerCase());
         })
       }))
       .filter((category) => category.documents.length || !search.trim());
-    const totalDocs = visibleCategories.reduce((count, category) => count + category.documents.length, 0);
-    const pendingDocs = visibleCategories.reduce((count, category) => count + category.documents.filter((document: any) => document.requires_acknowledgement && !document.acknowledged).length, 0);
 
     return <>
       <div className="mobileSectionStack">
         <SectionTitle title="База знаний" />
-        <section className="mobileShiftSnapshot">
-          <div className="mobileShiftSnapshotCopy">
-            <strong>Документы и инструкции</strong>
-            <span>{totalDocs} материалов доступны для вашей роли</span>
-          </div>
-          <span className={cx('badge', pendingDocs > 0 ? 'trial' : 'active')}>{pendingDocs > 0 ? `${pendingDocs} ждут` : 'Ок'}</span>
-        </section>
-        <section className="mobileSection">
-          <div className="mobileListSurface mobileFilterSurface">
+        <div className="mobileSearchSurface">
           <Field label="Поиск инструкций" icon="search" value={search} onChange={(e: any) => setSearch(e.target.value)} placeholder="Поиск инструкций..." />
-          </div>
-        </section>
-        <section className="mobileSection">
-          <div className="mobileKnowledgeGrid">
-            {visibleCategories.map((category) => <section key={category.id} className="mobileKnowledgeSection">
-              <div className="mobileListSectionHead">
-                <div className="mobileKnowledgeSectionTitle">
-                  <div className="mobileKnowledgeDocIcon"><AppIcon name="folder" className="navIcon" /></div>
-                  <h3>{category.title}</h3>
-                </div>
-                <span className="mobileSectionCount">{category.documents.length}</span>
+        </div>
+        <div className="mobileKnowledgeGrid">
+          {visibleCategories.map((category) => <section key={category.id} className="mobileKnowledgeFolder">
+            <div className="mobileKnowledgeFolderHead">
+              <div className="mobileStatBadge blue"><AppIcon name="folder" className="navIcon" /></div>
+              <div>
+                <strong>{category.title}</strong>
+                <span>{category.documents.length} документов</span>
               </div>
-              <div className="mobileListSurface">
-                <div className="mobileKnowledgeDocs">
-                  {category.documents.map((document: any) => <button key={document.id} type="button" className="mobileKnowledgeDoc" onClick={() => viewDoc(document)}>
-                    <div className="mobileKnowledgeDocIcon"><AppIcon name="file" className="navIcon" /></div>
-                    <div className="mobileKnowledgeDocCopy">
-                      <strong>{document.title}</strong>
-                      <span>{document.acknowledged ? 'Ознакомлен' : document.requires_acknowledgement ? 'Нужно ознакомиться' : 'Документ'}</span>
-                    </div>
-                    <AppIcon name="chevron" className="navIcon" />
-                  </button>)}
+            </div>
+            <div className="mobileKnowledgeDocs">
+              {category.documents.map((document: any) => <button key={document.id} type="button" className="mobileKnowledgeDoc" onClick={() => viewDoc(document)}>
+                <div className="mobileKnowledgeDocIcon"><AppIcon name="file" className="navIcon" /></div>
+                <div className="mobileKnowledgeDocCopy">
+                  <strong>{document.title}</strong>
+                  <span>{document.acknowledged ? 'Ознакомлен' : document.requires_acknowledgement ? 'Нужно ознакомиться' : 'Документ'}</span>
                 </div>
-              </div>
-            </section>)}
-            {visibleCategories.length === 0 && <Empty text="Ничего не найдено по этому запросу" />}
-          </div>
-        </section>
+                <AppIcon name="chevron" className="navIcon" />
+              </button>)}
+            </div>
+          </section>)}
+          {visibleCategories.length === 0 && <Empty text="Ничего не найдено по этому запросу" />}
+        </div>
       </div>
-      {openDoc && <MobileSheetModal
-        title={openDoc.title}
-        subtitle={openDoc.acknowledged ? 'Документ изучен' : openDoc.requires_acknowledgement ? 'Требуется подтверждение' : 'Документ'}
-        onClose={() => setOpenDoc(null)}
-        fullScreen
-        className="mobileReaderModal"
-        footer={openDoc.requires_acknowledgement && !openDoc.acknowledged
-          ? <Button onClick={() => ack(openDoc)} className="mobilePrimaryButton">Ознакомился</Button>
-          : null}
-      >
-        <pre className="mobileDocReaderContent">{openDoc.content}</pre>
-      </MobileSheetModal>}
+      {openDoc && <div className="mobileReaderModal" role="dialog" aria-modal="true">
+        <div className="mobileReaderTopbar">
+          <button className="mobileSheetCloseButton" type="button" onClick={() => setOpenDoc(null)} aria-label="Закрыть">×</button>
+          <div>
+            <h2>{openDoc.title}</h2>
+            <p>{openDoc.acknowledged ? 'Ознакомлен' : openDoc.requires_acknowledgement ? 'Требует ознакомления' : 'Документ'}</p>
+          </div>
+        </div>
+        <div className="mobileReaderContent">
+          <pre>{openDoc.content}</pre>
+        </div>
+        {openDoc.requires_acknowledgement && !openDoc.acknowledged && <div className="mobileStickyActionBar inReader single">
+          <Button className="mobilePrimaryButton" onClick={() => ack(openDoc)}>Ознакомился</Button>
+        </div>}
+      </div>}
     </>;
   }
 
