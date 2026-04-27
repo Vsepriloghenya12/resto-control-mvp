@@ -1468,9 +1468,19 @@ function Inventory({ user, admin = false }: any) {
     }
   }
 
+  function previewInventoryTotal(rawValue: any) {
+    const raw = String(rawValue || '').trim();
+    if (!raw) return '';
+    const normalized = raw.replace(/\s+/g, '').replace(/,/g, '.');
+    const parts = normalized.split('+');
+    if (!parts.length || parts.some(part => !/^\d+(?:\.\d+)?$/.test(part))) return '';
+    const total = parts.reduce((sum, part) => sum + Number(part), 0);
+    return String(Math.round(total * 1000) / 1000).replace('.', ',');
+  }
+
   async function submit(t: any) {
     const payload: any = {};
-    t.items.forEach((i: any) => { payload[i.product_id] = { qty: Number(values[i.product_id] || 0), comment: '' }; });
+    t.items.forEach((i: any) => { payload[i.product_id] = { qty: values[i.product_id] || '', comment: '' }; });
     const result = await api('/api/inventory/runs', { method: 'POST', body: JSON.stringify({ template_id: t.id, values: payload }) });
     setValues({}); setMsg(result?.offline ? 'Инвентаризация сохранена офлайн' : 'Инвентаризация сохранена'); load().catch(() => undefined);
   }
@@ -1517,24 +1527,27 @@ function Inventory({ user, admin = false }: any) {
         </div>
       </Card>
 
-      <Card title={selectedTemplate?.title || 'Бланк инвентаризации'} className="mobileCard">
+      <Card title={selectedTemplate?.title || 'Бланк инвентаризации'} className="mobileCard inventoryPlainCard">
         {filteredItems.length === 0 && <Empty text="Нет товаров по этому фильтру" />}
-        <div className="mobileInventoryList">
-          {filteredItems.map((item: any) => <label key={item.product_id} className="mobileInventoryItem">
-            <div className="mobileInventoryCopy">
-              <strong>{item.product?.name}</strong>
-              <span>{item.product?.unit || 'шт.'}</span>
-            </div>
-            <div className="mobileInventoryActions">
+        <div className="inventoryPlainList">
+          {filteredItems.map((item: any) => {
+            const rawValue = values[item.product_id] || '';
+            const preview = previewInventoryTotal(rawValue);
+            return <label key={item.product_id} className="inventoryPlainItem">
+              <div className="inventoryPlainTitle">
+                <strong>{item.product?.name}</strong>
+                <span>{item.product?.unit || 'шт.'}</span>
+              </div>
               <input
-                type="number"
-                min="0"
-                value={values[item.product_id] || ''}
+                type="text"
+                inputMode="decimal"
+                value={rawValue}
                 onChange={(e) => setValues({ ...values, [item.product_id]: e.target.value })}
-                placeholder="0"
+                placeholder="Например: 3+2,2+0,04"
               />
-            </div>
-          </label>)}
+              {preview && <em>Итого: {preview}</em>}
+            </label>;
+          })}
         </div>
         {selectedTemplate && <Button type="button" className="mobilePrimaryButton" onClick={() => submit(selectedTemplate)}>Сохранить остатки</Button>}
         {msg && <div className="notice mobileInlineNotice">{msg}</div>}
@@ -1601,9 +1614,9 @@ function Inventory({ user, admin = false }: any) {
               <div>
                 <b>{run.template?.title}</b>
                 <span>{run.user?.name} · {roles[run.user?.role] || 'Сотрудник'} · {fmtDate(run.created_at)}</span>
-                <span>Строк в файле: {run.values?.length || 0}</span>
+                <span>Строк в отправке: {run.values?.length || 0}</span>
               </div>
-              <Button kind="soft" onClick={() => download(`/api/admin/inventory/runs/${run.id}/export.xlsx`, `inventory-${run.id}.xlsx`)}>Скачать Excel</Button>
+              <Button kind="soft" onClick={() => download(`/api/admin/inventory/runs/${run.id}/export.xlsx`, `inventory-${run.id}.xlsx`)}>Скачать общий Excel</Button>
             </div>)}
           </div>
         </Card>

@@ -16,6 +16,7 @@ export function Bookings({ admin = false }: any) {
   const [dateFilter, setDateFilter] = useState(initialDate);
   const [showForm, setShowForm] = useState(false);
   const [viewingReservation, setViewingReservation] = useState<any>(null);
+  const [freeTable, setFreeTable] = useState<any>(null);
   const [editingReservationId, setEditingReservationId] = useState('');
   const [editingTableId, setEditingTableId] = useState('');
   const [bulkForm, setBulkForm] = useState<any>({ count: 6, seats: 4, zone: 'Основной зал', prefix: 'Стол' });
@@ -50,6 +51,7 @@ export function Bookings({ admin = false }: any) {
     }
     resetReservationForm(dateFilter, table?.id ? [table.id] : []);
     setViewingReservation(null);
+    setFreeTable(null);
     setMsg('');
     setShowForm(true);
   }
@@ -67,6 +69,7 @@ export function Bookings({ admin = false }: any) {
       table_ids: Array.isArray(reservation.table_ids) ? reservation.table_ids : []
     });
     setViewingReservation(null);
+    setFreeTable(null);
     setMsg('');
     setShowForm(true);
   }
@@ -107,6 +110,46 @@ export function Bookings({ admin = false }: any) {
         setShowForm(false);
         resetReservationForm();
       }
+      load();
+    } catch (error: any) {
+      setMsg(error.message);
+    }
+  }
+
+
+  async function seatTable(table: any) {
+    setMsg('');
+    try {
+      const reservation = await api(`/api/bookings/tables/${table.id}/seat`, { method: 'POST', body: JSON.stringify({}) });
+      setMsg('Стол отмечен занятым');
+      setFreeTable(null);
+      setViewingReservation(reservation);
+      load();
+    } catch (error: any) {
+      setMsg(error.message);
+    }
+  }
+
+  async function freeOccupiedTable(reservation: any) {
+    const tableId = Array.isArray(reservation.table_ids) ? reservation.table_ids[0] : '';
+    if (!tableId) return;
+    setMsg('');
+    try {
+      await api(`/api/bookings/tables/${tableId}/free`, { method: 'POST', body: JSON.stringify({}) });
+      setMsg('Стол освобождён');
+      setViewingReservation(null);
+      load();
+    } catch (error: any) {
+      setMsg(error.message);
+    }
+  }
+
+  async function seatReservation(reservation: any) {
+    setMsg('');
+    try {
+      const updated = await api(`/api/bookings/${reservation.id}`, { method: 'PATCH', body: JSON.stringify({ status: 'seated' }) });
+      setMsg('Гости посажены за стол');
+      setViewingReservation(updated);
       load();
     } catch (error: any) {
       setMsg(error.message);
@@ -200,20 +243,29 @@ export function Bookings({ admin = false }: any) {
       .filter((reservation: any) => (Array.isArray(reservation.table_ids) ? reservation.table_ids : []).includes(table.id))
       .filter((reservation: any) => ['booked', 'seated'].includes(reservation.status))
       .sort((a: any, b: any) => String(a.reserved_for || '').localeCompare(String(b.reserved_for || '')));
-    if (!tableReservations.length) return { tone: 'free', text: 'Свободен', reservation: null as any };
+    if (!tableReservations.length) return { tone: 'free', badge: 'Свободен', text: 'Нажмите для действия', reservation: null as any };
     const nextReservation = tableReservations[0];
     const time = new Date(nextReservation.reserved_for).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
     return {
       tone: nextReservation.status === 'seated' ? 'occupied' : 'reserved',
-      text: `${bookingStatuses[nextReservation.status] || 'Бронь'} · ${time}`,
+      badge: nextReservation.status === 'seated' ? 'Занято' : 'Забронировано',
+      text: `${time} · ${nextReservation.guests_count || 1} гост.`,
       reservation: nextReservation
     };
   }
 
   function openTable(table: any) {
     const state = tableStateForDay(table);
-    if (state.reservation) setViewingReservation(state.reservation);
-    else openCreateForm(table);
+    setShowForm(false);
+    setMsg('');
+    if (state.reservation) {
+      setFreeTable(null);
+      setViewingReservation(state.reservation);
+    } else {
+      setViewingReservation(null);
+      setFreeTable(table);
+      resetReservationForm(dateFilter, [table.id]);
+    }
   }
 
   const bookingForm = <form className="form" id="booking-form" onSubmit={saveReservation}>
@@ -245,7 +297,7 @@ export function Bookings({ admin = false }: any) {
   if (!admin) {
     return <>
       <div className="mobileSectionStack bookingMobileScreen">
-        <SectionTitle title="Брони" subtitle="Нажмите на свободный стол, чтобы создать бронь" />
+        <SectionTitle title="Брони" subtitle="Свободный стол можно забронировать или сразу отметить занятым" />
         <section className="mobileSection">
           <div className="mobileListSurface mobileFilterSurface"><Field label="Дата" type="date" value={dateFilter} onChange={(e: any) => setDateFilter(e.target.value)} /></div>
         </section>
@@ -256,7 +308,7 @@ export function Bookings({ admin = false }: any) {
             {hall.tables.map((table: any) => {
               const state = tableStateForDay(table);
               return <button key={table.id} type="button" className={cx('bookingTableButton', 'floorTableTile', state.tone)} onClick={() => openTable(table)}>
-                <strong>{table.label}</strong>
+                <div className="floorTableTileHead"><strong>{table.label}</strong><span className={cx('floorTableStatusBadge', state.tone)}>{state.badge}</span></div>
                 <span>{table.seats} мест</span>
                 <em>{state.text}</em>
               </button>;
@@ -266,12 +318,25 @@ export function Bookings({ admin = false }: any) {
         {msg && <div className={msg.includes('обнов') || msg.includes('создан') || msg.includes('отмен') ? 'notice mobileInlineNotice' : 'error mobileInlineNotice'}>{msg}</div>}
       </div>
 
+      {freeTable && <MobileSheetModal
+        title={freeTable.label}
+        subtitle={`${freeTable.seats} мест · ${freeTable.zone || 'Зал'} · свободен`}
+        onClose={() => setFreeTable(null)}
+        className="mobileFormSheet bookingDetailsSheet"
+        footer={<div className="bookingSheetActions"><Button type="button" onClick={() => seatTable(freeTable)}>Занято</Button><Button kind="soft" type="button" onClick={() => openCreateForm(freeTable)}>Создать бронь</Button></div>}
+      >
+        <div className="bookingDetailsList">
+          <div><span>Статус</span><strong>Свободен</strong></div>
+          <div><span>Действие</span><strong>Отметьте «Занято», если гости уже сели, или создайте бронь на время.</strong></div>
+        </div>
+      </MobileSheetModal>}
+
       {viewingReservation && <MobileSheetModal
-        title={viewingReservation.guest_name || 'Бронь'}
+        title={viewingReservation.guest_name || (viewingReservation.status === 'seated' ? 'Гости за столом' : 'Бронь')}
         subtitle={`${fmtDate(viewingReservation.reserved_for)} · ${bookingStatuses[viewingReservation.status] || viewingReservation.status}`}
         onClose={() => setViewingReservation(null)}
         className="mobileFormSheet bookingDetailsSheet"
-        footer={<div className="bookingSheetActions"><Button kind="soft" type="button" onClick={() => startEditReservation(viewingReservation)}>Редактировать</Button>{viewingReservation.status !== 'cancelled' && <Button kind="danger" type="button" onClick={() => cancelReservation(viewingReservation)}>Отменить</Button>}</div>}
+        footer={<div className="bookingSheetActions">{viewingReservation.status === 'seated' ? <Button type="button" onClick={() => freeOccupiedTable(viewingReservation)}>Свободен</Button> : <Button type="button" onClick={() => seatReservation(viewingReservation)}>Занято</Button>}<Button kind="soft" type="button" onClick={() => startEditReservation(viewingReservation)}>Редактировать</Button>{viewingReservation.status !== 'cancelled' && <Button kind="danger" type="button" onClick={() => cancelReservation(viewingReservation)}>Отменить</Button>}</div>}
       >
         <div className="bookingDetailsList">
           <div><span>Столы</span><strong>{tablesSummary(viewingReservation) || 'Не выбраны'}</strong></div>
@@ -284,9 +349,9 @@ export function Bookings({ admin = false }: any) {
       {showForm && <MobileSheetModal
         title={editingReservationId ? 'Редактировать бронь' : 'Новая бронь'}
         subtitle="Заполните время, гостя и стол"
-        onClose={() => { setShowForm(false); resetReservationForm(); }}
+        onClose={() => { setShowForm(false); setFreeTable(null); resetReservationForm(); }}
         className="mobileFormSheet"
-        footer={<div className="bookingSheetActions"><Button kind="soft" type="button" onClick={() => { setShowForm(false); resetReservationForm(); }}>Отмена</Button><Button type="submit" form="booking-form" className="mobilePrimaryButton">Сохранить бронь</Button></div>}
+        footer={<div className="bookingSheetActions"><Button kind="soft" type="button" onClick={() => { setShowForm(false); setFreeTable(null); resetReservationForm(); }}>Отмена</Button><Button type="submit" form="booking-form" className="mobilePrimaryButton">Сохранить бронь</Button></div>}
       >
         {bookingForm}
       </MobileSheetModal>}

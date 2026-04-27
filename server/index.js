@@ -198,6 +198,41 @@ function serializeReservation(reservation) {
   };
 }
 
+
+function parseInventoryQuantity(input) {
+  const raw = typeof input === 'object' && input !== null ? input.qty : input;
+  const expression = String(raw ?? '').trim();
+  if (!expression) return { qty: 0, expression: '' };
+
+  const normalized = expression.replace(/\s+/g, '').replace(/,/g, '.');
+  const terms = normalized.split('+');
+  if (!terms.length || terms.some(term => !term)) {
+    return { error: 'Введите количество числами, например 3+2,2+0,04' };
+  }
+
+  let total = 0;
+  for (const term of terms) {
+    if (!/^\d+(?:\.\d+)?$/.test(term)) {
+      return { error: 'Введите количество числами, например 3+2,2+0,04' };
+    }
+    total += Number(term);
+  }
+
+  return { qty: Math.round(total * 1000) / 1000, expression };
+}
+
+function currentTableReservation(restaurant_id, tableId) {
+  const now = Date.now();
+  return sameRestaurant(collection('table_reservations'), restaurant_id)
+    .filter(reservation => ['seated'].includes(reservation.status))
+    .filter(reservation => (Array.isArray(reservation.table_ids) ? reservation.table_ids : []).includes(tableId))
+    .sort((a, b) => String(b.reserved_for || '').localeCompare(String(a.reserved_for || '')))
+    .find(reservation => {
+      const interval = reservationInterval(reservation);
+      return Number.isFinite(interval.start) && now >= interval.start - 15 * 60000;
+    }) || null;
+}
+
 function normalizeReservationPayload(restaurant_id, rawBody = {}, currentReservationId = null) {
   const tableIds = Array.from(new Set((Array.isArray(rawBody.table_ids) ? rawBody.table_ids : []).map(value => String(value || '').trim()).filter(Boolean)));
   if (!tableIds.length) return { error: 'Выберите хотя бы один стол' };
@@ -906,9 +941,20 @@ app.post('/api/inventory/runs', auth, ensureRestaurantActive, runAsync(async (re
   const template = db.inventory_templates.find(t => t.id === template_id && t.restaurant_id === rid);
   if (!template) return res.status(404).json({ error: 'Бланк инвентаризации не найден' });
   if (!['owner', 'manager'].includes(req.user.role) && template.department !== req.user.department) return res.status(403).json({ error: 'Нет доступа к этой инвентаризации' });
+
+  const parsedValues = [];
+  for (const [product_id, value] of Object.entries(values || {})) {
+    const parsed = parseInventoryQuantity(value);
+    if (parsed.error) {
+      const product = db.products.find(p => p.id === product_id);
+      return res.status(400).json({ error: `${product?.name || 'Позиция'}: ${parsed.error}` });
+    }
+    parsedValues.push({ product_id, qty: parsed.qty, expression: parsed.expression, comment: typeof value === 'object' && value !== null ? value.comment || '' : '' });
+  }
+
   const run = { id: uid('invrun'), restaurant_id: rid, template_id, user_id: req.user.id, department: template.department, comment: comment || '', status: 'completed', created_at: nowIso() };
   db.inventory_runs.push(run);
-  Object.entries(values || {}).forEach(([product_id, value]) => db.inventory_values.push({ id: uid('invv'), restaurant_id: rid, inventory_run_id: run.id, product_id, qty: Number(value.qty || 0), comment: value.comment || '' }));
+  parsedValues.forEach(value => db.inventory_values.push({ id: uid('invv'), restaurant_id: rid, inventory_run_id: run.id, product_id: value.product_id, qty: value.qty, comment: value.expression || value.comment || '' }));
   logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'inventory_completed', title: `${req.user.name} отправил инвентаризацию "${template.title}"`, entity_type: 'inventory_run', entity_id: run.id, metadata: { template_id, department: template.department } });
   notifyManagers(rid, { title: 'Инвентаризация отправлена', body: `${req.user.name}: ${template.title}`, entity_type: 'inventory_run', entity_id: run.id });
   await persist();
@@ -931,24 +977,42 @@ app.get('/api/admin/inventory/runs/:id/export.xlsx', auth, ensureRestaurantActiv
   const run = db.inventory_runs.find(r => r.id === req.params.id && r.restaurant_id === rid);
   if (!run) return res.status(404).json({ error: 'Инвентаризация не найдена' });
   const template = db.inventory_templates.find(t => t.id === run.template_id);
-  const user = db.users.find(u => u.id === run.user_id);
-  const values = db.inventory_values.filter(v => v.inventory_run_id === run.id).map(v => ({ ...v, product: db.products.find(p => p.id === v.product_id) }));
+  const runDate = String(run.created_at || '').slice(0, 10);
+  const sameDayRuns = sameRestaurant(db.inventory_runs, rid)
+    .filter(item => item.template_id === run.template_id && item.status === 'completed' && String(item.created_at || '').slice(0, 10) === runDate);
+  const runIds = new Set(sameDayRuns.map(item => item.id));
+  const participants = sameDayRuns.map(item => db.users.find(u => u.id === item.user_id)?.name).filter(Boolean).join(', ');
+  const totals = new Map();
+
+  db.inventory_values
+    .filter(value => runIds.has(value.inventory_run_id))
+    .forEach(value => {
+      const product = db.products.find(p => p.id === value.product_id);
+      const current = totals.get(value.product_id) || { product, qty: 0, comments: [] };
+      current.qty += Number(value.qty || 0);
+      const sourceRun = sameDayRuns.find(item => item.id === value.inventory_run_id);
+      const sourceUser = db.users.find(u => u.id === sourceRun?.user_id)?.name || 'Сотрудник';
+      if (value.comment) current.comments.push(`${sourceUser}: ${value.comment}`);
+      totals.set(value.product_id, current);
+    });
 
   const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet('Инвентаризация');
+  const sheet = workbook.addWorksheet('Общая инвентаризация');
   sheet.addRow(['Ресторан', req.restaurant.name]);
   sheet.addRow(['Бланк', template?.title || '']);
   sheet.addRow(['Отдел', run.department]);
-  sheet.addRow(['Сотрудник', user?.name || '']);
-  sheet.addRow(['Дата', new Date(run.created_at).toLocaleString('ru-RU')]);
+  sheet.addRow(['Дата', new Date(run.created_at).toLocaleDateString('ru-RU')]);
+  sheet.addRow(['Сотрудники', participants || '']);
   sheet.addRow([]);
-  sheet.addRow(['Товар', 'Категория', 'Ед.', 'Остаток', 'Комментарий']);
-  values.forEach(v => sheet.addRow([v.product?.name || '', v.product?.category || '', v.product?.unit || '', v.qty, v.comment || '']));
-  sheet.columns.forEach(c => { c.width = 24; });
+  sheet.addRow(['Товар', 'Категория', 'Ед.', 'Итого', 'Подсчёты']);
+  Array.from(totals.values())
+    .sort((a, b) => String(a.product?.name || '').localeCompare(String(b.product?.name || ''), 'ru'))
+    .forEach(item => sheet.addRow([item.product?.name || '', item.product?.category || '', item.product?.unit || '', Math.round(item.qty * 1000) / 1000, item.comments.join('; ')]));
+  sheet.columns.forEach(c => { c.width = 26; });
   sheet.getRow(7).font = { bold: true };
 
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename=inventory-${run.id}.xlsx`);
+  res.setHeader('Content-Disposition', `attachment; filename=inventory-summary-${runDate}.xlsx`);
   await workbook.xlsx.write(res);
   res.end();
 }));
@@ -1018,6 +1082,47 @@ app.delete('/api/admin/bookings/tables/:id', auth, ensureRestaurantActive, admin
   res.json({ ok: true });
 }));
 
+
+app.post('/api/bookings/tables/:id/seat', auth, ensureRestaurantActive, runAsync(async (req, res) => {
+  const table = collection('floor_tables').find(item => item.id === req.params.id && item.restaurant_id === req.user.restaurant_id && item.active);
+  if (!table) return res.status(404).json({ error: 'Стол не найден' });
+  if (currentTableReservation(req.user.restaurant_id, table.id)) return res.status(400).json({ error: 'Стол уже занят' });
+
+  const guestsCount = Math.max(1, Math.round(Number(req.body.guests_count || 1) || 1));
+  const openedAt = nowIso();
+  const reservation = {
+    id: uid('book'),
+    restaurant_id: req.user.restaurant_id,
+    created_by: req.user.id,
+    table_ids: [table.id],
+    reserved_for: openedAt,
+    duration_minutes: 600,
+    guests_count: guestsCount,
+    guest_name: String(req.body.guest_name || '').trim() || 'Гости без брони',
+    guest_phone: String(req.body.guest_phone || '').trim(),
+    comment: String(req.body.comment || 'Посадка без брони').trim(),
+    status: 'seated',
+    created_at: openedAt,
+    updated_at: openedAt
+  };
+  collection('table_reservations').push(reservation);
+  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'booking_seated', title: `${req.user.name} отметил стол занятым`, entity_type: 'booking', entity_id: reservation.id, metadata: { table_id: table.id } });
+  await persist();
+  res.status(201).json(serializeReservation(reservation));
+}));
+
+app.post('/api/bookings/tables/:id/free', auth, ensureRestaurantActive, runAsync(async (req, res) => {
+  const table = collection('floor_tables').find(item => item.id === req.params.id && item.restaurant_id === req.user.restaurant_id && item.active);
+  if (!table) return res.status(404).json({ error: 'Стол не найден' });
+  const reservation = currentTableReservation(req.user.restaurant_id, table.id);
+  if (!reservation) return res.status(404).json({ error: 'На этом столе нет активной посадки' });
+  reservation.status = 'completed';
+  reservation.updated_at = nowIso();
+  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'booking_completed', title: `${req.user.name} освободил стол`, entity_type: 'booking', entity_id: reservation.id, metadata: { table_id: table.id } });
+  await persist();
+  res.json(serializeReservation(reservation));
+}));
+
 app.get('/api/bookings', auth, ensureRestaurantActive, (req, res) => {
   const rid = req.user.restaurant_id;
   const rows = sameRestaurant(collection('table_reservations'), rid)
@@ -1049,7 +1154,9 @@ app.post('/api/bookings', auth, ensureRestaurantActive, runAsync(async (req, res
 app.patch('/api/bookings/:id', auth, ensureRestaurantActive, runAsync(async (req, res) => {
   const reservation = collection('table_reservations').find(item => item.id === req.params.id && item.restaurant_id === req.user.restaurant_id);
   if (!reservation) return res.status(404).json({ error: 'Бронь не найдена' });
-  if (!MANAGER_ROLES.includes(req.user.role) && reservation.created_by !== req.user.id) return res.status(403).json({ error: 'Можно редактировать только свои брони' });
+  const requestKeys = Object.keys(req.body || {});
+  const statusOnlyUpdate = requestKeys.length === 1 && requestKeys[0] === 'status' && ['seated', 'completed'].includes(String(req.body.status || ''));
+  if (!MANAGER_ROLES.includes(req.user.role) && reservation.created_by !== req.user.id && !statusOnlyUpdate) return res.status(403).json({ error: 'Можно редактировать только свои брони' });
 
   const mergedPayload = {
     table_ids: req.body.table_ids !== undefined ? req.body.table_ids : reservation.table_ids,

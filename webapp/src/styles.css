@@ -3616,3 +3616,115 @@ html {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* Booking occupancy and inventory counting pass */
+.floorTableTileHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.floorTableStatusBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.floorTableStatusBadge.free {
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, 0.13);
+  border: 1px solid rgba(34, 197, 94, 0.22);
+}
+
+.floorTableStatusBadge.reserved {
+  color: #fde68a;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.22);
+}
+
+.floorTableStatusBadge.occupied {
+  color: #bae6fd;
+  background: rgba(56, 189, 248, 0.14);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+}
+
+.bookingSheetActions {
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+}
+
+.inventoryPlainCard .cardBody {
+  display: grid;
+  gap: 14px;
+}
+
+.inventoryPlainList {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.inventoryPlainItem {
+  display: grid;
+  gap: 10px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.inventoryPlainItem:last-child {
+  border-bottom: 0;
+}
+
+.inventoryPlainTitle {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.inventoryPlainTitle strong {
+  min-width: 0;
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.inventoryPlainTitle span {
+  color: var(--text-secondary);
+  font-size: 0.86rem;
+  white-space: nowrap;
+}
+
+.inventoryPlainItem input {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 16px;
+  text-align: left;
+}
+
+.inventoryPlainItem em {
+  color: #bbf7d0;
+  font-size: 0.86rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+@media (max-width: 980px) {
+  .inventoryPlainCard {
+    border-radius: 22px;
+  }
+
+  .inventoryPlainItem {
+    padding: 16px 0;
+  }
+
+  .floorTableTile::after {
+    display: none;
+  }
+}
