@@ -287,7 +287,6 @@ function NotificationCenter({ open, onClose, onChanged }: { open: boolean; onClo
 
 function ShiftControl({ user }: { user: any }) {
   const [shiftState, setShiftState] = useState<any>({ current: null, last_closed: null });
-  const [comment, setComment] = useState('');
   const [msg, setMsg] = useState('');
   async function load() { try { setShiftState(await api('/api/shifts/current')); } catch { setShiftState({ current: null, last_closed: null }); } }
   useEffect(() => { load(); }, []);
@@ -299,8 +298,7 @@ function ShiftControl({ user }: { user: any }) {
   }
   async function closeShift() {
     if (!shiftState.current) return;
-    const result = await api(`/api/shifts/${shiftState.current.id}/close`, { method: 'POST', body: JSON.stringify({ comment }) });
-    setComment('');
+    const result = await api(`/api/shifts/${shiftState.current.id}/close`, { method: 'POST', body: JSON.stringify({ comment: '' }) });
     setMsg(result?.offline ? 'Закрытие смены сохранено офлайн' : 'Смена закрыта');
     load().catch(() => undefined);
   }
@@ -308,8 +306,7 @@ function ShiftControl({ user }: { user: any }) {
   return <section className={cx('mobileShiftCard', current && 'active')}>
     <div className="mobileShiftCardHead"><div><span>{roles[user.role]} · {departments[user.department]}</span><strong>{current ? 'Смена идёт' : 'Смена не начата'}</strong></div><span className={cx('badge', current ? 'active' : 'trial')}>{current ? 'активна' : 'начать'}</span></div>
     <p>{current ? `Начата ${fmtDate(current.opened_at)}` : shiftState.last_closed ? `Последняя смена: ${fmtDate(shiftState.last_closed.closed_at)}` : 'Начните смену перед чек-листами и задачами.'}</p>
-    {current && <Textarea label="Комментарий к закрытию" value={comment} onChange={(e: any) => setComment(e.target.value)} placeholder="Что важно передать менеджеру" />}
-    <div className="mobileShiftActions">{current ? <><Button type="button" onClick={closeShift}>Закрыть смену</Button><Button type="button" kind="soft" onClick={() => download(`/api/reports/shift/export.csv?shift_id=${current.id}`, `shift-${current.id}.csv`)}>Экспорт</Button></> : <Button type="button" onClick={startShift}>Начать смену</Button>}</div>
+    <div className="mobileShiftActions">{current ? <Button type="button" onClick={closeShift}>Закрыть смену</Button> : <Button type="button" onClick={startShift}>Начать смену</Button>}</div>
     {msg && <div className="notice mobileInlineNotice">{msg}</div>}
   </section>;
 }
@@ -776,6 +773,7 @@ function UsersAdmin() {
     catch (e: any) { setMsg(e.message); }
   }
   function startEdit(user: any) {
+    if (user.role === 'owner') return;
     setEditingUserId(user.id);
     setEditForm({ name: user.name, login: user.login, password: '', role: user.role, active: user.active !== false });
     setMsg('');
@@ -788,20 +786,13 @@ function UsersAdmin() {
     e.preventDefault();
     setMsg('');
     try {
-      const payload: any = {
-        name: editForm.name,
-        login: editForm.login,
-        role: editForm.role,
-        active: editForm.active
-      };
+      const payload: any = { name: editForm.name, login: editForm.login, role: editForm.role, active: editForm.active };
       if (editForm.password) payload.password = editForm.password;
       await api(`/api/admin/users/${editingUserId}`, { method: 'PATCH', body: JSON.stringify(payload) });
       setMsg('Сотрудник обновлён');
       cancelEdit();
       load();
-    } catch (e: any) {
-      setMsg(e.message);
-    }
+    } catch (e: any) { setMsg(e.message); }
   }
   async function removeUser(user: any) {
     if (!window.confirm(`Удалить сотрудника "${user.name}"?`)) return;
@@ -811,51 +802,37 @@ function UsersAdmin() {
       if (editingUserId === user.id) cancelEdit();
       setMsg('Сотрудник удалён');
       load();
-    } catch (e: any) {
-      setMsg(e.message);
-    }
+    } catch (e: any) { setMsg(e.message); }
   }
   return <>
-    <Card title="Создать сотрудника">
-      <form className="form two" onSubmit={submit}>
+    <Card title="Создать сотрудника" className="adminCreateCard">
+      <form className="form two compactAdminForm" onSubmit={submit}>
         <Field label="Имя" value={form.name} onChange={(e: any) => setForm({ ...form, name: e.target.value })} />
         <Field label="Логин" value={form.login} onChange={(e: any) => setForm({ ...form, login: e.target.value })} />
         <Field label="Пароль" value={form.password} onChange={(e: any) => setForm({ ...form, password: e.target.value })} />
         <Select label="Роль" value={form.role} onChange={(e: any) => setForm({ ...form, role: e.target.value })}>{executableRoles.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>
         <Button>Добавить</Button>
       </form>
-      {msg && <div className="notice">{msg}</div>}
+      {msg && <div className={msg.includes('удал') || msg.includes('обнов') || msg.includes('добав') ? 'notice compactNotice' : 'error compactNotice'}>{msg}</div>}
     </Card>
-    {editingUserId && <Card title="Редактировать сотрудника">
-      <form className="form two" onSubmit={saveEdit}>
-        <Field label="Имя" value={editForm.name} onChange={(e: any) => setEditForm({ ...editForm, name: e.target.value })} />
-        <Field label="Логин" value={editForm.login} onChange={(e: any) => setEditForm({ ...editForm, login: e.target.value })} />
-        <Field label="Новый пароль" value={editForm.password} onChange={(e: any) => setEditForm({ ...editForm, password: e.target.value })} placeholder="Оставьте пустым, если не меняете" />
-        <Select label="Роль" value={editForm.role} onChange={(e: any) => setEditForm({ ...editForm, role: e.target.value })}>{executableRoles.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>
-        <label className="field">
-          <span>Статус</span>
-          <div className="checkboxRow">
-            <input type="checkbox" checked={!!editForm.active} onChange={(e) => setEditForm({ ...editForm, active: e.target.checked })} />
-            <span>{editForm.active ? 'Активен' : 'Отключён'}</span>
-          </div>
-        </label>
-        <div className="actions">
-          <Button kind="soft" type="button" onClick={cancelEdit}>Отмена</Button>
-          <Button>Сохранить</Button>
-        </div>
-      </form>
-    </Card>}
-    <Card title="Сотрудники">
-      <div className="list">{users.map(u => <div className="listRow adminUserRow" key={u.id}>
-        <div><b>{u.name}</b><span>{u.login} · {roles[u.role]} · {departments[u.department]}</span></div>
-        <div className="adminUserActions">
-          <span className={`badge ${u.active ? 'active' : 'cancelled'}`}>{u.active ? 'активен' : 'выкл'}</span>
-          {u.role !== 'owner' && <>
-            <Button kind="soft" type="button" onClick={() => startEdit(u)}>Редактировать</Button>
-            <Button kind="danger" type="button" onClick={() => removeUser(u)}>Удалить</Button>
-          </>}
-        </div>
-      </div>)}</div>
+
+    <Card title="Сотрудники" right={<span className="muted adminHint">Нажмите на строку, чтобы редактировать</span>}>
+      <div className="adminCompactList">{users.map(u => {
+        const editing = editingUserId === u.id;
+        return <div className={cx('adminEditableRow', editing && 'editing', u.role === 'owner' && 'locked')} key={u.id}>
+          {editing ? <form className="adminInlineEditor" onSubmit={saveEdit}>
+            <Field label="Имя" value={editForm.name} onChange={(e: any) => setEditForm({ ...editForm, name: e.target.value })} />
+            <Field label="Логин" value={editForm.login} onChange={(e: any) => setEditForm({ ...editForm, login: e.target.value })} />
+            <Field label="Новый пароль" value={editForm.password} onChange={(e: any) => setEditForm({ ...editForm, password: e.target.value })} placeholder="Не менять" />
+            <Select label="Роль" value={editForm.role} onChange={(e: any) => setEditForm({ ...editForm, role: e.target.value })}>{executableRoles.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>
+            <label className="checkboxRow compactCheckbox"><input type="checkbox" checked={!!editForm.active} onChange={(e) => setEditForm({ ...editForm, active: e.target.checked })} /><span>{editForm.active ? 'Активен' : 'Отключён'}</span></label>
+            <div className="adminInlineActions"><Button kind="soft" type="button" onClick={cancelEdit}>Отмена</Button><Button>Сохранить</Button><Button kind="danger" type="button" onClick={() => removeUser(u)}>Удалить</Button></div>
+          </form> : <button type="button" className="adminRowButton" onClick={() => startEdit(u)} disabled={u.role === 'owner'}>
+            <div className="adminRowMain"><b>{u.name}</b><span>{u.login} · {roles[u.role]} · {departments[u.department]}</span></div>
+            <div className="adminRowMeta"><span className={`badge ${u.active ? 'active' : 'cancelled'}`}>{u.active ? 'активен' : 'выкл'}</span><em>{u.role === 'owner' ? 'Владелец' : 'Изменить'}</em></div>
+          </button>}
+        </div>;
+      })}</div>
     </Card>
   </>;
 }
@@ -1352,21 +1329,13 @@ function Checklists({ user, admin = false }: any) {
 
     {admin ? <Card title="Шаблоны чек-листов" right={<span className="badge active">Только редактирование</span>}>
       {templates.length === 0 && <Empty text="Нет чек-листов" />}
-      <div className="grid adminTemplateGrid">{templates.map(t => <div className="miniCard checklistTemplateCard" key={t.id}>
-        <div className="rowBetween"><b>{t.title}</b><span className="badge">{roles[t.role]} · {checklistTypes[t.type] || t.type}</span></div>
-        <p>{t.items.length} пунктов · {t.items.filter((item: any) => item.required !== false).length} обязательных</p>
-        <div className="checkItems previewOnly">{t.items.slice(0, 6).map((i: any) => <div className="checkRow" key={i.id}>
-          <span className="checkBullet">✓</span>
-          <div className="checkContent">
-            <span>{i.text}</span>
-            <em>{i.needs_photo ? 'нужно фото' : ''}{i.needs_photo && i.needs_comment ? ' · ' : ''}{i.needs_comment ? 'нужен комментарий' : ''}</em>
-          </div>
-        </div>)}</div>
-        {t.items.length > 6 && <p className="muted">Ещё {t.items.length - 6} пунктов</p>}
-        <div className="actions">
-          <Button kind="soft" onClick={() => startTemplateEdit(t)}>Редактировать шаблон</Button>
+      <div className="templateCompactList">{templates.map(t => <button type="button" className={cx('templateCompactRow', editingTemplateId === t.id && 'editing')} key={t.id} onClick={() => startTemplateEdit(t)}>
+        <div>
+          <b>{t.title}</b>
+          <span>{roles[t.role]} · {checklistTypes[t.type] || t.type}</span>
         </div>
-      </div>)}</div>
+        <em>{t.items.length} пунктов · {t.items.filter((item: any) => item.required !== false).length} обяз.</em>
+      </button>)}</div>
     </Card> : <Card title="Мои чек-листы">
       {templates.length === 0 && <Empty text="Нет чек-листов" />}
       <div className="grid">{templates.map(t => <div className="miniCard" key={t.id}>

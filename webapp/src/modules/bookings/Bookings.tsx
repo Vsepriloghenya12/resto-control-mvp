@@ -4,22 +4,27 @@ import { Button, Card } from '../../components/dashboard-ui';
 import { Field, Select, Textarea, Empty } from '../../components/form-controls';
 import { MobileSheetModal } from '../../components/mobile-sheet-modal';
 import { SectionTitle } from '../../components/mobile-ui';
-import { CommentsPanel } from '../../components/comments-panel';
 import { cx } from '../../lib/cx';
 import { bookingStatuses } from '../../lib/dictionaries';
 import { dateTimeInputValue, dayKey, fmtDate } from '../../lib/format';
 
-export function Bookings({ user, admin = false }: any) {
+export function Bookings({ admin = false }: any) {
   const initialDate = dayKey(new Date().toISOString()) || '';
   const [tables, setTables] = useState<any[]>([]);
   const [reservations, setReservations] = useState<any[]>([]);
   const [msg, setMsg] = useState('');
   const [dateFilter, setDateFilter] = useState(initialDate);
   const [showForm, setShowForm] = useState(false);
+  const [viewingReservation, setViewingReservation] = useState<any>(null);
   const [editingReservationId, setEditingReservationId] = useState('');
+  const [editingTableId, setEditingTableId] = useState('');
   const [bulkForm, setBulkForm] = useState<any>({ count: 6, seats: 4, zone: 'Основной зал', prefix: 'Стол' });
   const [tableDrafts, setTableDrafts] = useState<any>({});
-  const [reservationForm, setReservationForm] = useState<any>({ reserved_for: `${initialDate}T19:00`, guests_count: 2, guest_phone: '', guest_name: '', duration_minutes: 120, comment: '', status: 'booked', table_ids: [] });
+  const [reservationForm, setReservationForm] = useState<any>(() => buildReservationForm(initialDate));
+
+  function buildReservationForm(nextDate = dateFilter || initialDate, tableIds: string[] = []) {
+    return { reserved_for: `${nextDate || initialDate}T19:00`, guests_count: 2, guest_phone: '', guest_name: '', duration_minutes: 120, comment: '', status: 'booked', table_ids: tableIds };
+  }
 
   async function load() {
     const [tableRows, reservationRows] = await Promise.all([
@@ -33,26 +38,18 @@ export function Bookings({ user, admin = false }: any) {
 
   useEffect(() => { load(); }, []);
 
-  function resetReservationForm(nextDate = dateFilter || initialDate) {
+  function resetReservationForm(nextDate = dateFilter || initialDate, tableIds: string[] = []) {
     setEditingReservationId('');
-    setReservationForm({
-      reserved_for: `${nextDate}T19:00`,
-      guests_count: 2,
-      guest_phone: '',
-      guest_name: '',
-      duration_minutes: 120,
-      comment: '',
-      status: 'booked',
-      table_ids: []
-    });
+    setReservationForm(buildReservationForm(nextDate, tableIds));
   }
 
-  function openCreateForm() {
+  function openCreateForm(table?: any) {
     if (!tables.length) {
       setMsg('Администратор должен сначала настроить зал и столы');
       return;
     }
-    resetReservationForm();
+    resetReservationForm(dateFilter, table?.id ? [table.id] : []);
+    setViewingReservation(null);
     setMsg('');
     setShowForm(true);
   }
@@ -69,6 +66,7 @@ export function Bookings({ user, admin = false }: any) {
       status: reservation.status || 'booked',
       table_ids: Array.isArray(reservation.table_ids) ? reservation.table_ids : []
     });
+    setViewingReservation(null);
     setMsg('');
     setShowForm(true);
   }
@@ -104,6 +102,7 @@ export function Bookings({ user, admin = false }: any) {
     try {
       await api(`/api/bookings/${reservation.id}`, { method: 'DELETE' });
       setMsg('Бронь отменена');
+      setViewingReservation(null);
       if (editingReservationId === reservation.id) {
         setShowForm(false);
         resetReservationForm();
@@ -130,6 +129,7 @@ export function Bookings({ user, admin = false }: any) {
     setMsg('');
     try {
       await api(`/api/admin/bookings/tables/${tableId}`, { method: 'PATCH', body: JSON.stringify(tableDrafts[tableId]) });
+      setEditingTableId('');
       setMsg('Стол обновлён');
       load();
     } catch (error: any) {
@@ -142,6 +142,7 @@ export function Bookings({ user, admin = false }: any) {
     setMsg('');
     try {
       await api(`/api/admin/bookings/tables/${table.id}`, { method: 'DELETE' });
+      setEditingTableId('');
       setMsg('Стол удалён из схемы');
       load();
     } catch (error: any) {
@@ -184,31 +185,35 @@ export function Bookings({ user, admin = false }: any) {
   function toggleTable(tableId: string) {
     setReservationForm((current: any) => {
       const selected = Array.isArray(current.table_ids) ? current.table_ids : [];
-      if (selected.includes(tableId)) {
-        return { ...current, table_ids: selected.filter((id: string) => id !== tableId) };
-      }
+      if (selected.includes(tableId)) return { ...current, table_ids: selected.filter((id: string) => id !== tableId) };
       if (unavailableTableIds.has(tableId)) return current;
       return { ...current, table_ids: [...selected, tableId] };
     });
   }
 
   function tablesSummary(reservation: any) {
-    return (reservation.tables || [])
-      .map((table: any) => table.label)
-      .join(', ');
+    return (reservation.tables || []).map((table: any) => table.label).join(', ');
   }
 
   function tableStateForDay(table: any) {
     const tableReservations = bookingsForDate
       .filter((reservation: any) => (Array.isArray(reservation.table_ids) ? reservation.table_ids : []).includes(table.id))
-      .filter((reservation: any) => ['booked', 'seated'].includes(reservation.status));
-    if (!tableReservations.length) return { tone: 'free', text: 'Свободен' };
+      .filter((reservation: any) => ['booked', 'seated'].includes(reservation.status))
+      .sort((a: any, b: any) => String(a.reserved_for || '').localeCompare(String(b.reserved_for || '')));
+    if (!tableReservations.length) return { tone: 'free', text: 'Свободен', reservation: null as any };
     const nextReservation = tableReservations[0];
     const time = new Date(nextReservation.reserved_for).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
     return {
       tone: nextReservation.status === 'seated' ? 'occupied' : 'reserved',
-      text: `${time} · ${nextReservation.guests_count} г.`
+      text: `${bookingStatuses[nextReservation.status] || 'Бронь'} · ${time}`,
+      reservation: nextReservation
     };
+  }
+
+  function openTable(table: any) {
+    const state = tableStateForDay(table);
+    if (state.reservation) setViewingReservation(state.reservation);
+    else openCreateForm(table);
   }
 
   const bookingForm = <form className="form" id="booking-form" onSubmit={saveReservation}>
@@ -224,17 +229,13 @@ export function Bookings({ user, admin = false }: any) {
     </div>
     <Textarea label="Комментарий" value={reservationForm.comment} onChange={(e: any) => setReservationForm({ ...reservationForm, comment: e.target.value })} placeholder="Например: детский стул, окно, день рождения" />
     <div className="bookingPicker">
-      <div className="rowBetween">
-        <strong>Выберите столы</strong>
-        <span className="muted">{reservationForm.table_ids.length} выбрано</span>
-      </div>
+      <div className="rowBetween"><strong>Столы</strong><span className="muted">{reservationForm.table_ids.length} выбрано</span></div>
       <div className="bookingTableSelectGrid">
         {tables.map((table: any) => {
           const selected = reservationForm.table_ids.includes(table.id);
           const unavailable = unavailableTableIds.has(table.id) && !selected;
           return <button key={table.id} type="button" className={cx('bookingTableButton', selected && 'selected', unavailable && 'disabled')} onClick={() => toggleTable(table.id)}>
-            <strong>{table.label}</strong>
-            <span>{table.seats} мест · {table.zone || 'Зал'}</span>
+            <strong>{table.label}</strong><span>{table.seats} мест · {table.zone || 'Зал'}</span>
           </button>;
         })}
       </div>
@@ -243,73 +244,49 @@ export function Bookings({ user, admin = false }: any) {
 
   if (!admin) {
     return <>
-      <div className="mobileSectionStack">
-        <SectionTitle title="Брони" action={<button type="button" className="sectionLink" onClick={openCreateForm}>Новая</button>} />
+      <div className="mobileSectionStack bookingMobileScreen">
+        <SectionTitle title="Брони" subtitle="Нажмите на свободный стол, чтобы создать бронь" />
         <section className="mobileSection">
-          <div className="mobileListSurface mobileFilterSurface">
-            <Field label="Дата" type="date" value={dateFilter} onChange={(e: any) => setDateFilter(e.target.value)} />
-          </div>
+          <div className="mobileListSurface mobileFilterSurface"><Field label="Дата" type="date" value={dateFilter} onChange={(e: any) => setDateFilter(e.target.value)} /></div>
         </section>
-        <section className="mobileSection">
-          <div className="mobileListSectionHead">
-            <h3>Схема зала</h3>
-            <span className="mobileSectionCount">{tables.length}</span>
-          </div>
-          {!tables.length && <div className="mobileListSurface"><Empty text="Администратор ещё не настроил зал и столы" /></div>}
-          {!!tables.length && <div className="bookingTablesGrid">
-            {tables.map((table: any) => {
+        {hallGroups.length === 0 && <section className="mobileSection"><div className="mobileListSurface"><Empty text="Администратор ещё не настроил зал и столы" /></div></section>}
+        {hallGroups.map((hall) => <section className="mobileSection" key={hall.name}>
+          <div className="mobileListSectionHead"><h3>{hall.name}</h3><span className="mobileSectionCount">{hall.tables.length}</span></div>
+          <div className="bookingTablesGrid floorTablesGrid">
+            {hall.tables.map((table: any) => {
               const state = tableStateForDay(table);
-              return <div key={table.id} className={cx('bookingTableButton', 'static', state.tone)}>
+              return <button key={table.id} type="button" className={cx('bookingTableButton', 'floorTableTile', state.tone)} onClick={() => openTable(table)}>
                 <strong>{table.label}</strong>
                 <span>{table.seats} мест</span>
                 <em>{state.text}</em>
-              </div>;
+              </button>;
             })}
-          </div>}
-        </section>
-        <section className="mobileSection">
-          <div className="mobileListSectionHead">
-            <h3>Брони на день</h3>
-            <span className="mobileSectionCount">{bookingsForDate.length}</span>
           </div>
-          <div className="mobileListSurface">
-            {bookingsForDate.length === 0 && <Empty text="На выбранную дату броней пока нет" />}
-            <div className="mobileRequestList">
-              {bookingsForDate.map((reservation: any) => <article key={reservation.id} className="mobileRequestCard bookingReservationCard">
-                <div className="rowBetween">
-                  <div>
-                    <strong>{reservation.guest_name || 'Гость'}</strong>
-                    <span>{fmtDate(reservation.reserved_for)} · {reservation.guests_count} гостей</span>
-                  </div>
-                  <span className={`badge ${reservation.status === 'cancelled' ? 'cancelled' : reservation.status === 'completed' ? 'active' : reservation.status === 'seated' ? 'trial' : 'warning'}`}>{bookingStatuses[reservation.status] || reservation.status}</span>
-                </div>
-                <div className="bookingTablesInline">{tablesSummary(reservation) || 'Столы не выбраны'}</div>
-                <div className="mobileInlineHint">{reservation.guest_phone}{reservation.comment ? ` · ${reservation.comment}` : ''}</div>
-                <div className="actions">
-                  <Button kind="soft" type="button" onClick={() => startEditReservation(reservation)}>Редактировать</Button>
-                  {reservation.status !== 'cancelled' && <Button kind="danger" type="button" onClick={() => cancelReservation(reservation)}>Отменить</Button>}
-                </div>
-              </article>)}
-            </div>
-          </div>
-        </section>
+        </section>)}
         {msg && <div className={msg.includes('обнов') || msg.includes('создан') || msg.includes('отмен') ? 'notice mobileInlineNotice' : 'error mobileInlineNotice'}>{msg}</div>}
       </div>
+
+      {viewingReservation && <MobileSheetModal
+        title={viewingReservation.guest_name || 'Бронь'}
+        subtitle={`${fmtDate(viewingReservation.reserved_for)} · ${bookingStatuses[viewingReservation.status] || viewingReservation.status}`}
+        onClose={() => setViewingReservation(null)}
+        className="mobileFormSheet bookingDetailsSheet"
+        footer={<div className="bookingSheetActions"><Button kind="soft" type="button" onClick={() => startEditReservation(viewingReservation)}>Редактировать</Button>{viewingReservation.status !== 'cancelled' && <Button kind="danger" type="button" onClick={() => cancelReservation(viewingReservation)}>Отменить</Button>}</div>}
+      >
+        <div className="bookingDetailsList">
+          <div><span>Столы</span><strong>{tablesSummary(viewingReservation) || 'Не выбраны'}</strong></div>
+          <div><span>Гостей</span><strong>{viewingReservation.guests_count}</strong></div>
+          <div><span>Телефон</span><strong>{viewingReservation.guest_phone || 'Не указан'}</strong></div>
+          {viewingReservation.comment && <div><span>Комментарий</span><strong>{viewingReservation.comment}</strong></div>}
+        </div>
+      </MobileSheetModal>}
+
       {showForm && <MobileSheetModal
         title={editingReservationId ? 'Редактировать бронь' : 'Новая бронь'}
-        subtitle="Выберите столы, время и контакты гостя"
-        onClose={() => {
-          setShowForm(false);
-          resetReservationForm();
-        }}
+        subtitle="Заполните время, гостя и стол"
+        onClose={() => { setShowForm(false); resetReservationForm(); }}
         className="mobileFormSheet"
-        footer={<div className="bookingSheetActions">
-          <Button kind="soft" type="button" onClick={() => {
-            setShowForm(false);
-            resetReservationForm();
-          }}>Отмена</Button>
-          <Button type="submit" form="booking-form" className="mobilePrimaryButton">Сохранить бронь</Button>
-        </div>}
+        footer={<div className="bookingSheetActions"><Button kind="soft" type="button" onClick={() => { setShowForm(false); resetReservationForm(); }}>Отмена</Button><Button type="submit" form="booking-form" className="mobilePrimaryButton">Сохранить бронь</Button></div>}
       >
         {bookingForm}
       </MobileSheetModal>}
@@ -318,63 +295,48 @@ export function Bookings({ user, admin = false }: any) {
 
   return <>
     <Card title="Залы и столы" right={<span className="badge active">Настройка администратора</span>}>
-      <form className="form two" onSubmit={createTables}>
+      <form className="form two compactAdminForm" onSubmit={createTables}>
         <Field label="Количество столов" type="number" min="1" value={bulkForm.count} onChange={(e: any) => setBulkForm({ ...bulkForm, count: e.target.value })} />
         <Field label="Мест за столом" type="number" min="1" value={bulkForm.seats} onChange={(e: any) => setBulkForm({ ...bulkForm, seats: e.target.value })} />
         <Field label="Зал" value={bulkForm.zone} onChange={(e: any) => setBulkForm({ ...bulkForm, zone: e.target.value })} />
         <Field label="Название столов" value={bulkForm.prefix} onChange={(e: any) => setBulkForm({ ...bulkForm, prefix: e.target.value })} />
-        <Button>Добавить столы</Button>
+        <Button>Добавить</Button>
       </form>
-      <div className="mobileInlineHint">Чтобы добавить новый зал, укажите новое название в поле «Зал». Все сотрудники сразу увидят эти столы и смогут ставить на них брони.</div>
-      {hallGroups.length > 0 && <div className="hallSummaryGrid">{hallGroups.map((hall) => <div className="hallSummaryCard" key={hall.name}>
-        <strong>{hall.name}</strong>
-        <span>{hall.tables.length} столов · {hall.seats} мест</span>
-      </div>)}</div>}
-      <div className="bookingAdminTableList">
+      <div className="mobileInlineHint">Новый зал создаётся названием в поле «Зал». Сотрудники сразу увидят столы и смогут ставить брони.</div>
+      {hallGroups.length > 0 && <div className="hallSummaryGrid">{hallGroups.map((hall) => <div className="hallSummaryCard" key={hall.name}><strong>{hall.name}</strong><span>{hall.tables.length} столов · {hall.seats} мест</span></div>)}</div>}
+      <div className="bookingAdminTableList compactTableList">
         {tables.length === 0 && <Empty text="Схема пока пустая. Добавьте первый зал и столы." />}
-        {tables.map((table: any) => <div key={table.id} className="listRow bookingAdminTableRow">
-          <div className="bookingAdminTableDraft">
-            <input value={tableDrafts[table.id]?.label || ''} onChange={(e) => setTableDrafts({ ...tableDrafts, [table.id]: { ...tableDrafts[table.id], label: e.target.value } })} placeholder="Название стола" />
-            <input type="number" min="1" value={tableDrafts[table.id]?.seats || ''} onChange={(e) => setTableDrafts({ ...tableDrafts, [table.id]: { ...tableDrafts[table.id], seats: e.target.value } })} placeholder="Мест" />
-            <input value={tableDrafts[table.id]?.zone || ''} onChange={(e) => setTableDrafts({ ...tableDrafts, [table.id]: { ...tableDrafts[table.id], zone: e.target.value } })} placeholder="Зал" />
-          </div>
-          <div className="adminUserActions">
-            <Button kind="soft" type="button" onClick={() => saveTable(table.id)}>Сохранить</Button>
-            <Button kind="danger" type="button" onClick={() => removeTable(table)}>Удалить</Button>
-          </div>
-        </div>)}
+        {tables.map((table: any) => {
+          const editing = editingTableId === table.id;
+          return <div key={table.id} className={cx('tableEditableRow', editing && 'editing')}>
+            {editing ? <form className="tableInlineEditor" onSubmit={(e) => { e.preventDefault(); saveTable(table.id); }}>
+              <input value={tableDrafts[table.id]?.label || ''} onChange={(e) => setTableDrafts({ ...tableDrafts, [table.id]: { ...tableDrafts[table.id], label: e.target.value } })} placeholder="Стол" />
+              <input type="number" min="1" value={tableDrafts[table.id]?.seats || ''} onChange={(e) => setTableDrafts({ ...tableDrafts, [table.id]: { ...tableDrafts[table.id], seats: e.target.value } })} placeholder="Мест" />
+              <input value={tableDrafts[table.id]?.zone || ''} onChange={(e) => setTableDrafts({ ...tableDrafts, [table.id]: { ...tableDrafts[table.id], zone: e.target.value } })} placeholder="Зал" />
+              <div className="adminInlineActions"><Button kind="soft" type="button" onClick={() => setEditingTableId('')}>Отмена</Button><Button>Сохранить</Button><Button kind="danger" type="button" onClick={() => removeTable(table)}>Удалить</Button></div>
+            </form> : <button type="button" className="tableCompactRow" onClick={() => setEditingTableId(table.id)}>
+              <div><b>{table.label}</b><span>{table.zone || 'Основной зал'}</span></div>
+              <strong>{table.seats} мест</strong>
+              <em>Изменить</em>
+            </button>}
+          </div>;
+        })}
       </div>
     </Card>
 
-    <Card title={editingReservationId ? 'Редактировать бронь' : 'Новая бронь'}>
-      {tables.length === 0
-        ? <Empty text="Сначала настройте зал и столы" />
-        : <>
-          {bookingForm}
-          <div className="actions">
-            {editingReservationId && <Button kind="soft" type="button" onClick={() => resetReservationForm()}>Сбросить</Button>}
-            <Button type="button" onClick={() => saveReservation()}>{editingReservationId ? 'Сохранить бронь' : 'Создать бронь'}</Button>
-          </div>
-        </>}
+    <Card title={editingReservationId ? 'Редактировать бронь' : 'Новая бронь'} className="adminBookingFormCard">
+      {tables.length === 0 ? <Empty text="Сначала настройте зал и столы" /> : <>{bookingForm}<div className="actions">{editingReservationId && <Button kind="soft" type="button" onClick={() => resetReservationForm()}>Сбросить</Button>}<Button type="button" onClick={() => saveReservation()}>{editingReservationId ? 'Сохранить бронь' : 'Создать бронь'}</Button></div></>}
     </Card>
 
-    <Card title="Список броней" right={<div className="bookingAdminFilter"><input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} /></div>}>
-      <div className="list">
+    <Card title="Брони" right={<div className="bookingAdminFilter"><input type="date" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} /></div>}>
+      <div className="reservationCompactList">
         {bookingsForDate.length === 0 && <Empty text="На выбранную дату броней пока нет" />}
-        {bookingsForDate.map((reservation: any) => <div className="miniCard bookingAdminReservation" key={reservation.id}>
-          <div className="rowBetween">
-            <div><b>{reservation.guest_name || 'Гость'}</b><span>{fmtDate(reservation.reserved_for)} · {reservation.guests_count} гостей</span></div>
-            <span className={`badge ${reservation.status === 'cancelled' ? 'cancelled' : reservation.status === 'completed' ? 'active' : reservation.status === 'seated' ? 'trial' : 'warning'}`}>{bookingStatuses[reservation.status] || reservation.status}</span>
-          </div>
-          <div className="mobileInlineHint">{reservation.guest_phone} · {tablesSummary(reservation) || 'Без столов'}</div>
-          {reservation.comment && <p>{reservation.comment}</p>}
-          <div className="actions">
-            <Button kind="soft" type="button" onClick={() => startEditReservation(reservation)}>Редактировать</Button>
-            {reservation.status !== 'cancelled' && <Button kind="danger" type="button" onClick={() => cancelReservation(reservation)}>Отменить</Button>}
-          </div>
-        </div>)}
+        {bookingsForDate.map((reservation: any) => <button type="button" className="reservationCompactRow" key={reservation.id} onClick={() => startEditReservation(reservation)}>
+          <div><b>{reservation.guest_name || 'Гость'}</b><span>{fmtDate(reservation.reserved_for)} · {reservation.guests_count} гостей · {tablesSummary(reservation) || 'без стола'}</span></div>
+          <span className={`badge ${reservation.status === 'cancelled' ? 'cancelled' : reservation.status === 'completed' ? 'active' : reservation.status === 'seated' ? 'trial' : 'warning'}`}>{bookingStatuses[reservation.status] || reservation.status}</span>
+        </button>)}
       </div>
-      {msg && <div className={msg.includes('обнов') || msg.includes('создан') || msg.includes('отмен') || msg.includes('добавлены') || msg.includes('удалён') ? 'notice' : 'error'}>{msg}</div>}
+      {msg && <div className={msg.includes('обнов') || msg.includes('создан') || msg.includes('отмен') || msg.includes('добавлены') || msg.includes('удалён') ? 'notice compactNotice' : 'error compactNotice'}>{msg}</div>}
     </Card>
   </>;
 }

@@ -214,7 +214,6 @@ function normalizeReservationPayload(restaurant_id, rawBody = {}, currentReserva
   }
 
   const guestPhone = String(rawBody.guest_phone || '').trim();
-  if (!guestPhone) return { error: 'Укажите номер телефона гостя' };
 
   const durationMinutes = Math.max(30, Math.min(600, Number(rawBody.duration_minutes || 120) || 120));
   const tables = tableIds.map(tableId => collection('floor_tables').find(table => table.id === tableId && table.restaurant_id === restaurant_id && table.active)).filter(Boolean);

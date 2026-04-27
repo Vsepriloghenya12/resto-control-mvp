@@ -3088,3 +3088,531 @@ html {
   font-size: 12px;
   color: var(--muted);
 }
+
+/* Owner/admin desktop refinement and native mobile pass */
+:root {
+  --muted: var(--text-secondary);
+}
+
+html {
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+}
+
+@media (min-width: 981px) {
+  .appShell {
+    padding: 20px 24px;
+  }
+
+  .workspaceLayout {
+    width: min(1680px, 100%);
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .dashboardSidebar {
+    top: 20px;
+    gap: 10px;
+    min-height: calc(100vh - 40px);
+    padding: 4px 18px 4px 0;
+    border: 0;
+    border-right: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .sidebarBrand {
+    padding: 0 6px 10px 0;
+    border-bottom: 0;
+  }
+
+  .sidebarLogo {
+    width: 138px;
+  }
+
+  .sidebarNav {
+    gap: 2px;
+  }
+
+  .sidebarNavItem {
+    min-height: 36px;
+    gap: 8px;
+    padding: 0 10px;
+    border-radius: 10px;
+    font-size: 0.84rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .sidebarNavItem .navIcon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .sidebarNavItem.active {
+    background: rgba(34, 197, 94, 0.08);
+    border-color: transparent;
+    box-shadow: inset 2px 0 0 rgba(34, 197, 94, 0.7);
+  }
+
+  .sidebarPromo {
+    display: none;
+  }
+
+  .sidebarSupport {
+    min-height: 36px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.84rem;
+  }
+
+  .workspaceMain {
+    gap: 14px;
+  }
+
+  .workspaceHeader {
+    min-height: 64px;
+    padding: 0;
+  }
+
+  .workspaceGreeting h1 {
+    font-size: clamp(1.35rem, 1.6vw, 1.8rem);
+  }
+
+  .workspaceGreeting p,
+  .workspaceSubline {
+    font-size: 0.9rem;
+  }
+
+  .card {
+    margin-bottom: 14px;
+    padding: 18px 20px;
+    border-radius: 16px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.18);
+  }
+
+  .cardHead {
+    min-height: 30px;
+    margin-bottom: 14px;
+  }
+
+  .cardHead h3 {
+    font-size: 1.04rem;
+  }
+
+  .miniCard,
+  .listRow,
+  .checkRow,
+  .productQty,
+  .receiveRow {
+    padding: 12px 14px;
+    border-radius: 14px;
+  }
+
+  .btn {
+    min-height: 38px;
+    padding: 8px 13px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+  }
+
+  input:not([type='checkbox']),
+  textarea,
+  select {
+    min-height: 42px;
+    padding: 9px 12px;
+    border-radius: 12px;
+  }
+
+  textarea {
+    min-height: 92px;
+  }
+
+  .field > span {
+    font-size: 0.78rem;
+  }
+
+  .form {
+    gap: 12px;
+  }
+
+  .form.two {
+    gap: 12px 14px;
+  }
+
+  .compactAdminForm {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: end;
+  }
+
+  .adminCreateCard .btn,
+  .compactAdminForm .btn {
+    width: auto;
+  }
+
+  .adminHint {
+    font-size: 0.82rem;
+  }
+
+  .adminCompactList,
+  .templateCompactList,
+  .compactTableList,
+  .reservationCompactList {
+    display: grid;
+    gap: 8px;
+  }
+
+  .adminEditableRow,
+  .tableEditableRow {
+    border-radius: 14px;
+  }
+
+  .adminRowButton,
+  .templateCompactRow,
+  .tableCompactRow,
+  .reservationCompactRow {
+    width: 100%;
+    min-height: 52px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    background: rgba(255, 255, 255, 0.025);
+    color: var(--text);
+    text-align: left;
+  }
+
+  .adminRowButton:not(:disabled):hover,
+  .templateCompactRow:hover,
+  .tableCompactRow:hover,
+  .reservationCompactRow:hover {
+    border-color: rgba(34, 197, 94, 0.22);
+    background: rgba(34, 197, 94, 0.06);
+  }
+
+  .adminRowButton:disabled {
+    cursor: default;
+    opacity: 0.82;
+  }
+
+  .adminRowMain,
+  .adminRowMeta,
+  .templateCompactRow div,
+  .tableCompactRow div,
+  .reservationCompactRow div {
+    min-width: 0;
+  }
+
+  .adminRowMain,
+  .templateCompactRow div,
+  .tableCompactRow div,
+  .reservationCompactRow div {
+    display: grid;
+    gap: 3px;
+  }
+
+  .adminRowMain b,
+  .templateCompactRow b,
+  .tableCompactRow b,
+  .reservationCompactRow b {
+    font-size: 0.96rem;
+  }
+
+  .adminRowMain span,
+  .templateCompactRow span,
+  .tableCompactRow span,
+  .reservationCompactRow span {
+    color: var(--text-secondary);
+    font-size: 0.84rem;
+  }
+
+  .adminRowMeta {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+
+  .adminRowMeta em,
+  .templateCompactRow em,
+  .tableCompactRow em {
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-style: normal;
+    font-weight: 700;
+  }
+
+  .adminInlineEditor,
+  .tableInlineEditor {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) auto auto;
+    gap: 10px;
+    align-items: end;
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid rgba(34, 197, 94, 0.24);
+    background: rgba(34, 197, 94, 0.055);
+  }
+
+  .tableInlineEditor {
+    grid-template-columns: minmax(180px, 1fr) 110px minmax(180px, 1fr) auto;
+  }
+
+  .adminInlineActions {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
+  .compactCheckbox {
+    min-height: 42px;
+    padding: 0 12px;
+    white-space: nowrap;
+  }
+
+  .compactNotice {
+    margin-top: 12px;
+  }
+
+  .templateCompactRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .templateCompactRow.editing {
+    border-color: rgba(34, 197, 94, 0.36);
+    background: rgba(34, 197, 94, 0.08);
+  }
+
+  .smartChecklistEditorRow {
+    grid-template-columns: minmax(260px, 1fr) auto 38px;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .smartChecklistEditorRow .iconBtn {
+    grid-column: auto;
+    width: 38px;
+    min-height: 38px;
+  }
+
+  .smartChecklistFlags {
+    margin-top: 0;
+    flex-wrap: nowrap;
+  }
+
+  .smartChecklistFlags label {
+    min-height: 34px;
+    padding: 5px 9px;
+    white-space: nowrap;
+  }
+
+  .hallSummaryGrid {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px;
+    margin: 12px 0 10px;
+  }
+
+  .hallSummaryCard {
+    padding: 10px 12px;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .hallSummaryCard strong {
+    color: var(--text);
+    font-size: 0.9rem;
+  }
+
+  .hallSummaryCard span {
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+  }
+
+  .bookingPicker {
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .bookingTableSelectGrid {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 8px;
+  }
+
+  .bookingTableButton {
+    min-height: 64px;
+    padding: 10px 12px;
+    border-radius: 14px;
+  }
+
+  .bookingTableButton strong {
+    font-size: 0.92rem;
+  }
+
+  .bookingTableButton span,
+  .bookingTableButton em {
+    font-size: 0.78rem;
+  }
+
+  .reservationCompactRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
+@media (max-width: 980px) {
+  .pageContainer {
+    padding-bottom: calc(90px + env(safe-area-inset-bottom));
+  }
+
+  .bottomNavigation {
+    padding: 0;
+    background: rgba(5, 11, 20, 0.96);
+    border-top: 1px solid rgba(148, 163, 184, 0.14);
+    backdrop-filter: blur(18px);
+  }
+
+  .bottomNavigationRail {
+    max-width: none;
+    min-height: 64px;
+    padding: 5px 10px calc(5px + env(safe-area-inset-bottom));
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .bottomNavItem {
+    min-height: 52px;
+    padding: 6px 2px;
+    border-radius: 12px;
+  }
+
+  .bottomNavItem.active {
+    background: transparent;
+    color: #86efac;
+  }
+
+  .bottomNavCreateBadge {
+    width: 36px;
+    height: 36px;
+    border-radius: 13px;
+    background: rgba(34, 197, 94, 0.14);
+  }
+
+  .mobileFlatPanel {
+    display: grid;
+    gap: 10px;
+  }
+
+  .mobileFlatPanel .mobileTaskList,
+  .mobileFlatPanel .mobileRequestList {
+    display: grid;
+    gap: 10px;
+  }
+
+  .mobileFlatPanel .mobileTaskRow,
+  .mobileFlatPanel .mobileRequestCard {
+    background: rgba(15, 23, 42, 0.78);
+    border-color: rgba(148, 163, 184, 0.12);
+  }
+
+  .bookingMobileScreen .mobileListSurface {
+    border-radius: 18px;
+    padding: 10px 12px;
+  }
+
+  .floorTablesGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .floorTableTile {
+    position: relative;
+    min-height: 104px;
+    border-radius: 22px;
+    padding: 14px;
+    box-shadow: none;
+  }
+
+  .floorTableTile::after {
+    content: '';
+    position: absolute;
+    right: 12px;
+    top: 12px;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: #22c55e;
+  }
+
+  .floorTableTile.reserved::after {
+    background: #f59e0b;
+  }
+
+  .floorTableTile.occupied::after {
+    background: #38bdf8;
+  }
+
+  .floorTableTile em {
+    align-self: end;
+    width: fit-content;
+    padding: 5px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text);
+    font-size: 0.76rem;
+    font-weight: 800;
+  }
+
+  .floorTableTile.free em {
+    color: #bbf7d0;
+    background: rgba(34, 197, 94, 0.14);
+  }
+
+  .floorTableTile.reserved em {
+    color: #fde68a;
+    background: rgba(245, 158, 11, 0.14);
+  }
+
+  .floorTableTile.occupied em {
+    color: #bae6fd;
+    background: rgba(56, 189, 248, 0.14);
+  }
+
+  .bookingDetailsList {
+    display: grid;
+    gap: 10px;
+  }
+
+  .bookingDetailsList div {
+    display: grid;
+    gap: 4px;
+    padding: 12px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .bookingDetailsList span {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+  }
+
+  .bookingDetailsList strong {
+    font-size: 0.98rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .floorTablesGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+}

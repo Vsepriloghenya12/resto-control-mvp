@@ -79,83 +79,52 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
     const finishedTechRequests = techRequests.filter((request) => ['done', 'cancelled'].includes(request.status));
 
     return <>
-      <div className="mobileSectionStack">
+      <div className="mobileSectionStack mobileTasksScreen">
         <SectionTitle title="Задачи" action={<button type="button" className="sectionLink" onClick={() => setShowTechForm(true)}>Техзаявка</button>} />
 
-        <Card title="Сегодня" className="mobileCard">
+        <section className="mobileSection mobileFlatPanel">
+          <div className="mobileListSectionHead"><h3>Сегодня</h3><span className="mobileSectionCount">{activeTasks.length}</span></div>
           <div className="mobileTaskList">
             {activeTasks.length === 0 && <Empty text="Нет активных задач на текущую смену" />}
             {activeTasks.map((task) => <div key={task.id} className="mobileTaskRow static">
               <span className="mobileTaskStatus" />
-              <div className="mobileTaskCopy">
-                <strong>{task.title}</strong>
-                <span>{task.description || 'Без описания'}</span>
-              </div>
+              <div className="mobileTaskCopy"><strong>{task.title}</strong><span>{task.description || 'Без описания'}</span></div>
               <Button type="button" kind="soft" onClick={() => done(task.id)}>Выполнено</Button>
               <CommentsPanel entityType="task" entityId={task.id} />
             </div>)}
           </div>
-        </Card>
+        </section>
 
-        <Card title="Техзаявки" className="mobileCard">
+        <section className="mobileSection mobileFlatPanel">
+          <div className="mobileListSectionHead"><h3>Техзаявки</h3><span className="mobileSectionCount">{activeTechRequests.length}</span></div>
           <div className="mobileRequestList">
             {activeTechRequests.length === 0 && <Empty text="Нет срочных техзаявок" />}
             {activeTechRequests.map((request) => <article key={request.id} className="mobileRequestCard">
-              <div className="rowBetween">
-                <div>
-                  <strong>{request.title}</strong>
-                  <span>{techRequestCategories[request.category] || request.category}</span>
-                </div>
-                <span className={`badge ${request.status}`}>{techRequestStatuses[request.status] || request.status}</span>
-              </div>
+              <div className="rowBetween"><div><strong>{request.title}</strong><span>{techRequestCategories[request.category] || request.category}</span></div><span className={`badge ${request.status}`}>{techRequestStatuses[request.status] || request.status}</span></div>
               <p>{request.description || 'Без описания'}</p>
               <div className="mobileInlineHint">{request.manager_comment || 'Комментарий менеджера появится здесь'}</div>
               <CommentsPanel entityType="tech_request" entityId={request.id} />
             </article>)}
           </div>
           {techMsg && <div className="notice mobileInlineNotice">{techMsg}</div>}
-        </Card>
+        </section>
 
-        <Card title="Выполнено" className="mobileCard">
+        <section className="mobileSection mobileFlatPanel">
+          <div className="mobileListSectionHead"><h3>Выполнено</h3><span className="mobileSectionCount">{completedTasks.length + finishedTechRequests.length}</span></div>
           <div className="mobileTaskList">
             {completedTasks.length === 0 && finishedTechRequests.length === 0 && <Empty text="Пока нет завершённых задач" />}
-            {completedTasks.map((task) => <div key={task.id} className="mobileTaskRow static done">
-              <span className="mobileTaskStatus done" />
-              <div className="mobileTaskCopy">
-                <strong>{task.title}</strong>
-                <span>{task.description || 'Задача выполнена'}</span>
-              </div>
-              <span className="badge active">Готово</span>
-            </div>)}
-            {finishedTechRequests.map((request) => <div key={request.id} className="mobileTaskRow static done">
-              <span className="mobileTaskStatus done" />
-              <div className="mobileTaskCopy">
-                <strong>{request.title}</strong>
-                <span>{request.manager_comment || 'Без комментария менеджера'}</span>
-              </div>
-              <span className={`badge ${request.status}`}>{techRequestStatuses[request.status] || request.status}</span>
-            </div>)}
+            {completedTasks.map((task) => <div key={task.id} className="mobileTaskRow static done"><span className="mobileTaskStatus done" /><div className="mobileTaskCopy"><strong>{task.title}</strong><span>{task.description || 'Задача выполнена'}</span></div><span className="badge active">Готово</span></div>)}
+            {finishedTechRequests.map((request) => <div key={request.id} className="mobileTaskRow static done"><span className="mobileTaskStatus done" /><div className="mobileTaskCopy"><strong>{request.title}</strong><span>{request.manager_comment || 'Без комментария менеджера'}</span></div><span className={`badge ${request.status}`}>{techRequestStatuses[request.status] || request.status}</span></div>)}
           </div>
-        </Card>
+        </section>
       </div>
 
-      {showTechForm && <div className="modal" onClick={() => {
-        setShowTechForm(false);
-        onCloseComposer?.();
-      }}>
+      {showTechForm && <div className="modal" onClick={() => { setShowTechForm(false); onCloseComposer?.(); }}>
         <div className="modalCard mobileDocModal" onClick={(e) => e.stopPropagation()}>
-          <div className="rowBetween">
-            <h2>Техзаявка</h2>
-            <button className="iconBtn" onClick={() => {
-              setShowTechForm(false);
-              onCloseComposer?.();
-            }}>×</button>
-          </div>
+          <div className="rowBetween"><h2>Техзаявка</h2><button className="iconBtn" onClick={() => { setShowTechForm(false); onCloseComposer?.(); }}>×</button></div>
           <form className="form" onSubmit={createTechRequest}>
             <Field label="Тема заявки" value={techForm.title} onChange={(e: any) => setTechForm({ ...techForm, title: e.target.value })} placeholder="Например: вызвать мастера по холодильнику" />
-            <Select label="Тип проблемы" value={techForm.category} onChange={(e: any) => setTechForm({ ...techForm, category: e.target.value })}>
-              {Object.entries(techRequestCategories).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
-            </Select>
+            <Select label="Тип проблемы" value={techForm.category} onChange={(e: any) => setTechForm({ ...techForm, category: e.target.value })}>{Object.entries(techRequestCategories).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</Select>
             <Textarea label="Что случилось" value={techForm.description} onChange={(e: any) => setTechForm({ ...techForm, description: e.target.value })} placeholder="Опишите проблему" />
             <Button className="mobilePrimaryButton">Отправить техзаявку</Button>
           </form>
