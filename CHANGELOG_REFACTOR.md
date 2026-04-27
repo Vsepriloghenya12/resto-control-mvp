@@ -23,3 +23,8 @@
 - Вынесены словари и форматирование в `src/lib`.
 - Вынесены общие элементы форм, комментарии и mobile sheet в `src/components`.
 - Вынесены крупные доменные модули в `src/modules`: брони, заявки, задачи.
+
+## Scroll behavior rollback
+
+- Reverted desktop workspace from internal content scrolling back to full-page document scrolling.
+- Kept the rest of the UI/refactor changes intact.
