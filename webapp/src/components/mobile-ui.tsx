@@ -71,6 +71,7 @@ export function MobileHeader({
   userInitials,
   notificationCount = 0,
   showMenuButton = true,
+  showBackButton = true,
   showNotifications = true,
   onMenu,
   onBack,
@@ -85,6 +86,7 @@ export function MobileHeader({
   userInitials: string;
   notificationCount?: number;
   showMenuButton?: boolean;
+  showBackButton?: boolean;
   showNotifications?: boolean;
   onMenu?: () => void;
   onBack?: () => void;
@@ -92,10 +94,12 @@ export function MobileHeader({
   onAction?: () => void;
   actionIcon?: IconName;
 }) {
+  const showLeadingButton = mode === 'overview' ? showMenuButton : showBackButton;
+
   return <header className="mobileHeader">
     <div className="mobileTopbar">
       <div className="mobileTopbarLeft">
-        {(mode !== 'overview' || showMenuButton) && <button type="button" className="mobileIconButton" onClick={mode === 'overview' ? onMenu : onBack} aria-label={mode === 'overview' ? 'Открыть меню' : 'Назад'}>
+        {showLeadingButton && <button type="button" className="mobileIconButton" onClick={mode === 'overview' ? onMenu : onBack} aria-label={mode === 'overview' ? 'Открыть меню' : 'Назад'}>
           <AppIcon name={mode === 'overview' ? 'menu' : 'back'} className="navIcon" />
         </button>}
         <div className="mobileBrand">
@@ -138,14 +142,18 @@ export function BottomNavigation({
   return <nav className="bottomNavigation" aria-label="Основная навигация">
     <div className="bottomNavigationRail">
       {leftItems.map(item => <button key={item.id} type="button" className={cn('bottomNavItem', item.active && 'active')} onClick={item.onClick}>
-        <AppIcon name={item.icon} className="navIcon" />
+        <span className="bottomNavIcon">
+          <AppIcon name={item.icon} className="navIcon" />
+        </span>
         <span>{item.title}</span>
       </button>)}
       <button type="button" className="bottomCreateButton" onClick={onCreate} aria-label="Создать">
         <AppIcon name="plus" className="navIcon" />
       </button>
       {rightItems.map(item => <button key={item.id} type="button" className={cn('bottomNavItem', item.active && 'active')} onClick={item.onClick}>
-        <AppIcon name={item.icon} className="navIcon" />
+        <span className="bottomNavIcon">
+          <AppIcon name={item.icon} className="navIcon" />
+        </span>
         <span>{item.title}</span>
       </button>)}
     </div>
@@ -166,7 +174,7 @@ export function BottomSheet({
   if (!open) return null;
 
   return <div className="bottomSheetBackdrop" onClick={onClose}>
-    <div className="bottomSheet" onClick={(event) => event.stopPropagation()}>
+    <div className="bottomSheet" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
       <div className="bottomSheetHandle" />
       <div className="bottomSheetHead">
         <h3>{title}</h3>
@@ -174,20 +182,22 @@ export function BottomSheet({
           <AppIcon name="close" className="navIcon" />
         </button>
       </div>
-      <div className="bottomSheetList">
-        {items.map(item => <button key={item.id} type="button" className="bottomSheetItem" onClick={() => {
-          item.onClick();
-          onClose();
-        }}>
-          <div className="bottomSheetItemIcon">
-            <AppIcon name={item.icon} className="navIcon" />
-          </div>
-          <div className="bottomSheetItemCopy">
-            <strong>{item.title}</strong>
-            {item.subtitle && <span>{item.subtitle}</span>}
-          </div>
-          <AppIcon name="chevron" className="navIcon" />
-        </button>)}
+      <div className="bottomSheetBody">
+        <div className="bottomSheetList">
+          {items.map(item => <button key={item.id} type="button" className="bottomSheetItem" onClick={() => {
+            item.onClick();
+            onClose();
+          }}>
+            <div className="bottomSheetItemIcon">
+              <AppIcon name={item.icon} className="navIcon" />
+            </div>
+            <div className="bottomSheetItemCopy">
+              <strong>{item.title}</strong>
+              {item.subtitle && <span>{item.subtitle}</span>}
+            </div>
+            <AppIcon name="chevron" className="navIcon" />
+          </button>)}
+        </div>
       </div>
     </div>
   </div>;
