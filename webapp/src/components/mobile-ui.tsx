@@ -153,8 +153,11 @@ export function BottomNavigation({
         </span>
         <span>{item.title}</span>
       </button>)}
-      <button type="button" className="bottomCreateButton" onClick={onCreate} aria-label="Создать">
-        <AppIcon name="plus" className="navIcon" />
+      <button type="button" className="bottomNavItem bottomCreateButton" onClick={onCreate} aria-label="Создать">
+        <span className="bottomNavIcon bottomCreateIcon">
+          <AppIcon name="plus" className="navIcon" />
+        </span>
+        <span>Создать</span>
       </button>
       {rightItems.map(item => <button key={item.id} type="button" className={cn('bottomNavItem', item.active && 'active')} onClick={item.onClick}>
         <span className="bottomNavIcon">
