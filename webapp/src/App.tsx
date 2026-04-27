@@ -12,6 +12,7 @@ import {
   type NavTab
 } from './components/dashboard-ui';
 import {
+  MobileAppShell,
   BottomNavigation,
   BottomSheet,
   MobileHeader,
@@ -123,6 +124,31 @@ function userInitials(name?: string) {
   const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return 'RC';
   return parts.slice(0, 2).map(part => part[0]?.toUpperCase() || '').join('') || 'RC';
+}
+
+function useIsMobileViewport(maxWidth = 980) {
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth <= maxWidth;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const query = `(max-width: ${maxWidth}px)`;
+    const media = window.matchMedia(query);
+    const update = () => setIsMobile(media.matches);
+    update();
+
+    if (typeof media.addEventListener === 'function') {
+      media.addEventListener('change', update);
+      return () => media.removeEventListener('change', update);
+    }
+
+    media.addListener(update);
+    return () => media.removeListener(update);
+  }, [maxWidth]);
+
+  return isMobile;
 }
 
 function mobileTabTitle(active: string, tabs: NavTab[]) {
@@ -864,6 +890,7 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
   const [tab, setTab] = useState<Tab>('today');
   const [notificationCount, setNotificationCount] = useState(0);
   const [openTechComposer, setOpenTechComposer] = useState(false);
+  const isMobileViewport = useIsMobileViewport();
   const tabs = withIcons([
     { id: 'today', title: 'Сегодня' }, { id: 'checklists', title: 'Чек-лист' }, { id: 'requests', title: 'Заявки' },
     { id: 'inventory', title: 'Инвент.' }, { id: 'tasks', title: 'Задачи' }, { id: 'knowledge', title: 'База' }
@@ -905,6 +932,32 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     { id: 'logout', title: 'Выйти из аккаунта', subtitle: 'Завершить сессию', icon: 'logout', onClick: onLogout }
   ];
 
+  const employeeSection = <>
+    {tab === 'today' && <Today user={user} onOpenTasks={() => setTab('tasks')} onOpenChecklists={() => setTab('checklists')} onOpenRequests={() => setTab('requests')} onOpenInventory={() => setTab('inventory')} />}
+    {tab === 'checklists' && <Checklists user={user} />}
+    {tab === 'requests' && <Requests user={user} />}
+    {tab === 'inventory' && <Inventory user={user} />}
+    {tab === 'tasks' && <Tasks user={user} showTechComposer={openTechComposer} onCloseComposer={() => setOpenTechComposer(false)} />}
+    {tab === 'knowledge' && <Knowledge user={user} />}
+  </>;
+
+  if (isMobileViewport) {
+    return <MobileAppShell
+      title={tab === 'today' ? <>Добро пожаловать, <em>{user.name}</em></> : mobileTabTitle(tab, tabs)}
+      subtitle={tab === 'today' ? `${roles[user.role]} · ${restaurant?.name}` : restaurant?.name}
+      brand="Resto Control"
+      userInitials={userInitials(user.name)}
+      navItems={mobileNavItems}
+      createItems={mobileCreateItems}
+      profileItems={mobileProfileItems}
+      notificationCount={notificationCount}
+      showNotifications={false}
+      className="employeeMobileShell"
+    >
+      {employeeSection}
+    </MobileAppShell>;
+  }
+
   return <BasicWorkspace
     user={user}
     subtitle={`${roles[user.role]} · ${restaurant?.name}`}
@@ -929,12 +982,7 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     }}
   >
     <div className="hello"><b>{user.name}</b><span>{roles[user.role]} · {restaurant?.name}</span></div>
-    {tab === 'today' && <Today user={user} onOpenTasks={() => setTab('tasks')} onOpenChecklists={() => setTab('checklists')} onOpenRequests={() => setTab('requests')} onOpenInventory={() => setTab('inventory')} />}
-    {tab === 'checklists' && <Checklists user={user} />}
-    {tab === 'requests' && <Requests user={user} />}
-    {tab === 'inventory' && <Inventory user={user} />}
-    {tab === 'tasks' && <Tasks user={user} showTechComposer={openTechComposer} onCloseComposer={() => setOpenTechComposer(false)} />}
-    {tab === 'knowledge' && <Knowledge user={user} />}
+    {employeeSection}
   </BasicWorkspace>;
 }
 
@@ -978,12 +1026,9 @@ function Today({
 
   if (!overview) {
     return <div className="mobileSectionStack">
-      <div className="mobileStatsGrid">
-        {Array.from({ length: 4 }).map((_, index) => <div key={index} className="mobileSkeletonCard" />)}
+      <div className="mobileListSurface">
+        {Array.from({ length: 4 }).map((_, index) => <div key={index} className="mobileSkeletonRow" />)}
       </div>
-      <Card className="mobileCard">
-        <Empty text="Собираем обзор смены" />
-      </Card>
     </div>;
   }
 
@@ -993,8 +1038,16 @@ function Today({
   const inventoryItems = overview.templates.reduce((total: number, template: any) => total + (template.items?.length || 0), 0);
 
   return <div className="mobileSectionStack">
+    <section className="mobileShiftSnapshot">
+      <div className="mobileShiftSnapshotCopy">
+        <strong>Смена сейчас</strong>
+        <span>{overview.checklists.length} чек-листов, {openTasks.length} задач, {openRequests.length} заявок</span>
+      </div>
+      <span className="badge active">{completedTasks.length} выполнено</span>
+    </section>
+
     <section className="mobileSection">
-      <SectionTitle title="Сегодня" action={<button type="button" className="sectionLink" onClick={onOpenTasks}>Все задачи</button>} />
+      <SectionTitle title="Разделы" />
       <div className="mobileListSurface">
         <button type="button" className="mobileOverviewRow" onClick={onOpenChecklists}>
           <div className="mobileOverviewIcon blue"><AppIcon name="checklists" className="navIcon" /></div>
@@ -1056,7 +1109,6 @@ function Today({
         </button>)}
         {openTasks.length === 0 && <Empty text="Нет открытых задач на эту смену" />}
       </div>
-      {completedTasks.length > 0 && <div className="mobileInlineHint">Выполнено за смену: {completedTasks.length}</div>}
     </section>
   </div>;
 }
@@ -1195,6 +1247,7 @@ function Checklists({ user, admin = false }: any) {
     : 0;
 
   const checklistRequiresPhoto = selectedTemplate?.items.some((item: any) => answers[item.id]?.done && !answers[item.id]?.photo_url);
+  const nextChecklistItem = selectedTemplate?.items.find((item: any) => !answers[item.id]?.done) || null;
 
   function toggleChecklistItem(item: any) {
     const current = answers[item.id] || {};
@@ -1225,6 +1278,14 @@ function Checklists({ user, admin = false }: any) {
             <span>{template.items.length}</span>
           </button>)}
         </div>
+      </section>}
+
+      {selectedTemplate && <section className="mobileChecklistHero">
+        <div className="mobileChecklistHeroCopy">
+          <span>{checklistTypes[selectedTemplate.type] || 'Чек-лист'}</span>
+          <strong>{nextChecklistItem ? `Сейчас: ${nextChecklistItem.text}` : 'Все пункты выполнены'}</strong>
+        </div>
+        <span className={cx('badge', nextChecklistItem ? 'trial' : 'active')}>{nextChecklistItem ? 'В работе' : 'Готово'}</span>
       </section>}
 
       {selectedTemplate && <section className="mobileChecklistSummary">
@@ -1270,6 +1331,7 @@ function Checklists({ user, admin = false }: any) {
               </div>}
               {itemAnswer.done && itemAnswer.photo_url && <div className="mobileChecklistAttachment">
                 <img className="mobileChecklistPhoto" src={itemAnswer.photo_url} alt={`Фото: ${item.text}`} />
+                <span className="mobileChecklistAttachmentLabel">Фото прикреплено</span>
               </div>}
               {itemAnswer.done && <textarea
                 className="mobileInlineTextarea"
@@ -1282,6 +1344,8 @@ function Checklists({ user, admin = false }: any) {
         })}
       </div>}
 
+      {runMsg && <div className={runMsg.includes('сохранён') ? 'notice mobileInlineNotice' : 'error mobileInlineNotice'}>{runMsg}</div>}
+
       {selectedTemplate && <div className="mobileStickyActionBar">
         <Button
           type="button"
@@ -1292,8 +1356,6 @@ function Checklists({ user, admin = false }: any) {
           Завершить чек-лист
         </Button>
       </div>}
-
-      {runMsg && <div className={runMsg.includes('сохранён') ? 'notice mobileInlineNotice' : 'error mobileInlineNotice'}>{runMsg}</div>}
       {cameraTarget && <CameraCapture
         title={cameraTarget.title}
         onClose={() => setCameraTarget(null)}
@@ -1409,33 +1471,39 @@ function Requests({ user, admin = false }: any) {
     return <div className="mobileSectionStack">
       <SectionTitle title="Заявки" action={<button type="button" className="sectionLink" onClick={() => setShowComposer(true)}>Создать</button>} />
 
-      <div className="mobileChipRow">
-        <button type="button" className={cx('mobileChip', statusFilter === 'all' && 'active')} onClick={() => setStatusFilter('all')}><span>Все</span><b>{requests.length}</b></button>
-        <button type="button" className={cx('mobileChip', statusFilter === 'processing' && 'active')} onClick={() => setStatusFilter('processing')}><span>В обработке</span><b>{requests.filter((request) => !['received', 'done', 'cancelled'].includes(request.status)).length}</b></button>
-        <button type="button" className={cx('mobileChip', statusFilter === 'done' && 'active')} onClick={() => setStatusFilter('done')}><span>Выполнено</span><b>{requests.filter((request) => ['received', 'done'].includes(request.status)).length}</b></button>
-        <button type="button" className={cx('mobileChip', statusFilter === 'rejected' && 'active')} onClick={() => setStatusFilter('rejected')}><span>Отклонено</span><b>{requests.filter((request) => ['not_received', 'cancelled'].includes(request.status)).length}</b></button>
-      </div>
+      <section className="mobileSection">
+        <div className="mobileChipRow">
+          <button type="button" className={cx('mobileChip', statusFilter === 'all' && 'active')} onClick={() => setStatusFilter('all')}><span>Все</span><b>{requests.length}</b></button>
+          <button type="button" className={cx('mobileChip', statusFilter === 'processing' && 'active')} onClick={() => setStatusFilter('processing')}><span>В работе</span><b>{requests.filter((request) => !['received', 'done', 'cancelled'].includes(request.status)).length}</b></button>
+          <button type="button" className={cx('mobileChip', statusFilter === 'done' && 'active')} onClick={() => setStatusFilter('done')}><span>Готово</span><b>{requests.filter((request) => ['received', 'done'].includes(request.status)).length}</b></button>
+          <button type="button" className={cx('mobileChip', statusFilter === 'rejected' && 'active')} onClick={() => setStatusFilter('rejected')}><span>Отклонено</span><b>{requests.filter((request) => ['not_received', 'cancelled'].includes(request.status)).length}</b></button>
+        </div>
+      </section>
 
       <section className="mobileSection">
-        <div className="mobileListSurface">
-        {visibleRequests.length === 0 && <Empty text="Под выбранный статус заявок пока нет" />}
-        <div className="mobileRequestList">
-          {visibleRequests.map((request) => <article key={request.id} className="mobileRequestCard">
-            <div className="rowBetween">
-              <div>
-                <strong>{departments[request.department] || 'Отдел'}</strong>
-                <span>{fmtDate(request.created_at)}</span>
-              </div>
-              <span className={`badge ${request.status}`}>{request.status}</span>
-            </div>
-            <div className="mobileRequestItems">
-              {request.items.map((item: any) => <div key={item.id} className="mobileRequestItem">
-                <span>{item.product?.name}</span>
-                <strong>{item.qty_ordered} {item.product?.unit}</strong>
-              </div>)}
-            </div>
-          </article>)}
+        <div className="mobileListSectionHead">
+          <h3>История</h3>
+          <span className="mobileSectionCount">{visibleRequests.length}</span>
         </div>
+        <div className="mobileListSurface">
+          {visibleRequests.length === 0 && <Empty text="Под выбранный статус заявок пока нет" />}
+          <div className="mobileRequestList">
+            {visibleRequests.map((request) => <article key={request.id} className="mobileRequestCard">
+              <div className="rowBetween">
+                <div>
+                  <strong>{departments[request.department] || 'Отдел'}</strong>
+                  <span>{fmtDate(request.created_at)}</span>
+                </div>
+                <span className={`badge ${request.status}`}>{request.status}</span>
+              </div>
+              <div className="mobileRequestItems">
+                {request.items.map((item: any) => <div key={item.id} className="mobileRequestItem">
+                  <span>{item.product?.name}</span>
+                  <strong>{item.qty_ordered} {item.product?.unit}</strong>
+                </div>)}
+              </div>
+            </article>)}
+          </div>
         </div>
       </section>
       {msg && <div className="notice mobileInlineNotice">{msg}</div>}
@@ -1606,6 +1674,14 @@ function Inventory({ user, admin = false }: any) {
       if (!inventoryFilter.trim()) return true;
       return String(item.product?.name || '').toLowerCase().includes(inventoryFilter.trim().toLowerCase());
     }) || [];
+    const filledItemsCount = filteredItems.filter((item: any) => {
+      const value = values[item.product_id];
+      return value !== '' && value !== undefined && value !== null;
+    }).length;
+    const lowStockCount = filteredItems.filter((item: any) => {
+      const value = Number(values[item.product_id]);
+      return !Number.isNaN(value) && value >= 0 && value <= 2;
+    }).length;
 
     function inventoryBadge(rawValue: any) {
       if (rawValue === '' || rawValue === undefined || rawValue === null) return { text: 'Не указано', tone: '' };
@@ -1618,6 +1694,14 @@ function Inventory({ user, admin = false }: any) {
 
     return <div className="mobileSectionStack">
       <SectionTitle title="Инвентаризация" />
+
+      {selectedTemplate && <section className="mobileShiftSnapshot">
+        <div className="mobileShiftSnapshotCopy">
+          <strong>{selectedTemplate.title}</strong>
+          <span>{filledItemsCount} из {filteredItems.length} позиций заполнено</span>
+        </div>
+        <span className={cx('badge', lowStockCount > 0 ? 'trial' : 'active')}>{lowStockCount > 0 ? `${lowStockCount} мало` : 'В норме'}</span>
+      </section>}
 
       <section className="mobileSection">
         <div className="mobileListSurface mobileFilterSurface">
@@ -1788,6 +1872,7 @@ function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer 
   const [showTechForm, setShowTechForm] = useState(false);
   const [techForm, setTechForm] = useState<any>({ title: '', description: '', category: 'equipment' });
   const [techDrafts, setTechDrafts] = useState<any>({});
+  const [taskView, setTaskView] = useState<'active' | 'done'>('active');
 
   async function load() {
     const [taskRows, techRows, userRows] = await Promise.all([
@@ -1848,6 +1933,22 @@ function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer 
       <div className="mobileSectionStack">
         <SectionTitle title="Задачи" action={<button type="button" className="sectionLink" onClick={() => setShowTechForm(true)}>Техзаявка</button>} />
 
+        <section className="mobileShiftSnapshot">
+          <div className="mobileShiftSnapshotCopy">
+            <strong>{taskView === 'active' ? 'Активная смена' : 'Завершённые задачи'}</strong>
+            <span>{activeTasks.length} задач, {activeTechRequests.length} техзаявок требуют внимания</span>
+          </div>
+          <span className="badge active">{completedTasks.length} готово</span>
+        </section>
+
+        <section className="mobileSection">
+          <div className="mobileSegmentedControl">
+            <button type="button" className={cx('mobileSegmentButton', taskView === 'active' && 'active')} onClick={() => setTaskView('active')}>Активные</button>
+            <button type="button" className={cx('mobileSegmentButton', taskView === 'done' && 'active')} onClick={() => setTaskView('done')}>Завершённые</button>
+          </div>
+        </section>
+
+        {taskView === 'active' && <>
         <section className="mobileSection">
           <div className="mobileListSectionHead">
             <h3>Сегодня</h3>
@@ -1884,14 +1985,15 @@ function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer 
                 </div>
                 <span className={`badge ${request.status}`}>{techRequestStatuses[request.status] || request.status}</span>
               </div>
-              <p>{request.description || 'Без описания'}</p>
+              <p className="mobileRequestDescription">{request.description || 'Без описания'}</p>
               <div className="mobileInlineHint">{request.manager_comment || 'Комментарий менеджера появится здесь'}</div>
             </article>)}
           </div>
           </div>
         </section>
+        </>}
 
-        <section className="mobileSection">
+        {taskView === 'done' && <section className="mobileSection">
           <div className="mobileListSectionHead">
             <h3>Выполнено</h3>
             <span className="mobileSectionCount">{completedTasks.length + finishedTechRequests.length}</span>
@@ -1917,7 +2019,7 @@ function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer 
             </div>)}
           </div>
           </div>
-        </section>
+        </section>}
         {techMsg && <div className="notice mobileInlineNotice">{techMsg}</div>}
       </div>
 
@@ -2046,10 +2148,19 @@ function Knowledge({ user, admin = false }: any) {
         })
       }))
       .filter((category) => category.documents.length || !search.trim());
+    const totalDocs = visibleCategories.reduce((count, category) => count + category.documents.length, 0);
+    const pendingDocs = visibleCategories.reduce((count, category) => count + category.documents.filter((document: any) => document.requires_acknowledgement && !document.acknowledged).length, 0);
 
     return <>
       <div className="mobileSectionStack">
         <SectionTitle title="База знаний" />
+        <section className="mobileShiftSnapshot">
+          <div className="mobileShiftSnapshotCopy">
+            <strong>Документы и инструкции</strong>
+            <span>{totalDocs} материалов доступны для вашей роли</span>
+          </div>
+          <span className={cx('badge', pendingDocs > 0 ? 'trial' : 'active')}>{pendingDocs > 0 ? `${pendingDocs} ждут` : 'Ок'}</span>
+        </section>
         <section className="mobileSection">
           <div className="mobileListSurface mobileFilterSurface">
           <Field label="Поиск инструкций" icon="search" value={search} onChange={(e: any) => setSearch(e.target.value)} placeholder="Поиск инструкций..." />

@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { AppIcon, type IconName } from './dashboard-ui';
 
 function cn(...parts: Array<string | false | null | undefined>) {
@@ -20,6 +20,8 @@ export type MobileActionItem = {
   icon: IconName;
   onClick: () => void;
 };
+
+type MobileShellSheetKind = 'create' | 'profile' | null;
 
 export function PageContainer({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn('pageContainer', className)}>{children}</div>;
@@ -96,14 +98,18 @@ export function MobileHeader({
 }) {
   const showLeadingButton = mode === 'overview' ? showMenuButton : showBackButton;
 
-  return <header className="mobileHeader">
+  return <header className={cn('mobileHeader', mode === 'overview' && 'overview')}>
     <div className="mobileTopbar">
       <div className="mobileTopbarLeft">
         {showLeadingButton && <button type="button" className="mobileIconButton" onClick={mode === 'overview' ? onMenu : onBack} aria-label={mode === 'overview' ? 'Открыть меню' : 'Назад'}>
           <AppIcon name={mode === 'overview' ? 'menu' : 'back'} className="navIcon" />
         </button>}
-        <div className="mobileBrand">
+        <div className={cn('mobileBrand', mode === 'overview' && 'mobileOverviewBrand')}>
           <img src={logoSrc} alt="Resto Control" className="mobileLogo" />
+          {mode === 'overview' && <div className="mobileHeaderCopy mobileHeaderInlineCopy overview">
+            <h1>{title}</h1>
+            {subtitle && <p>{subtitle}</p>}
+          </div>}
         </div>
       </div>
 
@@ -122,10 +128,10 @@ export function MobileHeader({
       </div>
     </div>
 
-    <div className={cn('mobileHeaderCopy', mode === 'overview' && 'overview')}>
+    {mode !== 'overview' && <div className="mobileHeaderCopy">
       <h1>{title}</h1>
       {subtitle && <p>{subtitle}</p>}
-    </div>
+    </div>}
   </header>;
 }
 
@@ -201,4 +207,69 @@ export function BottomSheet({
       </div>
     </div>
   </div>;
+}
+
+export function MobileAppShell({
+  title,
+  subtitle,
+  brand = 'Resto Control',
+  userInitials,
+  navItems,
+  createItems,
+  profileItems,
+  notificationCount = 0,
+  showNotifications = false,
+  onNotifications,
+  children,
+  className
+}: {
+  title: ReactNode;
+  subtitle?: ReactNode;
+  brand?: ReactNode;
+  userInitials: string;
+  navItems: MobileNavItem[];
+  createItems: MobileActionItem[];
+  profileItems: MobileActionItem[];
+  notificationCount?: number;
+  showNotifications?: boolean;
+  onNotifications?: () => void;
+  children: ReactNode;
+  className?: string;
+}) {
+  const [sheet, setSheet] = useState<MobileShellSheetKind>(null);
+
+  return <main className={cn('mobileAppShell', className)}>
+    <div className="mobileAppViewport">
+      <header className="mobileAppHeader">
+        <div className="mobileAppTopbar">
+          <div className="mobileAppBrand">
+            <span className="mobileAppBrandMark" />
+            <strong>{brand}</strong>
+          </div>
+          <div className="mobileAppTopbarActions">
+            {showNotifications && <button type="button" className="mobileIconButton notificationButton" onClick={onNotifications} aria-label="Уведомления">
+              <AppIcon name="notification" className="navIcon" />
+              {notificationCount > 0 && <span className="mobileNotificationBadge">{notificationCount > 9 ? '9+' : notificationCount}</span>}
+            </button>}
+            <button type="button" className="mobileAvatarButton" onClick={() => setSheet('profile')} aria-label="Профиль">
+              <span>{userInitials}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="mobileAppTitleBlock">
+          <h1>{title}</h1>
+          {subtitle && <p>{subtitle}</p>}
+        </div>
+      </header>
+
+      <div className="pageContainer mobileAppContent">
+        {children}
+      </div>
+
+      <BottomNavigation items={navItems} onCreate={() => setSheet('create')} />
+      <BottomSheet open={sheet === 'create'} title="Быстрые действия" items={createItems} onClose={() => setSheet(null)} />
+      <BottomSheet open={sheet === 'profile'} title="Профиль и доступ" items={profileItems} onClose={() => setSheet(null)} />
+    </div>
+  </main>;
 }
