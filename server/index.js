@@ -35,6 +35,8 @@ const uploadsDir = path.resolve(__dirname, 'data/uploads');
 const checklistUploadsDir = path.join(uploadsDir, 'checklists');
 const MANAGER_ROLES = ['owner', 'manager'];
 const STAFF_ROLES = ['manager', 'waiter', 'bartender', 'cook'];
+const departments = { hall: 'Зал', bar: 'Бар', kitchen: 'Кухня', common: 'Общее' };
+const techRequestStatuses = { new: 'новая', in_progress: 'в работе', done: 'выполнена', cancelled: 'отклонена' };
 
 app.use(cors());
 app.use(express.json({ limit: '15mb' }));
@@ -94,7 +96,12 @@ function ensureRestaurantActive(req, res, next) {
 }
 
 function sameRestaurant(items, restaurant_id) {
-  return items.filter(i => i.restaurant_id === restaurant_id);
+  return (items || []).filter(i => i.restaurant_id === restaurant_id);
+}
+
+function fmtDate(value) {
+  if (!value) return '—';
+  return new Date(value).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
 }
 
 function hasRoleAccess(user, allowedRoles = []) {
@@ -189,6 +196,197 @@ function makeAssignmentsForTask(task) {
     if (!exists) db.task_assignments.push({ id: uid('tasg'), restaurant_id: task.restaurant_id, task_id: task.id, user_id: u.id, done: false, comment: '', completed_at: null });
   });
 }
+
+function collection(name) {
+  if (!Array.isArray(db[name])) db[name] = [];
+  return db[name];
+}
+
+function actorName(userId) {
+  return db.users.find(u => u.id === userId)?.name || 'Система';
+}
+
+function csvEscape(value) {
+  const str = String(value ?? '');
+  if (/[",\n\r]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
+  return str;
+}
+
+function sendCsv(res, filename, rows) {
+  const csv = rows.map(row => row.map(csvEscape).join(',')).join('\n');
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+  res.send(`\ufeff${csv}`);
+}
+
+function logActivity({ restaurant_id, actor_id, type, title, entity_type = '', entity_id = '', metadata = {} }) {
+  const event = { id: uid('act'), restaurant_id, actor_id: actor_id || null, type, title, entity_type, entity_id, metadata, created_at: nowIso() };
+  collection('activity_events').push(event);
+  return event;
+}
+
+function notifyUsers(restaurant_id, users, payload) {
+  const uniqueUsers = Array.from(new Map(users.filter(Boolean).map(user => [user.id, user])).values());
+  uniqueUsers.forEach(user => collection('notifications').push({
+    id: uid('ntf'),
+    restaurant_id,
+    user_id: user.id,
+    title: payload.title,
+    body: payload.body || '',
+    entity_type: payload.entity_type || '',
+    entity_id: payload.entity_id || '',
+    read_at: null,
+    created_at: nowIso()
+  }));
+}
+
+function notifyManagers(restaurant_id, payload) {
+  notifyUsers(restaurant_id, db.users.filter(user => user.restaurant_id === restaurant_id && user.active && MANAGER_ROLES.includes(user.role)), payload);
+}
+
+function notifyAssignees(task, payload) {
+  notifyUsers(task.restaurant_id, db.task_assignments.filter(a => a.task_id === task.id).map(a => db.users.find(u => u.id === a.user_id && u.active)), payload);
+}
+
+function currentOpenShiftFor(user) {
+  return collection('shifts').filter(shift => shift.restaurant_id === user.restaurant_id && shift.user_id === user.id && shift.status === 'open').sort((a, b) => String(b.opened_at || '').localeCompare(String(a.opened_at || '')))[0] || null;
+}
+
+function eventsBetween(restaurant_id, start, end, user_id = null) {
+  return collection('activity_events')
+    .filter(event => event.restaurant_id === restaurant_id)
+    .filter(event => !user_id || event.actor_id === user_id)
+    .filter(event => {
+      const created = new Date(event.created_at).getTime();
+      return created >= start && created <= end;
+    })
+    .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
+}
+
+
+// OPERATIONAL LAYER
+app.get('/api/shifts/current', auth, ensureRestaurantActive, (req, res) => {
+  const current = currentOpenShiftFor(req.user);
+  const last_closed = collection('shifts').filter(s => s.restaurant_id === req.user.restaurant_id && s.user_id === req.user.id && s.status === 'closed').sort((a,b)=>String(b.closed_at||'').localeCompare(String(a.closed_at||'')))[0] || null;
+  res.json({ current, last_closed });
+});
+
+app.post('/api/shifts/start', auth, ensureRestaurantActive, runAsync(async (req, res) => {
+  const existing = currentOpenShiftFor(req.user);
+  if (existing) return res.json(existing);
+  const shift = { id: uid('shift'), restaurant_id: req.user.restaurant_id, user_id: req.user.id, role: req.user.role, department: req.user.department, location: String(req.body.location || '').trim(), status: 'open', opened_at: nowIso(), closed_at: null, comment: '' };
+  collection('shifts').push(shift);
+  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'shift_started', title: `${req.user.name} начал смену`, entity_type: 'shift', entity_id: shift.id, metadata: { role: req.user.role, department: req.user.department } });
+  notifyManagers(req.user.restaurant_id, { title: 'Смена началась', body: `${req.user.name} начал смену`, entity_type: 'shift', entity_id: shift.id });
+  await persist();
+  res.status(201).json(shift);
+}));
+
+app.post('/api/shifts/:id/close', auth, ensureRestaurantActive, runAsync(async (req, res) => {
+  const shift = collection('shifts').find(s => s.id === req.params.id && s.restaurant_id === req.user.restaurant_id);
+  if (!shift) return res.status(404).json({ error: 'Смена не найдена' });
+  if (!MANAGER_ROLES.includes(req.user.role) && shift.user_id !== req.user.id) return res.status(403).json({ error: 'Нельзя закрыть чужую смену' });
+  shift.status = 'closed';
+  shift.closed_at = shift.closed_at || nowIso();
+  shift.comment = String(req.body.comment || '').trim();
+  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'shift_closed', title: `${actorName(shift.user_id)} закрыл смену`, entity_type: 'shift', entity_id: shift.id, metadata: { comment: shift.comment } });
+  notifyManagers(req.user.restaurant_id, { title: 'Смена закрыта', body: `${actorName(shift.user_id)} завершил смену`, entity_type: 'shift', entity_id: shift.id });
+  await persist();
+  res.json(shift);
+}));
+
+app.get('/api/notifications', auth, ensureRestaurantActive, (req, res) => {
+  res.json(collection('notifications').filter(n => n.restaurant_id === req.user.restaurant_id && n.user_id === req.user.id).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).slice(0,80));
+});
+
+app.post('/api/notifications/read-all', auth, ensureRestaurantActive, runAsync(async (req, res) => {
+  collection('notifications').filter(n => n.restaurant_id === req.user.restaurant_id && n.user_id === req.user.id && !n.read_at).forEach(n => { n.read_at = nowIso(); });
+  await persist();
+  res.json({ ok: true });
+}));
+
+app.get('/api/activity', auth, ensureRestaurantActive, (req, res) => {
+  const isManager = MANAGER_ROLES.includes(req.user.role);
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit || 40)));
+  res.json(collection('activity_events').filter(e => e.restaurant_id === req.user.restaurant_id).filter(e => isManager || e.actor_id === req.user.id || ['task_created'].includes(e.type)).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).slice(0, limit).map(e => ({ ...e, actor: publicUser(db.users.find(u => u.id === e.actor_id)) })));
+});
+
+app.get('/api/admin/problems', auth, ensureRestaurantActive, adminOnly, (req, res) => {
+  const rid = req.user.restaurant_id;
+  const now = Date.now();
+  const today = new Date().toISOString().slice(0, 10);
+  const openAssignments = sameRestaurant(db.task_assignments, rid).filter(a => !a.done);
+  const overdueAssignments = openAssignments.filter(a => {
+    const task = db.tasks.find(t => t.id === a.task_id);
+    return task?.due_at && new Date(task.due_at).getTime() < now;
+  });
+  const openTech = sameRestaurant(db.tech_requests, rid).filter(t => !['done', 'cancelled'].includes(t.status));
+  const openRequests = sameRestaurant(db.product_requests, rid).filter(r => !['received', 'done', 'cancelled'].includes(r.status));
+  const staff = sameRestaurant(db.users, rid).filter(u => u.active && !u.is_super_admin && !MANAGER_ROLES.includes(u.role));
+  const requiredDocs = sameRestaurant(db.knowledge_documents, rid).filter(d => d.is_active && d.requires_acknowledgement);
+  const pendingAck = requiredDocs.reduce((total, doc) => {
+    const targets = staff.filter(u => hasRoleAccess(u, doc.allowed_roles));
+    const done = db.knowledge_acknowledgements.filter(a => a.document_id === doc.id && a.version === doc.version).length;
+    return total + Math.max(0, targets.length - done);
+  }, 0);
+  const problems = [
+    ...overdueAssignments.slice(0, 8).map(a => {
+      const task = db.tasks.find(t => t.id === a.task_id);
+      const user = db.users.find(u => u.id === a.user_id);
+      return { id: `task-${a.id}`, tone: 'danger', title: task?.title || 'Просроченная задача', subtitle: `${user?.name || 'Сотрудник'} · дедлайн ${fmtDate(task?.due_at)}`, type: 'task', entity_id: task?.id || a.task_id };
+    }),
+    ...openTech.slice(0, 8).map(t => ({ id: `tech-${t.id}`, tone: t.status === 'new' ? 'warning' : 'info', title: t.title, subtitle: `Техзаявка · ${techRequestStatuses[t.status] || t.status}`, type: 'tech_request', entity_id: t.id })),
+    ...openRequests.slice(0, 8).map(r => ({ id: `request-${r.id}`, tone: 'warning', title: `Заявка ${departments[r.department] || r.department}`, subtitle: `${r.status} · ${fmtDate(r.created_at)}`, type: 'product_request', entity_id: r.id }))
+  ];
+  res.json({ metrics: { open_shifts: collection('shifts').filter(s => s.restaurant_id === rid && s.status === 'open').length, open_tasks: openAssignments.length, overdue_tasks: overdueAssignments.length, open_tech_requests: openTech.length, open_product_requests: openRequests.length, checklist_runs_today: sameRestaurant(db.checklist_runs, rid).filter(r => String(r.created_at||'').slice(0,10) === today).length, pending_acknowledgements: pendingAck }, problems: problems.slice(0,20) });
+});
+
+app.get('/api/comments', auth, ensureRestaurantActive, (req, res) => {
+  const entityType = String(req.query.entity_type || '').trim();
+  const entityId = String(req.query.entity_id || '').trim();
+  if (!entityType || !entityId) return res.status(400).json({ error: 'Нужны entity_type и entity_id' });
+  res.json(collection('comments').filter(c => c.restaurant_id === req.user.restaurant_id && c.entity_type === entityType && c.entity_id === entityId).sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||''))).map(c => ({ ...c, user: publicUser(db.users.find(u => u.id === c.user_id)) })));
+});
+
+app.post('/api/comments', auth, ensureRestaurantActive, runAsync(async (req, res) => {
+  const entityType = String(req.body.entity_type || '').trim();
+  const entityId = String(req.body.entity_id || '').trim();
+  const body = String(req.body.body || '').trim();
+  if (!entityType || !entityId || !body) return res.status(400).json({ error: 'Нужны объект и текст комментария' });
+  const comment = { id: uid('cmt'), restaurant_id: req.user.restaurant_id, entity_type: entityType, entity_id: entityId, user_id: req.user.id, body, created_at: nowIso() };
+  collection('comments').push(comment);
+  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'comment_created', title: `${req.user.name} оставил комментарий`, entity_type: entityType, entity_id: entityId, metadata: { body } });
+  notifyManagers(req.user.restaurant_id, { title: 'Новый комментарий', body: `${req.user.name}: ${body.slice(0,120)}`, entity_type: entityType, entity_id: entityId });
+  await persist();
+  res.status(201).json({ ...comment, user: publicUser(req.user) });
+}));
+
+app.post('/api/offline/sync', auth, ensureRestaurantActive, runAsync(async (req, res) => {
+  const operations = Array.isArray(req.body.operations) ? req.body.operations : [];
+  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'offline_sync', title: `${req.user.name} синхронизировал офлайн-действия`, entity_type: 'offline', entity_id: '', metadata: { count: operations.length } });
+  await persist();
+  res.json({ ok: true, accepted: operations.length });
+}));
+
+app.get('/api/reports/shift/export.csv', auth, ensureRestaurantActive, (req, res) => {
+  const rid = req.user.restaurant_id;
+  let shift = String(req.query.shift_id || '').trim() ? collection('shifts').find(s => s.id === req.query.shift_id && s.restaurant_id === rid) : currentOpenShiftFor(req.user);
+  if (!shift) shift = collection('shifts').filter(s => s.restaurant_id === rid && s.user_id === req.user.id).sort((a,b)=>String(b.opened_at||'').localeCompare(String(a.opened_at||'')))[0];
+  if (!shift) return res.status(404).json({ error: 'Смена не найдена' });
+  if (!MANAGER_ROLES.includes(req.user.role) && shift.user_id !== req.user.id) return res.status(403).json({ error: 'Нет доступа к отчёту смены' });
+  const start = new Date(shift.opened_at).getTime();
+  const end = shift.closed_at ? new Date(shift.closed_at).getTime() : Date.now();
+  const rows = [['Дата','Событие','Сотрудник','Тип','Объект','Комментарий'], [fmtDate(shift.opened_at),'Смена начата',actorName(shift.user_id),'shift',shift.id,shift.location||''], ...eventsBetween(rid,start,end,shift.user_id).map(e => [fmtDate(e.created_at), e.title, actorName(e.actor_id), e.type, e.entity_type, e.metadata?.comment || e.metadata?.body || ''])];
+  if (shift.closed_at) rows.push([fmtDate(shift.closed_at),'Смена закрыта',actorName(shift.user_id),'shift',shift.id,shift.comment||'']);
+  sendCsv(res, `shift-${shift.id}.csv`, rows);
+});
+
+app.get('/api/admin/reports/operations.csv', auth, ensureRestaurantActive, adminOnly, (req, res) => {
+  const rid = req.user.restaurant_id;
+  const rows = [['Дата','Сотрудник','Тип','Событие','Объект','Комментарий'], ...collection('activity_events').filter(e => e.restaurant_id === rid).sort((a,b)=>String(b.created_at||'').localeCompare(String(a.created_at||''))).slice(0,1000).map(e => [fmtDate(e.created_at), actorName(e.actor_id), e.type, e.title, e.entity_type, e.metadata?.comment || e.metadata?.body || ''])];
+  sendCsv(res, `operations-${rid}.csv`, rows);
+});
+
 
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, app: 'Resto Control MVP', time: nowIso() });
@@ -437,13 +635,18 @@ app.post('/api/checklists/runs', auth, ensureRestaurantActive, runAsync(async (r
   if (!template) return res.status(404).json({ error: 'Чек-лист не найден' });
   if (!['owner', 'manager', template.role].includes(req.user.role)) return res.status(403).json({ error: 'Этот чек-лист не для вашей роли' });
   const templateItems = db.checklist_items.filter(i => i.template_id === template.id);
+  const missingRequiredItem = templateItems.find(item => item.required && !answers?.[item.id]?.done);
+  if (missingRequiredItem) return res.status(400).json({ error: `Обязательный пункт "${missingRequiredItem.text}" не выполнен` });
   const missingPhotoItem = templateItems.find(item => {
     const value = answers?.[item.id] || {};
-    return Boolean(value.done) && !value.photo_url;
+    return Boolean(item.needs_photo) && Boolean(value.done) && !value.photo_url;
   });
-  if (missingPhotoItem) {
-    return res.status(400).json({ error: `Для пункта "${missingPhotoItem.text}" нужно сделать фото` });
-  }
+  if (missingPhotoItem) return res.status(400).json({ error: `Для пункта "${missingPhotoItem.text}" нужно сделать фото` });
+  const missingCommentItem = templateItems.find(item => {
+    const value = answers?.[item.id] || {};
+    return Boolean(item.needs_comment) && Boolean(value.done) && !String(value.comment || '').trim();
+  });
+  if (missingCommentItem) return res.status(400).json({ error: `Для пункта "${missingCommentItem.text}" нужен комментарий` });
 
   const run = { id: uid('clrun'), restaurant_id: rid, template_id, user_id: req.user.id, status: 'completed', comment: comment || '', created_at: nowIso(), completed_at: nowIso() };
   db.checklist_runs.push(run);
@@ -458,6 +661,8 @@ app.post('/api/checklists/runs', auth, ensureRestaurantActive, runAsync(async (r
     db.checklist_runs = db.checklist_runs.filter(savedRun => savedRun.id !== run.id);
     return res.status(400).json({ error: error.message || 'Не удалось сохранить фото' });
   }
+  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'checklist_completed', title: `${req.user.name} завершил чек-лист "${template.title}"`, entity_type: 'checklist_run', entity_id: run.id, metadata: { total: templateItems.length } });
+  notifyManagers(rid, { title: 'Чек-лист выполнен', body: `${req.user.name}: ${template.title}`, entity_type: 'checklist_run', entity_id: run.id });
   await persist();
   res.status(201).json(run);
 }));
@@ -562,6 +767,8 @@ app.post('/api/requests', auth, ensureRestaurantActive, runAsync(async (req, res
   normalized.items.forEach(i => {
     db.request_items.push({ id: uid('reqi'), restaurant_id: rid, request_id: request.id, product_id: i.product_id, qty_ordered: i.qty_ordered, qty_received: 0, status: 'ordered', comment: i.comment });
   });
+  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'request_created', title: `${req.user.name} создал заявку ${departments[department] || department}`, entity_type: 'product_request', entity_id: request.id, metadata: { department, items_count: normalized.items.length } });
+  notifyManagers(rid, { title: 'Новая заявка', body: `${req.user.name} · ${departments[department] || department}`, entity_type: 'product_request', entity_id: request.id });
   await persist();
   res.status(201).json(request);
 }));
@@ -606,6 +813,8 @@ app.post('/api/inventory/runs', auth, ensureRestaurantActive, runAsync(async (re
   const run = { id: uid('invrun'), restaurant_id: rid, template_id, user_id: req.user.id, department: template.department, comment: comment || '', status: 'completed', created_at: nowIso() };
   db.inventory_runs.push(run);
   Object.entries(values || {}).forEach(([product_id, value]) => db.inventory_values.push({ id: uid('invv'), restaurant_id: rid, inventory_run_id: run.id, product_id, qty: Number(value.qty || 0), comment: value.comment || '' }));
+  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'inventory_completed', title: `${req.user.name} отправил инвентаризацию "${template.title}"`, entity_type: 'inventory_run', entity_id: run.id, metadata: { template_id, department: template.department } });
+  notifyManagers(rid, { title: 'Инвентаризация отправлена', body: `${req.user.name}: ${template.title}`, entity_type: 'inventory_run', entity_id: run.id });
   await persist();
   res.status(201).json(run);
 }));
@@ -670,6 +879,8 @@ app.post('/api/tasks', auth, ensureRestaurantActive, adminOnly, runAsync(async (
   const task = { id: uid('task'), restaurant_id: req.user.restaurant_id, title, description: description || '', target_type, target_role: target_role || null, target_user_id: target_user_id || null, due_at: due_at || null, created_by: req.user.id, created_at: nowIso(), active: true };
   db.tasks.push(task);
   makeAssignmentsForTask(task);
+  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'task_created', title: `${req.user.name} создал задачу "${title}"`, entity_type: 'task', entity_id: task.id, metadata: { target_type, target_role, target_user_id } });
+  notifyAssignees(task, { title: 'Новая задача', body: title, entity_type: 'task', entity_id: task.id });
   await persist();
   res.status(201).json(task);
 }));
@@ -680,6 +891,9 @@ app.patch('/api/tasks/:id/done', auth, ensureRestaurantActive, runAsync(async (r
   assignment.done = true;
   assignment.comment = req.body.comment || '';
   assignment.completed_at = nowIso();
+  const task = db.tasks.find(item => item.id === assignment.task_id);
+  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'task_completed', title: `${req.user.name} выполнил задачу "${task?.title || 'Задача'}"`, entity_type: 'task', entity_id: assignment.task_id, metadata: { comment: assignment.comment } });
+  notifyManagers(req.user.restaurant_id, { title: 'Задача выполнена', body: `${req.user.name}: ${task?.title || 'Задача'}`, entity_type: 'task', entity_id: assignment.task_id });
   await persist();
   res.json(assignment);
 }));
@@ -721,6 +935,8 @@ app.post('/api/tech-requests', auth, ensureRestaurantActive, runAsync(async (req
     updated_at: nowIso()
   };
   db.tech_requests.push(request);
+  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'tech_request_created', title: `${req.user.name} создал техзаявку "${title}"`, entity_type: 'tech_request', entity_id: request.id, metadata: { category } });
+  notifyManagers(rid, { title: 'Новая техзаявка', body: `${req.user.name}: ${title}`, entity_type: 'tech_request', entity_id: request.id });
   await persist();
   res.status(201).json(request);
 }));
@@ -748,6 +964,8 @@ app.patch('/api/tech-requests/:id', auth, ensureRestaurantActive, adminOnly, run
     request.resolved_at = null;
   }
   request.updated_at = nowIso();
+  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'tech_request_updated', title: `${req.user.name} обновил техзаявку "${request.title}"`, entity_type: 'tech_request', entity_id: request.id, metadata: { status: request.status, manager_comment: request.manager_comment } });
+  notifyUsers(req.user.restaurant_id, [db.users.find(user => user.id === request.created_by)], { title: 'Техзаявка обновлена', body: `${request.title}: ${techRequestStatuses[request.status] || request.status}`, entity_type: 'tech_request', entity_id: request.id });
 
   await persist();
   res.json({
@@ -794,7 +1012,10 @@ app.post('/api/knowledge/:id/ack', auth, ensureRestaurantActive, runAsync(async 
   const doc = db.knowledge_documents.find(d => d.id === req.params.id && d.restaurant_id === req.user.restaurant_id);
   if (!doc || !hasRoleAccess(req.user, doc.allowed_roles)) return res.status(404).json({ error: 'Документ не найден' });
   const exists = db.knowledge_acknowledgements.find(a => a.document_id === doc.id && a.user_id === req.user.id && a.version === doc.version);
-  if (!exists) db.knowledge_acknowledgements.push({ id: uid('kack'), restaurant_id: req.user.restaurant_id, document_id: doc.id, user_id: req.user.id, version: doc.version, acknowledged_at: nowIso() });
+  if (!exists) {
+    db.knowledge_acknowledgements.push({ id: uid('kack'), restaurant_id: req.user.restaurant_id, document_id: doc.id, user_id: req.user.id, version: doc.version, acknowledged_at: nowIso() });
+    logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'knowledge_acknowledged', title: `${req.user.name} ознакомился с "${doc.title}"`, entity_type: 'knowledge_document', entity_id: doc.id, metadata: { version: doc.version } });
+  }
   await persist();
   res.json({ ok: true });
 }));

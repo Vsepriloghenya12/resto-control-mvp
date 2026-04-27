@@ -37,7 +37,11 @@ const SNAPSHOT_TABLES = [
   { name: 'knowledge_categories', columns: ['id', 'restaurant_id', 'title', 'allowed_roles', 'sort_order'], jsonColumns: ['allowed_roles'] },
   { name: 'knowledge_documents', columns: ['id', 'restaurant_id', 'category_id', 'title', 'type', 'content', 'file_url', 'allowed_roles', 'requires_acknowledgement', 'version', 'is_active', 'created_by', 'created_at', 'updated_at', 'sort_order'], jsonColumns: ['allowed_roles'] },
   { name: 'knowledge_acknowledgements', columns: ['id', 'restaurant_id', 'document_id', 'user_id', 'version', 'acknowledged_at'] },
-  { name: 'knowledge_views', columns: ['id', 'restaurant_id', 'document_id', 'user_id', 'viewed_at'] }
+  { name: 'knowledge_views', columns: ['id', 'restaurant_id', 'document_id', 'user_id', 'viewed_at'] },
+  { name: 'shifts', columns: ['id', 'restaurant_id', 'user_id', 'role', 'department', 'location', 'status', 'opened_at', 'closed_at', 'comment'] },
+  { name: 'notifications', columns: ['id', 'restaurant_id', 'user_id', 'title', 'body', 'entity_type', 'entity_id', 'read_at', 'created_at'] },
+  { name: 'activity_events', columns: ['id', 'restaurant_id', 'actor_id', 'type', 'title', 'entity_type', 'entity_id', 'metadata', 'created_at'], jsonColumns: ['metadata'] },
+  { name: 'comments', columns: ['id', 'restaurant_id', 'entity_type', 'entity_id', 'user_id', 'body', 'created_at'] }
 ];
 
 let pool;
@@ -70,7 +74,7 @@ function readJsonDb() {
 }
 
 function encodeColumnValue(column, value) {
-  if (column === 'allowed_roles') return JSON.stringify(value || []);
+  if (column === 'allowed_roles' || column === 'metadata') return JSON.stringify(value || (column === 'metadata' ? {} : []));
   if (column === 'supplier') return value || 'Без поставщика';
   return value ?? null;
 }
@@ -170,7 +174,11 @@ function emptyDb() {
     knowledge_categories: [],
     knowledge_documents: [],
     knowledge_acknowledgements: [],
-    knowledge_views: []
+    knowledge_views: [],
+    shifts: [],
+    notifications: [],
+    activity_events: [],
+    comments: []
   };
 }
 

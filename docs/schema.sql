@@ -233,3 +233,51 @@ create index if not exists idx_inventory_runs_restaurant on inventory_runs(resta
 create index if not exists idx_tasks_restaurant on tasks(restaurant_id);
 create index if not exists idx_tech_requests_restaurant on tech_requests(restaurant_id);
 create index if not exists idx_knowledge_restaurant on knowledge_documents(restaurant_id);
+
+
+create table if not exists shifts (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  user_id text not null references users(id) on delete cascade,
+  role text,
+  department text,
+  location text,
+  status text not null default 'open',
+  opened_at timestamptz not null default now(),
+  closed_at timestamptz,
+  comment text
+);
+
+create table if not exists notifications (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  user_id text not null references users(id) on delete cascade,
+  title text not null,
+  body text,
+  entity_type text,
+  entity_id text,
+  read_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists activity_events (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  actor_id text references users(id) on delete set null,
+  type text not null,
+  title text not null,
+  entity_type text,
+  entity_id text,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists comments (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  entity_type text not null,
+  entity_id text not null,
+  user_id text references users(id) on delete set null,
+  body text not null,
+  created_at timestamptz not null default now()
+);

@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { api, clearToken, download, getToken, setToken } from './api';
+import { OFFLINE_EVENT, api, clearToken, download, flushOfflineQueue, getToken, offlineQueueCount, setToken } from './api';
 import {
   AppIcon,
   Button,
@@ -302,23 +302,18 @@ function CameraCapture({ title, onCapture, onClose }: { title: string; onCapture
     onClose();
   }
 
-  return <div className="mobileFullScreenModal mobileCameraModal" onClick={onClose}>
-    <div className="mobileFullScreenPanel mobileCameraPanel" onClick={(e) => e.stopPropagation()}>
-      <div className="mobileSheetTopbar">
-        <button className="mobileSheetCloseButton" type="button" onClick={onClose} aria-label="Закрыть">×</button>
-        <div>
-          <h2>Фото подтверждения</h2>
-          <p>{title}</p>
-        </div>
+  return <div className="modal" onClick={onClose}>
+    <div className="modalCard" onClick={(e) => e.stopPropagation()}>
+      <div className="rowBetween">
+        <h2>Фото для: {title}</h2>
+        <button className="iconBtn" onClick={onClose}>×</button>
       </div>
-      <div className="mobileCameraBody">
-        {busy && <div className="notice">Подключаем камеру...</div>}
-        {error && <div className="error">{error}</div>}
-        {!error && <video ref={videoRef} className="cameraVideo mobileCameraVideo" autoPlay playsInline muted />}
-      </div>
-      <div className="mobileStickyActionBar inModal">
-        <Button kind="soft" type="button" onClick={onClose}>Отмена</Button>
-        <Button type="button" disabled={busy || !!error} onClick={takePhoto}>Сделать фото</Button>
+      {busy && <div className="notice">Подключаем камеру...</div>}
+      {error && <div className="error">{error}</div>}
+      {!error && <video ref={videoRef} className="cameraVideo" autoPlay playsInline muted />}
+      <div className="actions cameraActions">
+        <Button kind="soft" onClick={onClose}>Отмена</Button>
+        <Button disabled={busy || !!error} onClick={takePhoto}>Сделать фото</Button>
       </div>
     </div>
   </div>;
@@ -364,6 +359,151 @@ export default function App() {
         : <EmployeeApp user={user} restaurant={session.restaurant} onLogout={onLogout} />}
   </div>;
 }
+
+
+function useOfflineQueueState() {
+  const [queueCount, setQueueCount] = useState(() => offlineQueueCount());
+  const [online, setOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
+
+  useEffect(() => {
+    const update = () => {
+      setQueueCount(offlineQueueCount());
+      setOnline(typeof navigator === 'undefined' ? true : navigator.onLine);
+    };
+    const flush = () => { update(); flushOfflineQueue().finally(update); };
+    window.addEventListener(OFFLINE_EVENT, update);
+    window.addEventListener('online', flush);
+    window.addEventListener('offline', update);
+    flushOfflineQueue().finally(update);
+    return () => {
+      window.removeEventListener(OFFLINE_EVENT, update);
+      window.removeEventListener('online', flush);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
+
+  return { queueCount, online, sync: () => flushOfflineQueue().finally(() => setQueueCount(offlineQueueCount())) };
+}
+
+
+function MobileSheetModal({
+  title,
+  subtitle,
+  children,
+  footer,
+  onClose,
+  className
+}: {
+  title: string;
+  subtitle?: ReactNode;
+  children: ReactNode;
+  footer?: ReactNode;
+  onClose: () => void;
+  className?: string;
+}) {
+  return <div className="mobileSheetModal" onClick={onClose}>
+    <section className={cx('mobileSheetPanel', className)} onClick={(event) => event.stopPropagation()}>
+      <div className="bottomSheetHandle" />
+      <div className="mobileSheetModalHead">
+        <div>
+          <h3>{title}</h3>
+          {subtitle && <p>{subtitle}</p>}
+        </div>
+        <button type="button" className="mobileIconButton" onClick={onClose} aria-label="Закрыть">
+          <AppIcon name="close" className="navIcon" />
+        </button>
+      </div>
+      <div className="mobileSheetContent">{children}</div>
+      {footer && <div className="mobileSheetFooter">{footer}</div>}
+    </section>
+  </div>;
+}
+
+function OfflineSyncBanner() {
+  const { queueCount, online, sync } = useOfflineQueueState();
+  if (online && queueCount === 0) return null;
+  return <div className={cx('mobileOfflineBanner', online && 'syncing')}>
+    <div><strong>{online ? 'Есть действия для синхронизации' : 'Офлайн-режим'}</strong><span>{queueCount > 0 ? `${queueCount} действий ждут отправки` : 'Данные сохранятся при появлении сети'}</span></div>
+    {online && queueCount > 0 && <button type="button" onClick={sync}>Синхр.</button>}
+  </div>;
+}
+
+function NotificationCenter({ open, onClose, onChanged }: { open: boolean; onClose: () => void; onChanged: () => void }) {
+  const [items, setItems] = useState<any[]>([]);
+  const unread = items.filter(item => !item.read_at).length;
+  async function load() { setItems(await api('/api/notifications')); }
+  useEffect(() => { if (open) load(); }, [open]);
+  async function markAllRead() { await api('/api/notifications/read-all', { method: 'POST', body: '{}' }); await load(); onChanged(); }
+  if (!open) return null;
+  return <MobileSheetModal title="Уведомления" subtitle={unread > 0 ? `${unread} новых` : 'Новых уведомлений нет'} onClose={onClose} className="mobileNotificationSheet" footer={items.length > 0 ? <Button type="button" kind="soft" onClick={markAllRead}>Отметить все прочитанными</Button> : null}>
+    <div className="mobileListSurface mobileNotificationList">
+      {items.length === 0 && <Empty text="Уведомлений пока нет" />}
+      {items.map(item => <article key={item.id} className={cx('mobileNotificationItem', !item.read_at && 'unread')}><div><strong>{item.title}</strong><span>{item.body || 'Новое событие'} · {fmtDate(item.created_at)}</span></div>{!item.read_at && <span className="mobileNotificationDot" />}</article>)}
+    </div>
+  </MobileSheetModal>;
+}
+
+function ShiftControl({ user }: { user: any }) {
+  const [shiftState, setShiftState] = useState<any>({ current: null, last_closed: null });
+  const [comment, setComment] = useState('');
+  const [msg, setMsg] = useState('');
+  async function load() { try { setShiftState(await api('/api/shifts/current')); } catch { setShiftState({ current: null, last_closed: null }); } }
+  useEffect(() => { load(); }, []);
+  async function startShift() {
+    setMsg('');
+    const result = await api('/api/shifts/start', { method: 'POST', body: JSON.stringify({ location: departments[user.department] || '' }) });
+    setMsg(result?.offline ? 'Смена сохранена офлайн' : 'Смена начата');
+    load().catch(() => undefined);
+  }
+  async function closeShift() {
+    if (!shiftState.current) return;
+    const result = await api(`/api/shifts/${shiftState.current.id}/close`, { method: 'POST', body: JSON.stringify({ comment }) });
+    setComment('');
+    setMsg(result?.offline ? 'Закрытие смены сохранено офлайн' : 'Смена закрыта');
+    load().catch(() => undefined);
+  }
+  const current = shiftState.current;
+  return <section className={cx('mobileShiftCard', current && 'active')}>
+    <div className="mobileShiftCardHead"><div><span>{roles[user.role]} · {departments[user.department]}</span><strong>{current ? 'Смена идёт' : 'Смена не начата'}</strong></div><span className={cx('badge', current ? 'active' : 'trial')}>{current ? 'online' : 'start'}</span></div>
+    <p>{current ? `Начата ${fmtDate(current.opened_at)}` : shiftState.last_closed ? `Последняя смена: ${fmtDate(shiftState.last_closed.closed_at)}` : 'Начните смену перед чек-листами и задачами.'}</p>
+    {current && <Textarea label="Комментарий к закрытию" value={comment} onChange={(e: any) => setComment(e.target.value)} placeholder="Что важно передать менеджеру" />}
+    <div className="mobileShiftActions">{current ? <><Button type="button" onClick={closeShift}>Закрыть смену</Button><Button type="button" kind="soft" onClick={() => download(`/api/reports/shift/export.csv?shift_id=${current.id}`, `shift-${current.id}.csv`)}>Экспорт</Button></> : <Button type="button" onClick={startShift}>Начать смену</Button>}</div>
+    {msg && <div className="notice mobileInlineNotice">{msg}</div>}
+  </section>;
+}
+
+function ActivityFeed({ limit = 6, compact = false }: { limit?: number; compact?: boolean }) {
+  const [events, setEvents] = useState<any[]>([]);
+  useEffect(() => { api(`/api/activity?limit=${limit}`).then(setEvents).catch(() => setEvents([])); }, [limit]);
+  return <div className={cx('activityFeed', compact && 'compact')}>{events.length === 0 && <Empty text="Событий пока нет" />}{events.map(event => <article key={event.id} className="activityItem"><span className="activityDot" /><div><strong>{event.title}</strong><span>{event.actor?.name || 'Система'} · {fmtDate(event.created_at)}</span></div></article>)}</div>;
+}
+
+function CommentsPanel({ entityType, entityId, title = 'Комментарии' }: { entityType: string; entityId: string; title?: string }) {
+  const [open, setOpen] = useState(false);
+  const [comments, setComments] = useState<any[]>([]);
+  const [body, setBody] = useState('');
+  const [msg, setMsg] = useState('');
+  async function load() { setComments(await api(`/api/comments?entity_type=${encodeURIComponent(entityType)}&entity_id=${encodeURIComponent(entityId)}`)); }
+  async function send() {
+    const value = body.trim();
+    if (!value) return;
+    const result = await api('/api/comments', { method: 'POST', body: JSON.stringify({ entity_type: entityType, entity_id: entityId, body: value }) });
+    setBody('');
+    setMsg(result?.offline ? 'Комментарий сохранён офлайн' : '');
+    load().catch(() => undefined);
+  }
+  useEffect(() => { if (open) load().catch(() => setComments([])); }, [open, entityType, entityId]);
+  return <div className="commentsPanel"><button type="button" className="commentsToggle" onClick={() => setOpen(!open)}>{title} {open ? '↑' : '↓'}</button>{open && <div className="commentsBody">{comments.length === 0 && <span className="muted">Комментариев пока нет</span>}{comments.map(comment => <div className="commentItem" key={comment.id}><strong>{comment.user?.name || 'Сотрудник'}</strong><span>{comment.body}</span><em>{fmtDate(comment.created_at)}</em></div>)}<div className="commentComposer"><input value={body} onChange={(e) => setBody(e.target.value)} placeholder="Написать комментарий" /><Button type="button" kind="soft" onClick={send}>Отправить</Button></div>{msg && <div className="notice">{msg}</div>}</div>}</div>;
+}
+
+function AdminProblemDashboard() {
+  const [data, setData] = useState<any>(null);
+  useEffect(() => { api('/api/admin/problems').then(setData).catch(() => setData(null)); }, []);
+  if (!data) return <Card title="Проблемы"><Empty text="Загружаем проблемный дашборд" /></Card>;
+  const metrics = data.metrics || {};
+  return <><Card title="Проблемный дашборд" right={<Button kind="soft" onClick={() => download('/api/admin/reports/operations.csv', 'operations-report.csv')}>Экспорт CSV</Button>}><div className="problemMetrics"><div><strong>{metrics.open_shifts || 0}</strong><span>смен сейчас</span></div><div><strong>{metrics.overdue_tasks || 0}</strong><span>просрочено</span></div><div><strong>{metrics.open_tech_requests || 0}</strong><span>техзаявок</span></div><div><strong>{metrics.pending_acknowledgements || 0}</strong><span>ознакомлений ждут</span></div></div><div className="problemList">{(data.problems || []).length === 0 && <Empty text="Критичных проблем сейчас нет" />}{(data.problems || []).map((problem: any) => <div className={cx('problemRow', problem.tone)} key={problem.id}><div><strong>{problem.title}</strong><span>{problem.subtitle}</span></div><span className="badge">{problem.type}</span></div>)}</div></Card><Card title="Лента событий"><ActivityFeed limit={12} /></Card></>;
+}
+
 
 function AuthScreen({ onLogin, error, setError }: any) {
   const [view, setView] = useState<View>('login');
@@ -792,6 +932,7 @@ function AdminOverview() {
         </div>
       </div>
     </Card>
+    <AdminProblemDashboard />
   </>;
 }
 
@@ -827,16 +968,22 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
   const [tab, setTab] = useState<Tab>('today');
   const [notificationCount, setNotificationCount] = useState(0);
   const [openTechComposer, setOpenTechComposer] = useState(false);
+  const [showNotificationCenter, setShowNotificationCenter] = useState(false);
   const tabs = withIcons([
     { id: 'today', title: 'Сегодня' }, { id: 'checklists', title: 'Чек-лист' }, { id: 'requests', title: 'Заявки' },
     { id: 'inventory', title: 'Инвент.' }, { id: 'tasks', title: 'Задачи' }, { id: 'knowledge', title: 'База' }
   ]);
 
-  useEffect(() => {
-    api('/api/tasks')
-      .then((rows) => setNotificationCount(rows.filter((task: any) => !task.assignment?.done).length))
-      .catch(() => setNotificationCount(0));
-  }, [tab]);
+  async function refreshNotifications() {
+    try {
+      const [notifications, tasks] = await Promise.all([api('/api/notifications').catch(() => []), api('/api/tasks').catch(() => [])]);
+      setNotificationCount(notifications.filter((item: any) => !item.read_at).length + tasks.filter((task: any) => !task.assignment?.done).length);
+    } catch {
+      setNotificationCount(0);
+    }
+  }
+
+  useEffect(() => { refreshNotifications(); }, [tab]);
 
   const mobileNavItems: MobileNavItem[] = [
     { id: 'today', title: 'Обзор', icon: 'overview', active: tab === 'today', onClick: () => setTab('today') },
@@ -880,15 +1027,16 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
       subtitle: tab === 'today' ? roles[user.role] : restaurant?.name,
       isOverview: tab === 'today',
       showMenuButton: false,
-      showNotifications: false,
+      showNotifications: true,
       navItems: mobileNavItems,
       menuItems: mobileMenuItems,
       createItems: mobileCreateItems,
       profileItems: mobileProfileItems,
       notificationCount,
-      onNotifications: () => setTab('tasks')
+      onNotifications: () => setShowNotificationCenter(true)
     }}
   >
+    <OfflineSyncBanner />
     <div className="hello"><b>{user.name}</b><span>{roles[user.role]} · {restaurant?.name}</span></div>
     {tab === 'today' && <Today user={user} onOpenTasks={() => setTab('tasks')} onOpenChecklists={() => setTab('checklists')} onOpenRequests={() => setTab('requests')} onOpenInventory={() => setTab('inventory')} />}
     {tab === 'checklists' && <Checklists user={user} />}
@@ -896,6 +1044,7 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     {tab === 'inventory' && <Inventory user={user} />}
     {tab === 'tasks' && <Tasks user={user} showTechComposer={openTechComposer} onCloseComposer={() => setOpenTechComposer(false)} />}
     {tab === 'knowledge' && <Knowledge user={user} />}
+    <NotificationCenter open={showNotificationCenter} onClose={() => setShowNotificationCenter(false)} onChanged={refreshNotifications} />
   </BasicWorkspace>;
 }
 
@@ -954,6 +1103,7 @@ function Today({
   const inventoryItems = overview.templates.reduce((total: number, template: any) => total + (template.items?.length || 0), 0);
 
   return <div className="mobileSectionStack">
+    <ShiftControl user={user} />
     <SectionTitle title="Сегодня" action={<button type="button" className="sectionLink" onClick={onOpenTasks}>Все задачи</button>} />
 
     <div className="mobileOverviewList">
@@ -1005,6 +1155,7 @@ function Today({
       </div>
       {completedTasks.length > 0 && <div className="mobileInlineHint">Выполнено за смену: {completedTasks.length}</div>}
     </Card>
+    <Card title="Лента смены" className="mobileCard compactMobileCard"><ActivityFeed limit={6} compact /></Card>
   </div>;
 }
 
@@ -1021,7 +1172,7 @@ function Checklists({ user, admin = false }: any) {
     title: '',
     role: 'manager',
     type: 'open',
-    items: [{ id: '', text: '' }]
+    items: [{ id: '', text: '', required: true, needs_photo: false, needs_comment: false }]
   });
 
   function resetTemplateEditor() {
@@ -1030,7 +1181,7 @@ function Checklists({ user, admin = false }: any) {
       title: '',
       role: 'manager',
       type: 'open',
-      items: [{ id: '', text: '' }]
+      items: [{ id: '', text: '', required: true, needs_photo: false, needs_comment: false }]
     });
   }
 
@@ -1050,10 +1201,17 @@ function Checklists({ user, admin = false }: any) {
     }));
   }
 
+  function updateTemplateItemFlag(index: number, key: string, value: boolean) {
+    setTemplateForm((current: any) => ({
+      ...current,
+      items: current.items.map((item: any, itemIndex: number) => itemIndex === index ? { ...item, [key]: value } : item)
+    }));
+  }
+
   function addTemplateItem() {
     setTemplateForm((current: any) => ({
       ...current,
-      items: [...current.items, { id: '', text: '' }]
+      items: [...current.items, { id: '', text: '', required: true, needs_photo: false, needs_comment: false }]
     }));
   }
 
@@ -1062,7 +1220,7 @@ function Checklists({ user, admin = false }: any) {
       const nextItems = current.items.filter((_: any, itemIndex: number) => itemIndex !== index);
       return {
         ...current,
-        items: nextItems.length ? nextItems : [{ id: '', text: '' }]
+        items: nextItems.length ? nextItems : [{ id: '', text: '', required: true, needs_photo: false, needs_comment: false }]
       };
     });
   }
@@ -1074,7 +1232,7 @@ function Checklists({ user, admin = false }: any) {
       title: template.title,
       role: template.role,
       type: template.type,
-      items: template.items.map((item: any) => ({ id: item.id, text: item.text }))
+      items: template.items.map((item: any) => ({ id: item.id, text: item.text, required: item.required !== false, needs_photo: !!item.needs_photo, needs_comment: !!item.needs_comment }))
     });
   }
 
@@ -1086,7 +1244,7 @@ function Checklists({ user, admin = false }: any) {
       role: templateForm.role,
       type: templateForm.type,
       items: templateForm.items
-        .map((item: any) => ({ id: item.id || undefined, text: String(item.text || '').trim() }))
+        .map((item: any) => ({ id: item.id || undefined, text: String(item.text || '').trim(), required: item.required !== false, needs_photo: !!item.needs_photo, needs_comment: !!item.needs_comment }))
         .filter((item: any) => item.text)
     };
 
@@ -1109,13 +1267,14 @@ function Checklists({ user, admin = false }: any) {
     setRunMsg('');
     const templateAnswers: any = {};
     template.items.forEach((i: any) => { templateAnswers[i.id] = answers[i.id] || { done: false, comment: '' }; });
-    const missingPhoto = template.items.find((i: any) => templateAnswers[i.id]?.done && !templateAnswers[i.id]?.photo_url);
-    if (missingPhoto) {
-      setRunMsg(`Для пункта "${missingPhoto.text}" нужно сделать фото`);
-      return;
-    }
-    await api('/api/checklists/runs', { method: 'POST', body: JSON.stringify({ template_id: template.id, answers: templateAnswers }) });
-    setRunMsg('Чек-лист сохранён'); setAnswers({}); load();
+    const missingRequired = template.items.find((i: any) => i.required !== false && !templateAnswers[i.id]?.done);
+    if (missingRequired) { setRunMsg(`Обязательный пункт "${missingRequired.text}" не выполнен`); return; }
+    const missingPhoto = template.items.find((i: any) => i.needs_photo && templateAnswers[i.id]?.done && !templateAnswers[i.id]?.photo_url);
+    if (missingPhoto) { setRunMsg(`Для пункта "${missingPhoto.text}" нужно сделать фото`); return; }
+    const missingComment = template.items.find((i: any) => i.needs_comment && templateAnswers[i.id]?.done && !String(templateAnswers[i.id]?.comment || '').trim());
+    if (missingComment) { setRunMsg(`Для пункта "${missingComment.text}" нужен комментарий`); return; }
+    const result = await api('/api/checklists/runs', { method: 'POST', body: JSON.stringify({ template_id: template.id, answers: templateAnswers }) });
+    setRunMsg(result?.offline ? 'Чек-лист сохранён офлайн' : 'Чек-лист сохранён'); setAnswers({}); load().catch(() => undefined);
   }
 
   const availableTemplates = admin
@@ -1141,7 +1300,7 @@ function Checklists({ user, admin = false }: any) {
     ? selectedTemplate.items.filter((item: any) => answers[item.id]?.done).length
     : 0;
 
-  const checklistRequiresPhoto = selectedTemplate?.items.some((item: any) => answers[item.id]?.done && !answers[item.id]?.photo_url);
+  const checklistRequiresPhoto = selectedTemplate?.items.some((item: any) => item.needs_photo && answers[item.id]?.done && !answers[item.id]?.photo_url);
 
   function toggleChecklistItem(item: any) {
     const current = answers[item.id] || {};
@@ -1149,7 +1308,8 @@ function Checklists({ user, admin = false }: any) {
       updateAnswer(item.id, { done: false, photo_url: '', comment: '' });
       return;
     }
-    setCameraTarget({ itemId: item.id, title: item.text });
+    if (item.needs_photo) { setCameraTarget({ itemId: item.id, title: item.text }); return; }
+    updateAnswer(item.id, { done: true });
   }
 
   if (!admin) {
@@ -1197,7 +1357,8 @@ function Checklists({ user, admin = false }: any) {
                 <strong>{item.text}</strong>
                 <span>{index + 1} / {selectedTemplate.items.length}</span>
               </div>
-              {itemAnswer.done && <div className="mobileChecklistLineMeta">
+              <div className="mobileChecklistSmartTags">{item.required !== false && <em>обязательный</em>}{item.needs_photo && <em>фото</em>}{item.needs_comment && <em>комментарий</em>}</div>
+              {itemAnswer.done && item.needs_photo && <div className="mobileChecklistLineMeta">
                 <span className="mobileChecklistPhotoStatus">
                   <AppIcon name="camera" className="navIcon" />
                   Фото добавлено
@@ -1222,7 +1383,7 @@ function Checklists({ user, admin = false }: any) {
         })}
       </div>}
 
-      {selectedTemplate && <div className="mobileStickyActionBar">
+      {selectedTemplate && <div className="mobileChecklistActions single">
         <Button
           type="button"
           className="mobilePrimaryButton"
@@ -1256,12 +1417,13 @@ function Checklists({ user, admin = false }: any) {
         </div>
 
         <div className="editorItems">
-          {templateForm.items.map((item: any, index: number) => <div className="editorItemRow" key={item.id || `new-${index}`}>
-            <input
-              value={item.text}
-              onChange={(e) => updateTemplateItem(index, e.target.value)}
-              placeholder={`Пункт ${index + 1}`}
-            />
+          {templateForm.items.map((item: any, index: number) => <div className="editorItemRow smartChecklistEditorRow" key={item.id || `new-${index}`}>
+            <input value={item.text} onChange={(e) => updateTemplateItem(index, e.target.value)} placeholder={`Пункт ${index + 1}`} />
+            <div className="smartChecklistFlags">
+              <label><input type="checkbox" checked={item.required !== false} onChange={(e) => updateTemplateItemFlag(index, 'required', e.target.checked)} />Обяз.</label>
+              <label><input type="checkbox" checked={!!item.needs_photo} onChange={(e) => updateTemplateItemFlag(index, 'needs_photo', e.target.checked)} />Фото</label>
+              <label><input type="checkbox" checked={!!item.needs_comment} onChange={(e) => updateTemplateItemFlag(index, 'needs_comment', e.target.checked)} />Коммент.</label>
+            </div>
             <button type="button" className="iconBtn" onClick={() => removeTemplateItem(index)}>×</button>
           </div>)}
         </div>
@@ -1322,17 +1484,24 @@ function Requests({ user, admin = false }: any) {
   const [received, setReceived] = useState<any>({});
   const [msg, setMsg] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [showRequestForm, setShowRequestForm] = useState(false);
+  const [showComposer, setShowComposer] = useState(false);
   async function load() { setProducts(await api('/api/products')); setRequests(await api('/api/requests')); }
   useEffect(() => { load(); }, []);
   async function submit() {
     const items = Object.entries(qty).map(([product_id, q]) => ({ product_id, qty_ordered: Number(q) })).filter(i => i.qty_ordered > 0);
-    await api('/api/requests', { method: 'POST', body: JSON.stringify({ department: user.department, items }) });
-    setQty({}); setMsg('Заявка отправлена'); setShowRequestForm(false); load();
+    if (items.length === 0) {
+      setMsg('Укажите количество хотя бы одного товара');
+      return;
+    }
+    const result = await api('/api/requests', { method: 'POST', body: JSON.stringify({ department: user.department, items }) });
+    setQty({});
+    setShowComposer(false);
+    setMsg(result?.offline ? 'Заявка сохранена офлайн и отправится после сети' : 'Заявка отправлена');
+    load().catch(() => undefined);
   }
   async function receive(req: any) {
-    await api(`/api/requests/${req.id}/receive`, { method: 'PATCH', body: JSON.stringify({ received: received[req.id] || {} }) });
-    setMsg('Приход товара обновлён'); load();
+    const result = await api(`/api/requests/${req.id}/receive`, { method: 'PATCH', body: JSON.stringify({ received: received[req.id] || {} }) });
+    setMsg(result?.offline ? 'Приход сохранён офлайн' : 'Приход товара обновлён'); load().catch(() => undefined);
   }
 
   const visibleRequests = statusFilter === 'all'
@@ -1345,24 +1514,20 @@ function Requests({ user, admin = false }: any) {
     });
 
   if (!admin) {
-    const requestItemsCount = Object.values(qty).filter((value) => Number(value) > 0).length;
+    const selectedCount = Object.values(qty).filter((value) => Number(value) > 0).length;
 
     return <>
       <div className="mobileSectionStack">
-        <SectionTitle
-          title="Заявки"
-          action={<button type="button" className="mobileCompactAction" onClick={() => setShowRequestForm(true)}>Новая заявка</button>}
-        />
-
+        <SectionTitle title="Заявки" action={<button type="button" className="sectionLink" onClick={() => setShowComposer(true)}>Новая заявка</button>} />
         {msg && <div className="notice mobileInlineNotice">{msg}</div>}
 
-        <button type="button" className="mobileCreateListRow" onClick={() => setShowRequestForm(true)}>
-          <div className="mobileOverviewIcon green"><AppIcon name="plus" className="navIcon" /></div>
+        <button type="button" className="mobileOverviewRow" onClick={() => setShowComposer(true)}>
+          <div className="mobileOverviewIcon green"><AppIcon name="requests" className="navIcon" /></div>
           <div className="mobileOverviewCopy">
             <strong>Создать заявку</strong>
-            <span>{requestItemsCount ? `Выбрано позиций: ${requestItemsCount}` : 'Добавьте товары в компактной форме'}</span>
+            <span>{products.length} товаров доступно для заказа</span>
           </div>
-          <AppIcon name="chevron" className="navIcon" />
+          <b>+</b>
         </button>
 
         <div className="mobileChipRow">
@@ -1372,11 +1537,7 @@ function Requests({ user, admin = false }: any) {
           <button type="button" className={cx('mobileChip', statusFilter === 'rejected' && 'active')} onClick={() => setStatusFilter('rejected')}><span>Отклонено</span><b>{requests.filter((request) => ['not_received', 'cancelled'].includes(request.status)).length}</b></button>
         </div>
 
-        <section className="mobileGroupedSection">
-          <div className="mobileSectionHeader">
-            <h3>История заявок</h3>
-            <span>{visibleRequests.length}</span>
-          </div>
+        <Card title="История заявок" className="mobileCard">
           {visibleRequests.length === 0 && <Empty text="Под выбранный статус заявок пока нет" />}
           <div className="mobileRequestList">
             {visibleRequests.map((request) => <article key={request.id} className="mobileRequestCard">
@@ -1393,42 +1554,35 @@ function Requests({ user, admin = false }: any) {
                   <strong>{item.qty_ordered} {item.product?.unit}</strong>
                 </div>)}
               </div>
+              <CommentsPanel entityType="product_request" entityId={request.id} />
             </article>)}
           </div>
-        </section>
+        </Card>
       </div>
 
-      {showRequestForm && <div className="mobileSheetModal" onClick={() => setShowRequestForm(false)}>
-        <div className="mobileSheetPanel mobileRequestSheet" onClick={(e) => e.stopPropagation()}>
-          <div className="bottomSheetHandle" />
-          <div className="mobileSheetTopbar">
-            <button className="mobileSheetCloseButton" type="button" onClick={() => setShowRequestForm(false)} aria-label="Закрыть">×</button>
+      {showComposer && <MobileSheetModal
+        title="Новая заявка"
+        subtitle={selectedCount > 0 ? `Выбрано позиций: ${selectedCount}` : 'Укажите фактическую потребность'}
+        onClose={() => setShowComposer(false)}
+        className="mobileRequestComposer"
+        footer={<Button type="button" className="mobilePrimaryButton" onClick={submit}>Отправить заявку</Button>}
+      >
+        <div className="mobileProductsList">
+          {products.map((product) => <label className="mobileProductRow" key={product.id}>
             <div>
-              <h2>Новая заявка</h2>
-              <p>{departments[user.department] || 'Ваш отдел'} · выберите количество</p>
+              <strong>{product.name}</strong>
+              <span>{departments[product.department] || 'Отдел'} · {product.unit}</span>
             </div>
-          </div>
-          <div className="mobileProductsList mobileSheetScrollArea">
-            {products.map((product) => <label className="mobileProductRow" key={product.id}>
-              <div>
-                <strong>{product.name}</strong>
-                <span>{departments[product.department] || 'Отдел'} · {product.unit}</span>
-              </div>
-              <input
-                type="number"
-                min="0"
-                value={qty[product.id] || ''}
-                onChange={(e) => setQty({ ...qty, [product.id]: e.target.value })}
-                placeholder="0"
-              />
-            </label>)}
-          </div>
-          <div className="mobileStickyActionBar inModal">
-            <Button type="button" kind="soft" onClick={() => setShowRequestForm(false)}>Отмена</Button>
-            <Button type="button" className="mobilePrimaryButton" disabled={!requestItemsCount} onClick={submit}>Отправить</Button>
-          </div>
+            <input
+              type="number"
+              min="0"
+              value={qty[product.id] || ''}
+              onChange={(e) => setQty({ ...qty, [product.id]: e.target.value })}
+              placeholder="0"
+            />
+          </label>)}
         </div>
-      </div>}
+      </MobileSheetModal>}
     </>;
   }
 
@@ -1443,6 +1597,7 @@ function Requests({ user, admin = false }: any) {
           <input type="number" min="0" placeholder="пришло" onChange={(e) => setReceived({ ...received, [r.id]: { ...(received[r.id] || {}), [i.id]: e.target.value } })} />
         </div>)}
         <Button kind="soft" onClick={() => receive(r)}>Отметить приход</Button>
+        <CommentsPanel entityType="product_request" entityId={r.id} />
       </div>)}</div>
     </Card>
   </>;
@@ -1544,8 +1699,8 @@ function Inventory({ user, admin = false }: any) {
   async function submit(t: any) {
     const payload: any = {};
     t.items.forEach((i: any) => { payload[i.product_id] = { qty: Number(values[i.product_id] || 0), comment: '' }; });
-    await api('/api/inventory/runs', { method: 'POST', body: JSON.stringify({ template_id: t.id, values: payload }) });
-    setValues({}); setMsg('Инвентаризация сохранена'); load();
+    const result = await api('/api/inventory/runs', { method: 'POST', body: JSON.stringify({ template_id: t.id, values: payload }) });
+    setValues({}); setMsg(result?.offline ? 'Инвентаризация сохранена офлайн' : 'Инвентаризация сохранена'); load().catch(() => undefined);
   }
 
   useEffect(() => {
@@ -1565,15 +1720,6 @@ function Inventory({ user, admin = false }: any) {
       if (!inventoryFilter.trim()) return true;
       return String(item.product?.name || '').toLowerCase().includes(inventoryFilter.trim().toLowerCase());
     }) || [];
-
-    function inventoryBadge(rawValue: any) {
-      if (rawValue === '' || rawValue === undefined || rawValue === null) return { text: 'Не указано', tone: '' };
-      const qty = Number(rawValue);
-      if (Number.isNaN(qty)) return { text: 'Не указано', tone: '' };
-      if (qty <= 0) return { text: 'Нет', tone: 'cancelled' };
-      if (qty <= 2) return { text: 'Мало', tone: 'trial' };
-      return { text: 'Норма', tone: 'active' };
-    }
 
     return <div className="mobileSectionStack">
       <SectionTitle title="Инвентаризация" />
@@ -1602,27 +1748,23 @@ function Inventory({ user, admin = false }: any) {
       <Card title={selectedTemplate?.title || 'Бланк инвентаризации'} className="mobileCard">
         {filteredItems.length === 0 && <Empty text="Нет товаров по этому фильтру" />}
         <div className="mobileInventoryList">
-          {filteredItems.map((item: any) => {
-            const state = inventoryBadge(values[item.product_id]);
-            return <label key={item.product_id} className={cx('mobileInventoryItem', state.tone === 'cancelled' && 'danger')}>
-              <div className="mobileInventoryCopy">
-                <strong>{item.product?.name}</strong>
-                <span>{item.product?.unit || 'шт.'}</span>
-              </div>
-              <div className="mobileInventoryActions">
-                <span className={cx('badge', state.tone)}>{state.text}</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={values[item.product_id] || ''}
-                  onChange={(e) => setValues({ ...values, [item.product_id]: e.target.value })}
-                  placeholder="0"
-                />
-              </div>
-            </label>;
-          })}
+          {filteredItems.map((item: any) => <label key={item.product_id} className="mobileInventoryItem">
+            <div className="mobileInventoryCopy">
+              <strong>{item.product?.name}</strong>
+              <span>{item.product?.unit || 'шт.'}</span>
+            </div>
+            <div className="mobileInventoryActions">
+              <input
+                type="number"
+                min="0"
+                value={values[item.product_id] || ''}
+                onChange={(e) => setValues({ ...values, [item.product_id]: e.target.value })}
+                placeholder="0"
+              />
+            </div>
+          </label>)}
         </div>
-        {selectedTemplate && <div className="mobileStickyActionBar"><Button type="button" className="mobilePrimaryButton" onClick={() => submit(selectedTemplate)}>Сохранить остатки</Button></div>}
+        {selectedTemplate && <Button type="button" className="mobilePrimaryButton" onClick={() => submit(selectedTemplate)}>Сохранить остатки</Button>}
         {msg && <div className="notice mobileInlineNotice">{msg}</div>}
       </Card>
     </div>;
@@ -1752,32 +1894,36 @@ function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer 
   async function create(e: FormEvent) {
     e.preventDefault();
     setTaskMsg('');
-    await api('/api/tasks', { method: 'POST', body: JSON.stringify(form) });
+    const result = await api('/api/tasks', { method: 'POST', body: JSON.stringify(form) });
     setForm({ ...form, title: '', description: '' });
-    setTaskMsg('Задача создана');
-    load();
+    setTaskMsg(result?.offline ? 'Задача сохранена офлайн' : 'Задача создана');
+    load().catch(() => undefined);
   }
-  async function done(id: string) { await api(`/api/tasks/${id}/done`, { method: 'PATCH', body: JSON.stringify({ comment: '' }) }); load(); }
+  async function done(id: string) {
+    const result = await api(`/api/tasks/${id}/done`, { method: 'PATCH', body: JSON.stringify({ comment: '' }) });
+    setTaskMsg(result?.offline ? 'Выполнение сохранено офлайн' : 'Задача выполнена');
+    load().catch(() => undefined);
+  }
   async function createTechRequest(e: FormEvent) {
     e.preventDefault();
     setTechMsg('');
-    await api('/api/tech-requests', { method: 'POST', body: JSON.stringify(techForm) });
+    const result = await api('/api/tech-requests', { method: 'POST', body: JSON.stringify(techForm) });
     setTechForm({ title: '', description: '', category: 'equipment' });
-    setTechMsg('Техзаявка отправлена менеджеру');
+    setTechMsg(result?.offline ? 'Техзаявка сохранена офлайн' : 'Техзаявка отправлена менеджеру');
     setShowTechForm(false);
     onCloseComposer?.();
     load();
   }
   async function updateTechRequest(request: any) {
     const draft = techDrafts[request.id] || {};
-    await api(`/api/tech-requests/${request.id}`, {
+    const result = await api(`/api/tech-requests/${request.id}`, {
       method: 'PATCH',
       body: JSON.stringify({
         status: draft.status || request.status,
         manager_comment: draft.manager_comment !== undefined ? draft.manager_comment : request.manager_comment || ''
       })
     });
-    setTechMsg('Техзаявка обновлена');
+    setTechMsg(result?.offline ? 'Обновление сохранено офлайн' : 'Техзаявка обновлена');
     load();
   }
 
@@ -1807,6 +1953,7 @@ function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer 
                 <span>{task.description || 'Без описания'}</span>
               </div>
               <Button type="button" kind="soft" onClick={() => done(task.id)}>Выполнено</Button>
+              <CommentsPanel entityType="task" entityId={task.id} />
             </div>)}
           </div>
         </Card>
@@ -1824,6 +1971,7 @@ function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer 
               </div>
               <p>{request.description || 'Без описания'}</p>
               <div className="mobileInlineHint">{request.manager_comment || 'Комментарий менеджера появится здесь'}</div>
+              <CommentsPanel entityType="tech_request" entityId={request.id} />
             </article>)}
           </div>
           {techMsg && <div className="notice mobileInlineNotice">{techMsg}</div>}
@@ -1852,31 +2000,25 @@ function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer 
         </Card>
       </div>
 
-      {showTechForm && <div className="mobileSheetModal" onClick={() => {
+      {showTechForm && <div className="modal" onClick={() => {
         setShowTechForm(false);
         onCloseComposer?.();
       }}>
-        <div className="mobileSheetPanel mobileFormSheet" onClick={(e) => e.stopPropagation()}>
-          <div className="bottomSheetHandle" />
-          <div className="mobileSheetTopbar">
-            <button className="mobileSheetCloseButton" type="button" onClick={() => {
+        <div className="modalCard mobileDocModal" onClick={(e) => e.stopPropagation()}>
+          <div className="rowBetween">
+            <h2>Техзаявка</h2>
+            <button className="iconBtn" onClick={() => {
               setShowTechForm(false);
               onCloseComposer?.();
-            }} aria-label="Закрыть">×</button>
-            <div>
-              <h2>Техзаявка</h2>
-              <p>Опишите проблему, менеджер увидит её в задачах</p>
-            </div>
+            }}>×</button>
           </div>
-          <form className="form mobileSheetForm" onSubmit={createTechRequest}>
+          <form className="form" onSubmit={createTechRequest}>
             <Field label="Тема заявки" value={techForm.title} onChange={(e: any) => setTechForm({ ...techForm, title: e.target.value })} placeholder="Например: вызвать мастера по холодильнику" />
             <Select label="Тип проблемы" value={techForm.category} onChange={(e: any) => setTechForm({ ...techForm, category: e.target.value })}>
               {Object.entries(techRequestCategories).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
             </Select>
             <Textarea label="Что случилось" value={techForm.description} onChange={(e: any) => setTechForm({ ...techForm, description: e.target.value })} placeholder="Опишите проблему" />
-            <div className="mobileStickyActionBar inModal single">
-              <Button className="mobilePrimaryButton">Отправить техзаявку</Button>
-            </div>
+            <Button className="mobilePrimaryButton">Отправить техзаявку</Button>
           </form>
         </div>
       </div>}
@@ -1948,6 +2090,7 @@ function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer 
                   <strong>{request.manager_comment || 'Комментария пока нет'}</strong>
                 </div>
               </div>}
+              <CommentsPanel entityType="tech_request" entityId={request.id} />
           </div>;
         })}
       </div>
@@ -1958,6 +2101,7 @@ function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer 
         <div className="rowBetween"><b>{t.title}</b>{!admin && <span className={`badge ${t.assignment?.done ? 'active' : ''}`}>{t.assignment?.done ? 'готово' : 'ждёт'}</span>}</div>
         <p>{t.description}</p>
         {admin ? <p>Назначено: {t.assignments?.length || 0}, выполнено: {t.assignments?.filter((a: any) => a.done).length || 0}</p> : !t.assignment?.done && <Button onClick={() => done(t.id)}>Выполнено</Button>}
+        <CommentsPanel entityType="task" entityId={t.id} />
       </div>)}</div>
     </Card>
   </>;
@@ -1973,7 +2117,7 @@ function Knowledge({ user, admin = false }: any) {
   async function load() { const cats = await api('/api/knowledge'); setCategories(cats); if (admin) setStats(await api('/api/admin/knowledge/stats')); }
   useEffect(() => { load(); }, []);
   async function viewDoc(doc: any) { setOpenDoc(doc); await api(`/api/knowledge/${doc.id}/view`, { method: 'POST', body: '{}' }); }
-  async function ack(doc: any) { await api(`/api/knowledge/${doc.id}/ack`, { method: 'POST', body: '{}' }); setOpenDoc({ ...doc, acknowledged: true }); load(); }
+  async function ack(doc: any) { const result = await api(`/api/knowledge/${doc.id}/ack`, { method: 'POST', body: '{}' }); setOpenDoc({ ...doc, acknowledged: true, offlineAck: !!result?.offline }); load().catch(() => undefined); }
   async function createCat(e: FormEvent) { e.preventDefault(); await api('/api/admin/knowledge/categories', { method: 'POST', body: JSON.stringify(catForm) }); setCatForm({ title: '', allowed_roles: ['waiter'] }); load(); }
   async function createDoc(e: FormEvent) { e.preventDefault(); await api('/api/admin/knowledge/documents', { method: 'POST', body: JSON.stringify(docForm) }); setDocForm({ ...docForm, title: '', content: '' }); load(); }
 
@@ -1982,7 +2126,7 @@ function Knowledge({ user, admin = false }: any) {
       .map((category) => ({
         ...category,
         documents: category.documents.filter((document: any) => {
-          const haystack = `${document.title} ${document.content || ""}`.toLowerCase();
+          const haystack = `${document.title} ${document.content || ''}`.toLowerCase();
           return !search.trim() || haystack.includes(search.trim().toLowerCase());
         })
       }))
@@ -1991,46 +2135,41 @@ function Knowledge({ user, admin = false }: any) {
     return <>
       <div className="mobileSectionStack">
         <SectionTitle title="База знаний" />
-        <div className="mobileSearchSurface">
+        <Card className="mobileCard">
           <Field label="Поиск инструкций" icon="search" value={search} onChange={(e: any) => setSearch(e.target.value)} placeholder="Поиск инструкций..." />
-        </div>
-        <div className="mobileKnowledgeGrid">
-          {visibleCategories.map((category) => <section key={category.id} className="mobileKnowledgeFolder">
-            <div className="mobileKnowledgeFolderHead">
-              <div className="mobileStatBadge blue"><AppIcon name="folder" className="navIcon" /></div>
-              <div>
-                <strong>{category.title}</strong>
-                <span>{category.documents.length} документов</span>
-              </div>
-            </div>
-            <div className="mobileKnowledgeDocs">
-              {category.documents.map((document: any) => <button key={document.id} type="button" className="mobileKnowledgeDoc" onClick={() => viewDoc(document)}>
-                <div className="mobileKnowledgeDocIcon"><AppIcon name="file" className="navIcon" /></div>
-                <div className="mobileKnowledgeDocCopy">
-                  <strong>{document.title}</strong>
-                  <span>{document.acknowledged ? 'Ознакомлен' : document.requires_acknowledgement ? 'Нужно ознакомиться' : 'Документ'}</span>
+          <div className="mobileKnowledgeGrid">
+            {visibleCategories.map((category) => <article key={category.id} className="mobileKnowledgeFolder">
+              <div className="mobileKnowledgeFolderHead">
+                <div className="mobileStatBadge blue"><AppIcon name="folder" className="navIcon" /></div>
+                <div>
+                  <strong>{category.title}</strong>
+                  <span>{category.documents.length} документов</span>
                 </div>
-                <AppIcon name="chevron" className="navIcon" />
-              </button>)}
-            </div>
-          </section>)}
-          {visibleCategories.length === 0 && <Empty text="Ничего не найдено по этому запросу" />}
-        </div>
-      </div>
-      {openDoc && <div className="mobileReaderModal" role="dialog" aria-modal="true">
-        <div className="mobileReaderTopbar">
-          <button className="mobileSheetCloseButton" type="button" onClick={() => setOpenDoc(null)} aria-label="Закрыть">×</button>
-          <div>
-            <h2>{openDoc.title}</h2>
-            <p>{openDoc.acknowledged ? 'Ознакомлен' : openDoc.requires_acknowledgement ? 'Требует ознакомления' : 'Документ'}</p>
+              </div>
+              <div className="mobileKnowledgeDocs">
+                {category.documents.map((document: any) => <button key={document.id} type="button" className="mobileKnowledgeDoc" onClick={() => viewDoc(document)}>
+                  <div className="mobileKnowledgeDocIcon"><AppIcon name="file" className="navIcon" /></div>
+                  <div className="mobileKnowledgeDocCopy">
+                    <strong>{document.title}</strong>
+                    <span>{document.acknowledged ? 'Ознакомлен' : document.requires_acknowledgement ? 'Нужно ознакомиться' : 'Документ'}</span>
+                  </div>
+                  <AppIcon name="chevron" className="navIcon" />
+                </button>)}
+              </div>
+            </article>)}
+            {visibleCategories.length === 0 && <Empty text="Ничего не найдено по этому запросу" />}
           </div>
-        </div>
-        <div className="mobileReaderContent">
+        </Card>
+      </div>
+      {openDoc && <div className="modal" onClick={() => setOpenDoc(null)}>
+        <div className="modalCard mobileDocModal" onClick={(e) => e.stopPropagation()}>
+          <div className="rowBetween">
+            <h2>{openDoc.title}</h2>
+            <button className="iconBtn" onClick={() => setOpenDoc(null)}>×</button>
+          </div>
           <pre>{openDoc.content}</pre>
+          {openDoc.requires_acknowledgement && !openDoc.acknowledged && <Button onClick={() => ack(openDoc)}>Ознакомился</Button>}
         </div>
-        {openDoc.requires_acknowledgement && !openDoc.acknowledged && <div className="mobileStickyActionBar inReader single">
-          <Button className="mobilePrimaryButton" onClick={() => ack(openDoc)}>Ознакомился</Button>
-        </div>}
       </div>}
     </>;
   }
