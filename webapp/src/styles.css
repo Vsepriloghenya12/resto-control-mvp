@@ -2001,7 +2001,7 @@ input[type='checkbox'] {
 .modal {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 100;
   display: grid;
   place-items: center;
   padding: 24px;
@@ -4597,6 +4597,18 @@ textarea {
 
   .modalCard:not(.mobileDocModal) {
     border-radius: 20px;
+  }
+
+  .modal {
+    z-index: 100;
+    padding-bottom: calc(78px + env(safe-area-inset-bottom));
+    align-items: end;
+  }
+
+  .modalCard.mobileDocModal {
+    width: 100%;
+    max-height: calc(100dvh - 96px - env(safe-area-inset-bottom));
+    padding-bottom: calc(22px + env(safe-area-inset-bottom));
   }
 
   .bottomNavigation {

@@ -1554,7 +1554,9 @@ function Inventory({ user, admin = false }: any) {
               </div>
               <input
                 type="text"
-                inputMode="decimal"
+                inputMode="tel"
+                pattern="[0-9+,.\s]*"
+                autoComplete="off"
                 value={rawValue}
                 onChange={(e) => setValues({ ...values, [item.product_id]: e.target.value })}
                 placeholder="Например: 3+2,2+0,04"
