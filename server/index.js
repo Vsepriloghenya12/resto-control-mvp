@@ -1922,12 +1922,23 @@ app.patch('/api/admin/knowledge/categories/:id', auth, ensureRestaurantActive, a
 app.delete('/api/admin/knowledge/categories/:id', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
   const category = db.knowledge_categories.find(c => c.id === req.params.id && c.restaurant_id === req.user.restaurant_id);
   if (!category) return res.status(404).json({ error: 'Папка не найдена' });
-  const now = nowIso();
-  const affectedDocs = db.knowledge_documents.filter(d => d.restaurant_id === req.user.restaurant_id && d.category_id === category.id && d.is_active);
-  affectedDocs.forEach(doc => { doc.is_active = false; doc.updated_at = now; });
-  db.knowledge_categories = db.knowledge_categories.filter(c => !(c.id === category.id && c.restaurant_id === req.user.restaurant_id));
+
+  const docsToDelete = db.knowledge_documents
+    .filter(d => d.restaurant_id === req.user.restaurant_id && d.category_id === category.id)
+    .map(d => d.id);
+  const deletedDocs = docsToDelete.length;
+
+  db.knowledge_acknowledgements = db.knowledge_acknowledgements
+    .filter(a => !(a.restaurant_id === req.user.restaurant_id && docsToDelete.includes(a.document_id)));
+  db.knowledge_views = db.knowledge_views
+    .filter(v => !(v.restaurant_id === req.user.restaurant_id && docsToDelete.includes(v.document_id)));
+  db.knowledge_documents = db.knowledge_documents
+    .filter(d => !(d.restaurant_id === req.user.restaurant_id && d.category_id === category.id));
+  db.knowledge_categories = db.knowledge_categories
+    .filter(c => !(c.id === category.id && c.restaurant_id === req.user.restaurant_id));
+
   await persist();
-  res.json({ ok: true, deleted_documents: affectedDocs.length });
+  res.json({ ok: true, deleted_documents: deletedDocs });
 }));
 
 app.post('/api/admin/knowledge/documents', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
@@ -1936,23 +1947,31 @@ app.post('/api/admin/knowledge/documents', auth, ensureRestaurantActive, adminOn
   if (!category) return res.status(400).json({ error: 'Выберите папку для документа' });
 
   const docType = String(type || 'text').trim() || 'text';
+  const pdfLike = ['pdf', 'ttk', 'service_book'].includes(docType);
   let storedPdf = null;
   let storedPhoto = null;
   let parsedTtk = null;
 
-  if (file?.data) {
-    storedPdf = saveKnowledgeFile(file, req.user.restaurant_id, 'pdf');
-    if (docType === 'ttk') {
-      try {
-        parsedTtk = await parseTtkPdfBuffer(storedPdf.buffer);
-      } catch (error) {
-        return res.status(400).json({ error: 'PDF загружен, но состав ТТК не удалось прочитать. Загрузите PDF с текстом, не скан.' });
-      }
+  try {
+    if (file?.data) {
+      storedPdf = saveKnowledgeFile(file, req.user.restaurant_id, 'pdf');
+      if (docType === 'ttk') parsedTtk = await parseTtkPdfBuffer(storedPdf.buffer);
     }
+    if (photo?.data) storedPhoto = saveKnowledgeFile(photo, req.user.restaurant_id, 'image');
+  } catch (error) {
+    const fallback = docType === 'ttk'
+      ? 'PDF загружен, но состав ТТК не удалось прочитать. Загрузите PDF с текстом, не скан.'
+      : 'Не удалось загрузить файл. Проверьте формат PDF или изображения.';
+    return res.status(400).json({ error: error.message || fallback });
   }
-  if (photo?.data) storedPhoto = saveKnowledgeFile(photo, req.user.restaurant_id, 'image');
 
-  const cleanTitle = String(title || '').trim();
+  if (pdfLike && !storedPdf?.url && !file_url) {
+    return res.status(400).json({ error: 'Выберите PDF-файл' });
+  }
+
+  const uploadedName = String(storedPdf?.filename || file?.file_name || file?.name || '').trim();
+  const fallbackTitle = uploadedName ? path.basename(uploadedName, path.extname(uploadedName)) : '';
+  const cleanTitle = String(title || fallbackTitle).trim();
   const common = {
     restaurant_id: req.user.restaurant_id,
     category_id,
@@ -1975,7 +1994,7 @@ app.post('/api/admin/knowledge/documents', auth, ensureRestaurantActive, adminOn
     const docs = cards.map((card, index) => ({
       id: uid('kdoc'),
       ...common,
-      title: cleanTitle && cards.length === 1 ? cleanTitle : (card.title || cleanTitle || `ТТК ${index + 1}`),
+      title: cleanTitle && cards.length === 1 ? cleanTitle : (card.title || cleanTitle || 'ТТК ' + (index + 1)),
       content: buildTtkContent(card),
       ingredients: card.ingredients || [],
       sort_order: common.sort_order + index
@@ -2007,29 +2026,36 @@ app.patch('/api/admin/knowledge/documents/:id', auth, ensureRestaurantActive, ad
   if (!category) return res.status(400).json({ error: 'Выберите папку для документа' });
 
   const nextType = String(type || doc.type || 'text').trim() || 'text';
-  const cleanTitle = String(title || '').trim();
+  const pdfLike = ['pdf', 'ttk', 'service_book'].includes(nextType);
   let storedPdf = null;
   let storedPhoto = null;
   let parsedTtk = null;
 
-  if (file?.data) {
-    storedPdf = saveKnowledgeFile(file, req.user.restaurant_id, 'pdf');
-    if (nextType === 'ttk') {
-      try {
-        parsedTtk = await parseTtkPdfBuffer(storedPdf.buffer);
-      } catch (error) {
-        return res.status(400).json({ error: 'PDF загружен, но состав ТТК не удалось прочитать. Загрузите PDF с текстом, не скан.' });
-      }
+  try {
+    if (file?.data) {
+      storedPdf = saveKnowledgeFile(file, req.user.restaurant_id, 'pdf');
+      if (nextType === 'ttk') parsedTtk = await parseTtkPdfBuffer(storedPdf.buffer);
     }
+    if (photo?.data) storedPhoto = saveKnowledgeFile(photo, req.user.restaurant_id, 'image');
+  } catch (error) {
+    const fallback = nextType === 'ttk'
+      ? 'PDF загружен, но состав ТТК не удалось прочитать. Загрузите PDF с текстом, не скан.'
+      : 'Не удалось загрузить файл. Проверьте формат PDF или изображения.';
+    return res.status(400).json({ error: error.message || fallback });
   }
-  if (photo?.data) storedPhoto = saveKnowledgeFile(photo, req.user.restaurant_id, 'image');
+
+  const nextFileUrl = storedPdf?.url || (typeof file_url === 'string' ? file_url : doc.file_url || '');
+  if (pdfLike && !nextFileUrl) return res.status(400).json({ error: 'Выберите PDF-файл' });
+
+  const uploadedName = String(storedPdf?.filename || file?.file_name || file?.name || '').trim();
+  const fallbackTitle = uploadedName ? path.basename(uploadedName, path.extname(uploadedName)) : '';
+  const cleanTitle = String(title || fallbackTitle).trim();
 
   doc.category_id = nextCategoryId;
   doc.type = nextType;
   doc.allowed_roles = Array.isArray(allowed_roles) ? allowed_roles : doc.allowed_roles;
   doc.requires_acknowledgement = requires_acknowledgement !== false;
-  if (storedPdf?.url) doc.file_url = storedPdf.url;
-  else if (typeof file_url === 'string') doc.file_url = file_url;
+  doc.file_url = nextFileUrl;
   if (storedPhoto?.url) doc.photo_url = storedPhoto.url;
 
   if (nextType === 'ttk' && parsedTtk?.cards?.length) {

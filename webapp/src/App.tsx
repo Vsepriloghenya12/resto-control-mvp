@@ -72,12 +72,29 @@ type MobileWorkspaceConfig = {
 const brandLogoSrc = '/resto-control-logo.png';
 
 const subscriptionTariffs = [
-  { title: 'До 10 сотрудников', price: '1 490 ₽ / мес' },
-  { title: 'До 25 сотрудников', price: '2 990 ₽ / мес' },
-  { title: 'До 50 сотрудников', price: '4 990 ₽ / мес' },
-  { title: 'До 100 сотрудников', price: '7 990 ₽ / мес' },
-  { title: '100+ сотрудников', price: 'индивидуально' }
+  { title: 'Старт', employees: 'до 10 сотрудников', price: '1 490 ₽', period: '/ мес', note: 'Для небольших команд', featured: false },
+  { title: 'Команда', employees: 'до 25 сотрудников', price: '2 990 ₽', period: '/ мес', note: 'Для растущего заведения', featured: true },
+  { title: 'Бизнес', employees: 'до 50 сотрудников', price: '4 990 ₽', period: '/ мес', note: 'Для нескольких смен', featured: false },
+  { title: 'Сеть', employees: 'до 100 сотрудников', price: '7 990 ₽', period: '/ мес', note: 'Для крупных ресторанов', featured: false },
+  { title: 'Enterprise', employees: '100+ сотрудников', price: 'Индивидуально', period: '', note: 'Персональные условия', featured: false }
 ];
+
+function TariffPlans() {
+  return <div className="tariffGrid">
+    {subscriptionTariffs.map((tariff) => <div className={cx('tariffCard', tariff.featured && 'featured')} key={tariff.title}>
+      {tariff.featured && <span className="tariffBadge">Популярный</span>}
+      <div className="tariffCardHead">
+        <strong>{tariff.title}</strong>
+        <span>{tariff.employees}</span>
+      </div>
+      <div className="tariffPrice">
+        <b>{tariff.price}</b>
+        {tariff.period && <em>{tariff.period}</em>}
+      </div>
+      <p>{tariff.note}</p>
+    </div>)}
+  </div>;
+}
 
 function WorkspaceInfoModal({
   title,
@@ -87,7 +104,7 @@ function WorkspaceInfoModal({
   onClose
 }: {
   title: string;
-  text: string;
+  text?: string;
   details?: ReactNode;
   actions: { label: string; kind?: string; onClick: () => void }[];
   onClose: () => void;
@@ -98,7 +115,7 @@ function WorkspaceInfoModal({
         <h2>{title}</h2>
         <button className="iconBtn" onClick={onClose}>×</button>
       </div>
-      <p className="infoModalText">{text}</p>
+      {text && <p className="infoModalText">{text}</p>}
       {details}
       <div className="actions">
         {actions.map((action) => <Button
@@ -517,7 +534,7 @@ function RestaurantWorkspace({
     setModalKind(null);
   }
 
-  const modal = modalKind === 'notifications'
+  const modal: { title: string; text?: string; details?: ReactNode; actions: { label: string; kind?: string; onClick: () => void }[] } | null = modalKind === 'notifications'
     ? {
         title: 'Центр действий',
         text: 'Быстро переходите к ключевым разделам кабинета: задачам, заявкам и чек-листам.',
@@ -539,16 +556,9 @@ function RestaurantWorkspace({
       : modalKind === 'billing'
         ? {
             title: 'Тарифы и оплата',
-            text: 'Стоимость зависит от количества сотрудников в заведении. Для ресторанов больше 100 человек условия обсуждаются индивидуально.',
-            details: <div className="tariffList">
-              {subscriptionTariffs.map((tariff) => <div className="tariffRow" key={tariff.title}>
-                <span>{tariff.title}</span>
-                <strong>{tariff.price}</strong>
-              </div>)}
-            </div>,
+            details: <TariffPlans />,
             actions: [
-              { label: 'Открыть обзор', kind: 'primary', onClick: () => setActive('overview') },
-              { label: 'База знаний', onClick: () => setActive('knowledge') }
+              { label: 'Открыть обзор', kind: 'primary', onClick: () => setActive('overview') }
             ]
           }
         : null;
@@ -1452,6 +1462,14 @@ function Checklists({ user, admin = false }: any) {
 }
 
 
+function isKnowledgeFileType(type: string) {
+  return ['pdf', 'ttk', 'service_book'].includes(String(type || ''));
+}
+
+function filenameToTitle(fileName = '') {
+  return String(fileName || '').replace(/\.[^.]+$/, '').trim();
+}
+
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1881,11 +1899,14 @@ function Knowledge({ user, admin = false }: any) {
   const [editingDocId, setEditingDocId] = useState('');
   const [docEditForm, setDocEditForm] = useState<any>(emptyDocForm);
 
-  async function load() {
+  async function load(preferredCategoryId = selectedCategoryId) {
     const cats = await api('/api/knowledge');
     setCategories(cats);
     if (admin) setStats(await api('/api/admin/knowledge/stats'));
-    if (!selectedCategoryId && cats.length) setSelectedCategoryId(cats[0].id);
+
+    if (!admin) return;
+    const categoryExists = preferredCategoryId && cats.some((category: any) => category.id === preferredCategoryId);
+    setSelectedCategoryId(categoryExists ? preferredCategoryId : (cats[0]?.id || ''));
   }
 
   useEffect(() => { load(); }, []);
@@ -1910,7 +1931,7 @@ function Knowledge({ user, admin = false }: any) {
       setDocForm((current: any) => ({ ...current, category_id: created.id }));
       setSelectedCategoryId(created.id);
       setKnowledgeMsg('Папка создана');
-      load();
+      load(created.id);
     } catch (error: any) {
       setKnowledgeMsg(error.message || 'Не удалось создать папку');
     }
@@ -1929,7 +1950,7 @@ function Knowledge({ user, admin = false }: any) {
       setEditingCategoryId('');
       setCategoryEditTitle('');
       setKnowledgeMsg('Папка сохранена');
-      load();
+      load(categoryId);
     } catch (error: any) {
       setKnowledgeMsg(error.message || 'Не удалось сохранить папку');
     }
@@ -1942,7 +1963,7 @@ function Knowledge({ user, admin = false }: any) {
       await api(`/api/admin/knowledge/categories/${category.id}`, { method: 'DELETE' });
       if (selectedCategoryId === category.id) setSelectedCategoryId('');
       setKnowledgeMsg('Папка удалена');
-      load();
+      load('');
     } catch (error: any) {
       setKnowledgeMsg(error.message || 'Не удалось удалить папку');
     }
@@ -1976,15 +1997,21 @@ function Knowledge({ user, admin = false }: any) {
     e.preventDefault();
     setKnowledgeMsg('');
     try {
+      const nextType = docForm.type || 'text';
+      if (isKnowledgeFileType(nextType) && !docForm.file) {
+        setKnowledgeMsg('Выберите PDF-файл');
+        return;
+      }
       const payload = {
         ...docForm,
+        title: docForm.title || (nextType !== 'ttk' ? filenameToTitle(docForm.file?.file_name) : ''),
         category_id: docForm.category_id || selectedCategoryId || categories[0]?.id || '',
         allowed_roles: []
       };
       const created = await api('/api/admin/knowledge/documents', { method: 'POST', body: JSON.stringify(payload) });
       setDocForm({ ...emptyDocForm, category_id: payload.category_id, type: docForm.type });
-      setKnowledgeMsg(created?.created ? `Документы сохранены: ${created.created}` : 'Документ сохранён');
-      load();
+      setKnowledgeMsg(created?.created ? 'Документы сохранены: ' + created.created : 'Документ сохранён');
+      load(payload.category_id);
     } catch (error: any) {
       setKnowledgeMsg(error.message || 'Не удалось сохранить документ');
     }
@@ -2012,7 +2039,7 @@ function Knowledge({ user, admin = false }: any) {
       setEditingDocId('');
       setDocEditForm(emptyDocForm);
       setKnowledgeMsg('Документ сохранён');
-      load();
+      load(docEditForm.category_id || selectedCategoryId);
     } catch (error: any) {
       setKnowledgeMsg(error.message || 'Не удалось сохранить документ');
     }
@@ -2026,7 +2053,7 @@ function Knowledge({ user, admin = false }: any) {
       if (openDoc?.id === doc.id) setOpenDoc(null);
       if (editingDocId === doc.id) setEditingDocId('');
       setKnowledgeMsg('Документ удалён');
-      load();
+      load(selectedCategoryId);
     } catch (error: any) {
       setKnowledgeMsg(error.message || 'Не удалось удалить документ');
     }
