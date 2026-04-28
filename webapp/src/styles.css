@@ -4996,3 +4996,48 @@ textarea {
 .techRequestSheet .mobileSheetBody {
   padding-bottom: calc(96px + env(safe-area-inset-bottom));
 }
+
+/* Tariffs and inventory delete controls */
+.tariffList {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0 8px;
+}
+
+.tariffRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.tariffRow span {
+  color: var(--text-secondary);
+  font-size: 0.94rem;
+}
+
+.tariffRow strong {
+  color: var(--text-primary);
+  font-size: 0.98rem;
+  white-space: nowrap;
+}
+
+.inventoryEditActions {
+  justify-content: space-between;
+}
+
+@media (max-width: 680px) {
+  .tariffRow,
+  .inventoryEditActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tariffRow strong {
+    white-space: normal;
+  }
+}

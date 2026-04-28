@@ -71,14 +71,24 @@ type MobileWorkspaceConfig = {
 
 const brandLogoSrc = '/resto-control-logo.png';
 
+const subscriptionTariffs = [
+  { title: 'До 10 сотрудников', price: '1 490 ₽ / мес' },
+  { title: 'До 25 сотрудников', price: '2 990 ₽ / мес' },
+  { title: 'До 50 сотрудников', price: '4 990 ₽ / мес' },
+  { title: 'До 100 сотрудников', price: '7 990 ₽ / мес' },
+  { title: '100+ сотрудников', price: 'индивидуально' }
+];
+
 function WorkspaceInfoModal({
   title,
   text,
+  details,
   actions,
   onClose
 }: {
   title: string;
   text: string;
+  details?: ReactNode;
   actions: { label: string; kind?: string; onClick: () => void }[];
   onClose: () => void;
 }) {
@@ -89,6 +99,7 @@ function WorkspaceInfoModal({
         <button className="iconBtn" onClick={onClose}>×</button>
       </div>
       <p className="infoModalText">{text}</p>
+      {details}
       <div className="actions">
         {actions.map((action) => <Button
           key={action.label}
@@ -528,7 +539,13 @@ function RestaurantWorkspace({
       : modalKind === 'billing'
         ? {
             title: 'Тарифы и оплата',
-            text: 'Здесь мы собрали быстрый доступ к статусу подписки. Для следующего шага можно вернуться в обзор или открыть раздел поддержки.',
+            text: 'Стоимость зависит от количества сотрудников в заведении. Для ресторанов больше 100 человек условия обсуждаются индивидуально.',
+            details: <div className="tariffList">
+              {subscriptionTariffs.map((tariff) => <div className="tariffRow" key={tariff.title}>
+                <span>{tariff.title}</span>
+                <strong>{tariff.price}</strong>
+              </div>)}
+            </div>,
             actions: [
               { label: 'Открыть обзор', kind: 'primary', onClick: () => setActive('overview') },
               { label: 'База знаний', onClick: () => setActive('knowledge') }
@@ -623,7 +640,7 @@ function RestaurantWorkspace({
         <div className="workspaceContent">{children}</div>
       </div>
     </section>
-    {modal && <WorkspaceInfoModal title={modal.title} text={modal.text} actions={modal.actions} onClose={closeModal} />}
+    {modal && <WorkspaceInfoModal title={modal.title} text={modal.text} details={modal.details} actions={modal.actions} onClose={closeModal} />}
     {showMobileWorkspace && <>
       <BottomNavigation items={mobileNavItems} onCreate={() => setSheet('create')} />
       <BottomSheet open={sheet === 'menu'} title="Разделы кабинета" items={mobileMenuItems} onClose={() => setSheet(null)} />
@@ -1587,6 +1604,21 @@ function Inventory({ user, admin = false }: any) {
     }
   }
 
+  async function removeProduct() {
+    if (!editingProduct) return;
+    const section = inventorySectionMeta(editingProduct.section as InventorySectionId);
+    if (!window.confirm(`Удалить товар "${editingProduct.name}" из списка "${section.title}"?`)) return;
+    setProductMsg('');
+    try {
+      await api(`/api/admin/products/${editingProduct.id}`, { method: 'DELETE' });
+      setEditingProduct(null);
+      setProductMsg(`Товар удалён из списка "${section.title}"`);
+      load();
+    } catch (error: any) {
+      setProductMsg(error.message);
+    }
+  }
+
   function previewInventoryTotal(rawValue: any) {
     const raw = String(rawValue || '').trim();
     if (!raw) return '';
@@ -1739,7 +1771,7 @@ function Inventory({ user, admin = false }: any) {
               <Button>Добавить в список</Button>
             </div>
           </form>
-          {productMsg && <div className={productMsg.includes('добавлен') ? 'notice' : 'error'}>{productMsg}</div>}
+          {productMsg && <div className={productMsg.includes('добавлен') || productMsg.includes('обновл') || productMsg.includes('удал') ? 'notice' : 'error'}>{productMsg}</div>}
 
           <div className="inventoryOwnerGrid">
             {groupedProducts.map(section => <div className="miniCard inventorySectionCard" key={section.id}>
@@ -1811,9 +1843,12 @@ function Inventory({ user, admin = false }: any) {
             <Field label="Единица" value={editingProduct.unit} onChange={(e: any) => setEditingProduct({ ...editingProduct, unit: e.target.value })} />
             <Field label="Категория" value={editingProduct.category} onChange={(e: any) => setEditingProduct({ ...editingProduct, category: e.target.value })} />
           </div>
-          <div className="actions">
-            <Button kind="soft" type="button" onClick={() => setEditingProduct(null)}>Отмена</Button>
-            <Button>Сохранить товар</Button>
+          <div className="actions inventoryEditActions">
+            <Button kind="danger" type="button" onClick={removeProduct}>Удалить товар</Button>
+            <div className="adminInlineActions">
+              <Button kind="soft" type="button" onClick={() => setEditingProduct(null)}>Отмена</Button>
+              <Button>Сохранить товар</Button>
+            </div>
           </div>
         </form>
       </div>
