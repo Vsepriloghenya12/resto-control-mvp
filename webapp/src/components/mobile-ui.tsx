@@ -118,10 +118,10 @@ export function MobileHeader({
       </div>
     </div>
 
-    <div className={cn('mobileHeaderCopy', mode === 'overview' && 'overview')}>
+    {mode === 'overview' && <div className="mobileHeaderCopy overview">
       <h1>{title}</h1>
       {subtitle && <p>{subtitle}</p>}
-    </div>
+    </div>}
   </header>;
 }
 

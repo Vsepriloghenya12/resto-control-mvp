@@ -4684,3 +4684,15 @@ textarea {
     padding-bottom: 16px;
   }
 }
+
+
+/* Hide mobile tab titles: regular tabs start with content, overview keeps welcome copy */
+@media (max-width: 980px) {
+  .mobileHeader {
+    gap: 0;
+  }
+
+  .mobileHeaderCopy.overview {
+    margin-top: 10px;
+  }
+}
