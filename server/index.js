@@ -274,6 +274,7 @@ function isInventoryHeader(value) {
 
 function normalizeImportedProductName(value) {
   return cleanInventoryText(value)
+    .replace(/^\d{4,6}(?=[^\d\s])/, '')
     .replace(/^\d+[.)\-\s]+/, '')
     .replace(/^(наименование|название|товар|продукт)\s*[:\-]\s*/i, '')
     .replace(/\s+(шт\.?|кг\.?|г|гр\.?|л\.?|мл\.?|уп\.?|бут\.?)$/i, '')
@@ -298,6 +299,113 @@ function rowFromLine(line) {
   const name = normalizeImportedProductName(nameTokens.join(' '));
   if (!name || name.length < 2 || isInventoryHeader(name)) return null;
   return { name, unit };
+}
+
+
+function stripInventoryNoise(value) {
+  return cleanInventoryText(value)
+    .replace(/\b\d{8,14}\b/g, ' ')
+    .replace(/\b\d+\s*из\s*\d+\b/gi, ' ')
+    .replace(/инвентаризацию\s+(произвел|принял).*$/i, ' ')
+    .replace(/^(организация|бланк инвентаризации|на дату|склад|товар|код|штрихкод|группа|ед\. изм\.?|единица измерения|остаток фактический|отметки)$/i, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function looksLikePostUnitNoise(value) {
+  const text = stripInventoryNoise(value);
+  if (!text) return true;
+  if (/^\d+$/.test(text)) return true;
+  if (/^(организация|бланк|инвентаризации|товар|код|штрихкод|группа|наименование|остаток|отметки|ед\.?\s*изм)/i.test(text)) return true;
+  if (/^[А-ЯЁ0-9\s\/().,"«»\-]+$/.test(text) && text.length <= 80) return true;
+  if (/\sт$/i.test(text) && text.length <= 80) return true;
+  return false;
+}
+
+function normalizePdfSegmentName(value) {
+  return normalizeImportedProductName(stripInventoryNoise(value)
+    .replace(/^(наименование|группа|штрихкод)\s*/i, '')
+    .replace(/\s+/g, ' '));
+}
+
+function rowFromPdfSegment(segment) {
+  const prepared = String(segment || '')
+    .replace(/\u00a0/g, ' ')
+    .replace(/[\t\r]+/g, ' ')
+    .replace(/\n+/g, ' ')
+    .replace(/(\d{8,14})/g, ' $1 ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!prepared || prepared.length < 3) return null;
+
+  const withoutBarcodes = prepared.replace(/\b\d{8,14}\b/g, ' ');
+  const compactUnits = Array.from(new Set(inventoryUnitWords.flatMap(value => {
+    const normalized = normalizeInventoryUnit(value);
+    return [value, normalized, normalized.replace(/\.$/, '')];
+  })))
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)
+    .map(match => ({ match: match.toLowerCase(), unit: normalizeInventoryUnit(match) }));
+  const lower = withoutBarcodes.toLowerCase();
+
+  for (let index = 0; index < lower.length; index += 1) {
+    for (const unitCandidate of compactUnits) {
+      const unit = unitCandidate.unit;
+      const match = unitCandidate.match;
+      if (!unit || !match) continue;
+      if (!lower.startsWith(match, index)) continue;
+
+      const beforeChar = withoutBarcodes[index - 1] || '';
+      const afterChar = withoutBarcodes[index + match.length] || '';
+      if (/\d/.test(beforeChar)) continue;
+      if (match === 'л' && /[мm]/i.test(beforeChar)) continue;
+      if (match === 'г' && /[кk]/i.test(beforeChar)) continue;
+      if (afterChar && /[а-яёa-z]/.test(afterChar)) continue;
+
+      const rawName = withoutBarcodes.slice(0, index);
+      const after = withoutBarcodes.slice(index + match.length);
+      if (!looksLikePostUnitNoise(after)) continue;
+
+      const name = normalizePdfSegmentName(rawName);
+      if (!name || name.length < 2 || isInventoryHeader(name)) continue;
+      if (/^(группа|штрихкод|наименование|код)$/i.test(name)) continue;
+      return { name, unit };
+    }
+  }
+
+  return rowFromLine(prepared.replace(/\b\d{8,14}\b/g, ' '));
+}
+
+function parseInventoryPdfText(text) {
+  const source = String(text || '')
+    .replace(/\u00a0/g, ' ')
+    .replace(/([0-9]{4,6})(?=[А-ЯЁа-яёA-Za-z«"])/g, '$1 ');
+  const codeMatches = Array.from(source.matchAll(/(?<!\d)(\d{4,6})(?!\d)/g))
+    .filter(match => {
+      const code = match[1];
+      if (/^(202[0-9]|20[0-9]{2})$/.test(code)) return false;
+      const before = source.slice(Math.max(0, match.index - 12), match.index);
+      const after = source.slice(match.index + code.length, match.index + code.length + 12);
+      return !/\d$/.test(before) && !/^\d/.test(after);
+    });
+
+  const rows = [];
+  for (let i = 0; i < codeMatches.length; i += 1) {
+    const current = codeMatches[i];
+    const next = codeMatches[i + 1];
+    const start = current.index + current[1].length;
+    const end = next ? next.index : source.length;
+    const segment = source.slice(start, end);
+    const row = rowFromPdfSegment(segment);
+    if (row) rows.push(row);
+  }
+
+  String(text || '').split(/\r?\n/)
+    .map(line => rowFromPdfSegment(line) || rowFromLine(line))
+    .filter(Boolean)
+    .forEach(row => rows.push(row));
+
+  return rows;
 }
 
 function rowFromCells(cells) {
@@ -346,7 +454,7 @@ async function parseInventoryImportFile({ file_name = '', mime_type = '', data =
       const mod = await import('pdf-parse');
       const pdfParse = mod.default || mod;
       const parsed = await pdfParse(buffer);
-      String(parsed.text || '').split(/\r?\n/).map(rowFromLine).filter(Boolean).forEach(row => rows.push(row));
+      parseInventoryPdfText(parsed.text || '').forEach(row => rows.push(row));
     } catch (error) {
       return { error: 'Не удалось прочитать PDF. Если это скан без текста, сохраните бланк в Excel или PDF с распознанным текстом.' };
     }
