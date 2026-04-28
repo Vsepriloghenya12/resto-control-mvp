@@ -33,11 +33,11 @@ const SNAPSHOT_TABLES = [
   { name: 'inventory_values', columns: ['id', 'restaurant_id', 'inventory_run_id', 'product_id', 'qty', 'comment'] },
   { name: 'floor_tables', columns: ['id', 'restaurant_id', 'label', 'seats', 'zone', 'sort_order', 'active', 'created_at'] },
   { name: 'table_reservations', columns: ['id', 'restaurant_id', 'created_by', 'table_ids', 'reserved_for', 'duration_minutes', 'guests_count', 'guest_name', 'guest_phone', 'comment', 'status', 'created_at', 'updated_at'], jsonColumns: ['table_ids'] },
-  { name: 'tasks', columns: ['id', 'restaurant_id', 'title', 'description', 'target_type', 'target_role', 'target_user_id', 'due_at', 'created_by', 'created_at', 'active'] },
+  { name: 'tasks', columns: ['id', 'restaurant_id', 'title', 'description', 'target_type', 'target_role', 'target_user_id', 'target_department', 'due_at', 'created_by', 'created_at', 'active'] },
   { name: 'task_assignments', columns: ['id', 'restaurant_id', 'task_id', 'user_id', 'done', 'comment', 'completed_at'] },
   { name: 'tech_requests', columns: ['id', 'restaurant_id', 'created_by', 'title', 'description', 'category', 'status', 'manager_comment', 'started_at', 'resolved_at', 'created_at', 'updated_at'] },
   { name: 'knowledge_categories', columns: ['id', 'restaurant_id', 'title', 'allowed_roles', 'sort_order'], jsonColumns: ['allowed_roles'] },
-  { name: 'knowledge_documents', columns: ['id', 'restaurant_id', 'category_id', 'title', 'type', 'content', 'file_url', 'allowed_roles', 'requires_acknowledgement', 'version', 'is_active', 'created_by', 'created_at', 'updated_at', 'sort_order'], jsonColumns: ['allowed_roles'] },
+  { name: 'knowledge_documents', columns: ['id', 'restaurant_id', 'category_id', 'title', 'type', 'content', 'file_url', 'photo_url', 'ingredients', 'allowed_roles', 'requires_acknowledgement', 'version', 'is_active', 'created_by', 'created_at', 'updated_at', 'sort_order'], jsonColumns: ['allowed_roles', 'ingredients'] },
   { name: 'knowledge_acknowledgements', columns: ['id', 'restaurant_id', 'document_id', 'user_id', 'version', 'acknowledged_at'] },
   { name: 'knowledge_views', columns: ['id', 'restaurant_id', 'document_id', 'user_id', 'viewed_at'] },
   { name: 'shifts', columns: ['id', 'restaurant_id', 'user_id', 'role', 'department', 'location', 'status', 'opened_at', 'closed_at', 'comment'] },
@@ -48,7 +48,7 @@ const SNAPSHOT_TABLES = [
 
 let pool;
 
-export const ROLES = ['owner', 'manager', 'hostess', 'waiter', 'bartender', 'cook'];
+export const ROLES = ['owner', 'manager', 'senior_waiter', 'senior_bartender', 'senior_cook', 'hostess', 'waiter', 'bartender', 'cook'];
 export const DEPARTMENTS = ['hall', 'bar', 'kitchen', 'common'];
 
 function hasPostgres() {
@@ -76,7 +76,7 @@ function readJsonDb() {
 }
 
 function encodeColumnValue(column, value) {
-  if (column === 'allowed_roles' || column === 'metadata' || column === 'table_ids') {
+  if (column === 'allowed_roles' || column === 'metadata' || column === 'table_ids' || column === 'ingredients') {
     if (column === 'metadata') return JSON.stringify(value || {});
     return JSON.stringify(value || []);
   }
@@ -93,6 +93,9 @@ async function ensurePostgresSchema() {
   await getPool().query(sql);
   await getPool().query('alter table if exists knowledge_documents add column if not exists sort_order int not null default 0');
   await getPool().query(`alter table if exists products add column if not exists supplier text not null default 'Без поставщика'`);
+  await getPool().query(`alter table if exists tasks add column if not exists target_department text`);
+  await getPool().query(`alter table if exists knowledge_documents add column if not exists photo_url text`);
+  await getPool().query(`alter table if exists knowledge_documents add column if not exists ingredients jsonb not null default '[]'`);
 }
 
 async function loadPostgresSnapshot() {
@@ -262,10 +265,9 @@ export function restaurantStatus(restaurant) {
 }
 
 export function roleToDepartment(role) {
-  if (role === 'hostess') return 'hall';
-  if (role === 'bartender') return 'bar';
-  if (role === 'cook') return 'kitchen';
-  if (role === 'waiter') return 'hall';
+  if (role === 'hostess' || role === 'waiter' || role === 'senior_waiter') return 'hall';
+  if (role === 'bartender' || role === 'senior_bartender') return 'bar';
+  if (role === 'cook' || role === 'senior_cook') return 'kitchen';
   return 'common';
 }
 
@@ -373,7 +375,7 @@ function addKnowledge(db, restaurant_id, title, allowed_roles, docs) {
   db.knowledge_categories.push(cat);
   docs.forEach((doc, idx) => db.knowledge_documents.push({
     id: uid('kdoc'), restaurant_id, category_id: cat.id, title: doc.title, type: doc.type || 'text', content: doc.content,
-    file_url: '', allowed_roles: doc.allowed_roles || allowed_roles, requires_acknowledgement: doc.requires_acknowledgement ?? true,
+    file_url: doc.file_url || '', photo_url: doc.photo_url || '', ingredients: doc.ingredients || [], allowed_roles: doc.allowed_roles || allowed_roles, requires_acknowledgement: doc.requires_acknowledgement ?? true,
     version: 1, is_active: true, created_by: null, created_at: nowIso(), updated_at: nowIso(), sort_order: idx + 1
   }));
 }
@@ -437,7 +439,7 @@ export function createRestaurantWithDefaults(db, data) {
     { title: 'Цезарь с курицей', content: 'Выход: 280 г\nАллергены: яйцо, молочные продукты, глютен.\nТехнология: подготовить салат, курицу, соус, выложить по стандарту подачи.' }
   ]);
 
-  const task = { id: uid('task'), restaurant_id: restaurant.id, title: 'Проверить актуальность стоп-листа', description: 'Перед открытием смены проверьте стоп-лист и сообщите менеджеру.', target_type: 'all', target_role: null, target_user_id: null, due_at: addDays(1), created_by: null, created_at: nowIso(), active: true };
+  const task = { id: uid('task'), restaurant_id: restaurant.id, title: 'Проверить актуальность стоп-листа', description: 'Перед открытием смены проверьте стоп-лист и сообщите менеджеру.', target_type: 'all', target_role: null, target_user_id: null, target_department: null, due_at: addDays(1), created_by: null, created_at: nowIso(), active: true };
   db.tasks.push(task);
   db.users.filter(u => u.restaurant_id === restaurant.id && !u.is_super_admin).forEach(u => {
     db.task_assignments.push({ id: uid('tasg'), restaurant_id: restaurant.id, task_id: task.id, user_id: u.id, done: false, comment: '', completed_at: null });

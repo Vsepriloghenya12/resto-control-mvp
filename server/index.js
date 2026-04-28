@@ -33,8 +33,17 @@ const __dirname = path.dirname(__filename);
 const webDist = path.resolve(__dirname, '../webapp/dist');
 const uploadsDir = path.resolve(__dirname, 'data/uploads');
 const checklistUploadsDir = path.join(uploadsDir, 'checklists');
+const knowledgeUploadsDir = path.join(uploadsDir, 'knowledge');
 const MANAGER_ROLES = ['owner', 'manager'];
-const STAFF_ROLES = ['manager', 'hostess', 'waiter', 'bartender', 'cook'];
+const SENIOR_ROLE_DEPARTMENT = { senior_waiter: 'hall', senior_bartender: 'bar', senior_cook: 'kitchen' };
+const SENIOR_ROLES = Object.keys(SENIOR_ROLE_DEPARTMENT);
+const DEPARTMENT_ROLE_MAP = {
+  hall: ['senior_waiter', 'waiter', 'hostess'],
+  bar: ['senior_bartender', 'bartender'],
+  kitchen: ['senior_cook', 'cook'],
+  common: ['manager']
+};
+const STAFF_ROLES = ['manager', 'senior_waiter', 'senior_bartender', 'senior_cook', 'hostess', 'waiter', 'bartender', 'cook'];
 const departments = { hall: 'Зал', bar: 'Бар', kitchen: 'Кухня', common: 'Общее' };
 const techRequestStatuses = { new: 'новая', in_progress: 'в работе', done: 'выполнена', cancelled: 'отклонена' };
 const productRequestStatuses = { sent: 'отправлена', ordered: 'заказано', partial: 'частично пришло', received: 'получено', done: 'завершена', not_received: 'не получено', cancelled: 'отменена' };
@@ -90,6 +99,34 @@ function adminOnly(req, res, next) {
   if (req.user?.is_super_admin) return next();
   if (!MANAGER_ROLES.includes(req.user?.role)) return res.status(403).json({ error: 'Доступ только для владельца или менеджера' });
   next();
+}
+
+function roleDepartment(role) {
+  if (role === 'hostess' || role === 'waiter' || role === 'senior_waiter') return 'hall';
+  if (role === 'bartender' || role === 'senior_bartender') return 'bar';
+  if (role === 'cook' || role === 'senior_cook') return 'kitchen';
+  return 'common';
+}
+
+function manageableDepartment(user) {
+  if (!user) return '';
+  return SENIOR_ROLE_DEPARTMENT[user.role] || '';
+}
+
+function manageableRolesForUser(user) {
+  if (!user) return [];
+  if (user.is_super_admin || MANAGER_ROLES.includes(user.role)) return STAFF_ROLES;
+  const department = manageableDepartment(user);
+  return department ? (DEPARTMENT_ROLE_MAP[department] || []) : [];
+}
+
+function canManageRole(user, role) {
+  return manageableRolesForUser(user).includes(role);
+}
+
+function operationalEditorOnly(req, res, next) {
+  if (req.user?.is_super_admin || MANAGER_ROLES.includes(req.user?.role) || SENIOR_ROLES.includes(req.user?.role)) return next();
+  return res.status(403).json({ error: 'Доступ только для менеджера или старшего сотрудника подразделения' });
 }
 
 function ensureRestaurantActive(req, res, next) {
@@ -568,9 +605,143 @@ function saveChecklistPhoto(dataUrl, restaurant_id, run_id, item_id) {
   return `/uploads/checklists/${restaurant_id}/${filename}`;
 }
 
+function decodeBase64File(file = {}) {
+  const data = String(file.data || file.file_data || '');
+  const base64 = data.replace(/^data:[^;]+;base64,/, '');
+  const buffer = Buffer.from(base64, 'base64');
+  if (!buffer.length) throw new Error('Файл пустой или не удалось прочитать данные');
+  return buffer;
+}
+
+function safeUploadName(name = '', fallback = 'file') {
+  const ext = path.extname(String(name || '')).toLowerCase();
+  const base = path.basename(String(name || fallback), ext).replace(/[^a-zA-Z0-9а-яА-ЯёЁ._-]+/g, '-').slice(0, 80) || fallback;
+  return `${Date.now()}-${cryptoRandom()}-${base}${ext}`;
+}
+
+function cryptoRandom() {
+  return Math.random().toString(36).slice(2, 8);
+}
+
+function saveKnowledgeFile(file, restaurant_id, kind = 'docs') {
+  const filename = String(file?.file_name || file?.name || '').trim();
+  const mime = String(file?.mime_type || file?.type || '').toLowerCase();
+  const isPdf = filename.toLowerCase().endsWith('.pdf') || mime.includes('pdf');
+  const isImage = mime.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(filename);
+  if (kind === 'pdf' && !isPdf) throw new Error('Загрузите PDF-файл');
+  if (kind === 'image' && !isImage) throw new Error('Фото должно быть в формате JPG, PNG или WEBP');
+
+  const buffer = decodeBase64File(file);
+  const ext = isPdf ? '.pdf' : path.extname(filename || '').toLowerCase() || (mime.includes('png') ? '.png' : '.jpg');
+  const restaurantDir = path.join(knowledgeUploadsDir, restaurant_id, kind === 'image' ? 'photos' : 'docs');
+  fs.mkdirSync(restaurantDir, { recursive: true });
+  const storedName = safeUploadName(filename || `document${ext}`, kind === 'image' ? 'photo' : 'document');
+  const filepath = path.join(restaurantDir, storedName);
+  fs.writeFileSync(filepath, buffer);
+  return { url: `/uploads/knowledge/${restaurant_id}/${kind === 'image' ? 'photos' : 'docs'}/${storedName}`, buffer, filename };
+}
+
+function cleanTtkText(value) {
+  return String(value || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function parseTtkNumber(value) {
+  const normalized = String(value || '').replace(',', '.');
+  const number = Number(normalized);
+  return Number.isFinite(number) ? Math.round(number * 1000) / 1000 : null;
+}
+
+function normalizeTtkIngredientName(value) {
+  return cleanTtkText(value)
+    .replace(/\s+Т$/i, '')
+    .replace(/^ТРЕБОВАНИЯ.*$/i, '')
+    .replace(/^ИТОГО.*$/i, '')
+    .trim();
+}
+
+function lineLooksLikeTtkName(line) {
+  const text = normalizeTtkIngredientName(line);
+  if (!text || /^\d/.test(text)) return false;
+  if (/^(название|область|хранение|срок|органолептические|требования|итого|вес готового)/i.test(text)) return false;
+  if (/^(№|наименование|ед\.?.*изм|брутто|вес|технология)/i.test(text)) return false;
+  return /[а-яёa-z]/i.test(text);
+}
+
+function parseTtkBlock(block) {
+  const source = String(block || '').replace(/\r/g, '');
+  const number = cleanTtkText(source.match(/^(\s*\d+)/)?.[1] || source.match(/№\s*(\d+)/)?.[1] || '');
+  const titleMatch = source.match(/(\d{2}\.\d{2}\.\d{4})\s+([\s\S]*?)(?:Название на чеке|Область применения|№\s+Наименование)/i);
+  const date = titleMatch?.[1] || '';
+  const title = cleanTtkText(titleMatch?.[2] || source.split('\n').slice(0, 3).join(' ')).replace(/^\d+\s*/, '');
+  const lines = source.split('\n').map(line => cleanTtkText(line)).filter(Boolean);
+  const ingredients = [];
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const row = line.match(/^(\d+)\s+(.+)$/);
+    if (!row) continue;
+    const rest = row[2];
+    const withName = rest.match(/^(.+?)\s+(кг|г|л|мл|шт\.?|порц\.?)\s+((?:\d+[,.]?\d*\s*)+)$/i);
+    const noName = rest.match(/^(кг|г|л|мл|шт\.?|порц\.?)\s+((?:\d+[,.]?\d*\s*)+)$/i);
+    let name = '';
+    let unit = '';
+    let amounts = [];
+
+    if (withName) {
+      name = normalizeTtkIngredientName(withName[1]);
+      unit = withName[2];
+      amounts = withName[3].trim().split(/\s+/);
+    } else if (noName) {
+      unit = noName[1];
+      amounts = noName[2].trim().split(/\s+/);
+      for (let j = i + 1; j < Math.min(lines.length, i + 5); j += 1) {
+        if (lineLooksLikeTtkName(lines[j])) {
+          name = normalizeTtkIngredientName(lines[j]);
+          break;
+        }
+      }
+    }
+
+    const qty = parseTtkNumber(amounts[amounts.length - 1]);
+    if (name && unit && qty !== null) {
+      const key = `${name.toLowerCase()}::${unit}::${qty}`;
+      if (!ingredients.some(item => `${item.name.toLowerCase()}::${item.unit}::${item.qty}` === key)) {
+        ingredients.push({ name, unit, qty, display_qty: String(amounts[amounts.length - 1] || '').replace('.', ',') });
+      }
+    }
+  }
+
+  return { number, date, title: title || (number ? `ТТК № ${number}` : 'ТТК'), ingredients };
+}
+
+async function parseTtkPdfBuffer(buffer) {
+  const mod = await import('pdf-parse');
+  const pdfParse = mod.default || mod;
+  const parsed = await pdfParse(buffer);
+  const text = parsed.text || '';
+  const parts = text.split(/Технологическая карта\s*№/i).map(part => part.trim()).filter(Boolean);
+  const cards = (parts.length ? parts : [text]).map(parseTtkBlock).filter(card => card.title || card.ingredients.length);
+  return { text, cards };
+}
+
+function buildTtkContent(card) {
+  const lines = [];
+  lines.push(`Технологическая карта${card.number ? ` № ${card.number}` : ''}`);
+  if (card.date) lines.push(`Дата: ${card.date}`);
+  if (card.title) lines.push(`Блюдо/напиток: ${card.title}`);
+  lines.push('');
+  lines.push('Состав:');
+  if (card.ingredients.length) {
+    card.ingredients.forEach(item => lines.push(`- ${item.name}: ${item.display_qty || item.qty} ${item.unit}`));
+  } else {
+    lines.push('- Состав не удалось извлечь автоматически. Проверьте PDF и заполните вручную.');
+  }
+  return lines.join('\n');
+}
 function makeAssignmentsForTask(task) {
   const candidates = db.users.filter(u => u.restaurant_id === task.restaurant_id && u.active && STAFF_ROLES.includes(u.role));
   const selected = candidates.filter(u => {
+    if (task.target_department && u.department !== task.target_department) return false;
     if (task.target_type === 'all') return true;
     if (task.target_type === 'role') return u.role === task.target_role;
     if (task.target_type === 'user') return u.id === task.target_user_id;
@@ -864,9 +1035,14 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
 });
 
 // USERS
-app.get('/api/admin/users', auth, ensureRestaurantActive, adminOnly, (req, res) => {
+app.get('/api/admin/users', auth, ensureRestaurantActive, operationalEditorOnly, (req, res) => {
   const rid = req.user.restaurant_id || req.query.restaurant_id;
-  res.json(sameRestaurant(db.users, rid).filter(u => !u.is_super_admin).map(publicUser));
+  const manageableDepartmentName = manageableDepartment(req.user);
+  const rows = sameRestaurant(db.users, rid)
+    .filter(u => !u.is_super_admin)
+    .filter(u => !manageableDepartmentName || u.department === manageableDepartmentName || canManageRole(req.user, u.role))
+    .map(publicUser);
+  res.json(rows);
 });
 
 app.post('/api/admin/users', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
@@ -940,18 +1116,25 @@ app.delete('/api/admin/users/:id', auth, ensureRestaurantActive, adminOnly, runA
 // CHECKLISTS
 app.get('/api/checklists/templates', auth, ensureRestaurantActive, (req, res) => {
   const rid = req.user.restaurant_id;
-  const role = ['owner', 'manager'].includes(req.user.role) ? req.query.role : req.user.role;
+  const manageableRoles = manageableRolesForUser(req.user);
+  const role = MANAGER_ROLES.includes(req.user.role) ? req.query.role : req.user.role;
   const templates = sameRestaurant(db.checklist_templates, rid)
-    .filter(t => t.active && (!role || t.role === role || ['owner', 'manager'].includes(req.user.role)))
+    .filter(t => t.active)
+    .filter(t => {
+      if (MANAGER_ROLES.includes(req.user.role)) return !role || t.role === role || role === req.user.role;
+      if (SENIOR_ROLES.includes(req.user.role)) return manageableRoles.includes(t.role);
+      return t.role === req.user.role;
+    })
     .map(t => ({ ...t, items: db.checklist_items.filter(i => i.template_id === t.id).sort((a, b) => a.sort_order - b.sort_order) }));
   res.json(templates);
 });
 
-app.post('/api/admin/checklists/templates', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
+app.post('/api/admin/checklists/templates', auth, ensureRestaurantActive, operationalEditorOnly, runAsync(async (req, res) => {
   const rid = req.user.restaurant_id;
   const { title, role, type, items } = req.body;
   if (!title || !role || !type) return res.status(400).json({ error: 'Нужны название, роль и тип' });
   if (!STAFF_ROLES.includes(String(role))) return res.status(400).json({ error: 'Чек-лист можно назначить только рабочей роли, не владельцу' });
+  if (!canManageRole(req.user, String(role))) return res.status(403).json({ error: 'Можно редактировать чек-листы только своего подразделения' });
   const normalized = normalizeChecklistTemplateItems(items);
   if (normalized.error) return res.status(400).json({ error: normalized.error });
   const template = { id: uid('cltpl'), restaurant_id: rid, title, role, type, active: true, created_at: nowIso() };
@@ -961,7 +1144,7 @@ app.post('/api/admin/checklists/templates', auth, ensureRestaurantActive, adminO
   res.status(201).json({ ...template, items: db.checklist_items.filter(i => i.template_id === template.id) });
 }));
 
-app.patch('/api/admin/checklists/templates/:id', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
+app.patch('/api/admin/checklists/templates/:id', auth, ensureRestaurantActive, operationalEditorOnly, runAsync(async (req, res) => {
   const rid = req.user.restaurant_id;
   const template = db.checklist_templates.find(t => t.id === req.params.id && t.restaurant_id === rid);
   if (!template) return res.status(404).json({ error: 'Чек-лист не найден' });
@@ -974,6 +1157,9 @@ app.patch('/api/admin/checklists/templates/:id', auth, ensureRestaurantActive, a
   }
   if (!STAFF_ROLES.includes(nextRole)) {
     return res.status(400).json({ error: 'Чек-лист можно назначить только рабочей роли, не владельцу' });
+  }
+  if (!canManageRole(req.user, template.role) || !canManageRole(req.user, nextRole)) {
+    return res.status(403).json({ error: 'Можно редактировать чек-листы только своего подразделения' });
   }
 
   template.title = nextTitle;
@@ -1057,7 +1243,7 @@ app.post('/api/checklists/runs', auth, ensureRestaurantActive, runAsync(async (r
   res.status(201).json(run);
 }));
 
-app.get('/api/admin/checklists/runs', auth, ensureRestaurantActive, adminOnly, (req, res) => {
+app.get('/api/admin/checklists/runs', auth, ensureRestaurantActive, operationalEditorOnly, (req, res) => {
   const rid = req.user.restaurant_id;
   const rows = sameRestaurant(db.checklist_runs, rid).map(run => ({
     ...run,
@@ -1065,7 +1251,8 @@ app.get('/api/admin/checklists/runs', auth, ensureRestaurantActive, adminOnly, (
     template: db.checklist_templates.find(t => t.id === run.template_id),
     answers: db.checklist_answers.filter(a => a.run_id === run.id)
   })).sort((a, b) => b.created_at.localeCompare(a.created_at));
-  res.json(rows);
+  const visibleRows = SENIOR_ROLES.includes(req.user.role) ? rows.filter(row => canManageRole(req.user, row.template?.role)) : rows;
+  res.json(visibleRows);
 });
 
 // PRODUCTS
@@ -1189,6 +1376,7 @@ app.post('/api/admin/inventory/import-template', auth, ensureRestaurantActive, a
   const rid = req.user.restaurant_id;
   const sectionId = String(req.body.section || 'bar');
   const section = inventoryImportSections[sectionId] || inventoryImportSections.bar;
+  const dryRun = req.body.dry_run === true || req.body.dry_run === 'true';
   const parsed = await parseInventoryImportFile(req.body);
   if (parsed.error) return res.status(400).json({ error: parsed.error });
 
@@ -1198,12 +1386,16 @@ app.post('/api/admin/inventory/import-template', auth, ensureRestaurantActive, a
 
   const added = [];
   const skipped = [];
+  const preview = [];
   for (const item of parsed.items) {
     const key = `${productKey(item.name)}::${normalizeInventoryUnit(item.unit)}::${productKey(section.defaultCategory)}`;
     if (existing.has(key)) {
       skipped.push(item);
+      preview.push({ ...item, status: 'duplicate', category: section.defaultCategory });
       continue;
     }
+    preview.push({ ...item, status: 'new', category: section.defaultCategory });
+    if (dryRun) continue;
     const product = {
       id: uid('prod'), restaurant_id: rid, department: section.department,
       name: item.name, unit: item.unit, category: section.defaultCategory,
@@ -1215,9 +1407,13 @@ app.post('/api/admin/inventory/import-template', auth, ensureRestaurantActive, a
     added.push(product);
   }
 
+  if (dryRun) {
+    return res.json({ detected: parsed.items, added: [], skipped, preview, will_add: preview.filter(item => item.status === 'new') });
+  }
+
   logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'inventory_template_imported', title: `${req.user.name} загрузил бланк инвентаризации: ${section.title}`, entity_type: 'inventory_template', entity_id: null, metadata: { section: sectionId, detected: parsed.items.length, added: added.length, skipped: skipped.length } });
   await persist();
-  res.status(201).json({ detected: parsed.items, added, skipped });
+  res.status(201).json({ detected: parsed.items, added, skipped, preview });
 }));
 
 app.get('/api/inventory/templates', auth, ensureRestaurantActive, (req, res) => {
@@ -1485,12 +1681,16 @@ app.delete('/api/bookings/:id', auth, ensureRestaurantActive, runAsync(async (re
 // TASKS
 app.get('/api/tasks', auth, ensureRestaurantActive, (req, res) => {
   const rid = req.user.restaurant_id;
+  const manage = String(req.query.manage || '') === '1';
   let rows;
-  if (['owner', 'manager'].includes(req.user.role)) {
-    rows = sameRestaurant(db.tasks, rid).map(task => ({
-      ...task,
-      assignments: db.task_assignments.filter(a => a.task_id === task.id).map(a => ({ ...a, user: publicUser(db.users.find(u => u.id === a.user_id)) }))
-    }));
+  if (MANAGER_ROLES.includes(req.user.role) || (manage && SENIOR_ROLES.includes(req.user.role))) {
+    const department = manage && SENIOR_ROLES.includes(req.user.role) ? manageableDepartment(req.user) : '';
+    rows = sameRestaurant(db.tasks, rid)
+      .filter(task => !department || task.target_department === department || task.created_by === req.user.id)
+      .map(task => ({
+        ...task,
+        assignments: db.task_assignments.filter(a => a.task_id === task.id).map(a => ({ ...a, user: publicUser(db.users.find(u => u.id === a.user_id)) }))
+      }));
   } else {
     const assignments = db.task_assignments.filter(a => a.restaurant_id === rid && a.user_id === req.user.id);
     rows = assignments.map(a => ({ ...db.tasks.find(t => t.id === a.task_id), assignment: a })).filter(Boolean);
@@ -1498,13 +1698,41 @@ app.get('/api/tasks', auth, ensureRestaurantActive, (req, res) => {
   res.json(rows.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')));
 });
 
-app.post('/api/tasks', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
+app.post('/api/tasks', auth, ensureRestaurantActive, operationalEditorOnly, runAsync(async (req, res) => {
   const { title, description, target_type, target_role, target_user_id, due_at } = req.body;
-  if (!title || !target_type) return res.status(400).json({ error: 'Нужны title и target_type' });
-  const task = { id: uid('task'), restaurant_id: req.user.restaurant_id, title, description: description || '', target_type, target_role: target_role || null, target_user_id: target_user_id || null, due_at: due_at || null, created_by: req.user.id, created_at: nowIso(), active: true };
+  if (!title || !target_type) return res.status(400).json({ error: 'Нужны название и получатель задачи' });
+
+  let targetDepartment = null;
+  if (SENIOR_ROLES.includes(req.user.role)) {
+    targetDepartment = manageableDepartment(req.user);
+    if (target_type === 'role' && !canManageRole(req.user, target_role)) {
+      return res.status(403).json({ error: 'Старший сотрудник может ставить задачи только своему подразделению' });
+    }
+    if (target_type === 'user') {
+      const targetUser = db.users.find(user => user.id === target_user_id && user.restaurant_id === req.user.restaurant_id && user.active);
+      if (!targetUser || targetUser.department !== targetDepartment) {
+        return res.status(403).json({ error: 'Можно выбрать только сотрудника своего подразделения' });
+      }
+    }
+  }
+
+  const task = {
+    id: uid('task'),
+    restaurant_id: req.user.restaurant_id,
+    title: String(title || '').trim(),
+    description: description || '',
+    target_type,
+    target_role: target_role || null,
+    target_user_id: target_user_id || null,
+    target_department: targetDepartment,
+    due_at: due_at || null,
+    created_by: req.user.id,
+    created_at: nowIso(),
+    active: true
+  };
   db.tasks.push(task);
   makeAssignmentsForTask(task);
-  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'task_created', title: `${req.user.name} создал задачу "${title}"`, entity_type: 'task', entity_id: task.id, metadata: { target_type, target_role, target_user_id } });
+  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'task_created', title: `${req.user.name} создал задачу "${title}"`, entity_type: 'task', entity_id: task.id, metadata: { target_type, target_role, target_user_id, target_department: targetDepartment } });
   notifyAssignees(task, { title: 'Новая задача', body: title, entity_type: 'task', entity_id: task.id });
   await persist();
   res.status(201).json(task);
@@ -1618,11 +1846,68 @@ app.post('/api/admin/knowledge/categories', auth, ensureRestaurantActive, adminO
 }));
 
 app.post('/api/admin/knowledge/documents', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
-  const { category_id, title, content, allowed_roles, requires_acknowledgement, type, file_url } = req.body;
-  const cleanTitle = String(title || '').trim();
+  const { category_id, title, content, allowed_roles, requires_acknowledgement, type, file_url, file, photo } = req.body;
   const category = db.knowledge_categories.find(c => c.id === category_id && c.restaurant_id === req.user.restaurant_id);
-  if (!category || !cleanTitle) return res.status(400).json({ error: 'Выберите папку и укажите название документа' });
-  const doc = { id: uid('kdoc'), restaurant_id: req.user.restaurant_id, category_id, title: cleanTitle, type: type || 'text', content: content || '', file_url: file_url || '', allowed_roles: Array.isArray(allowed_roles) ? allowed_roles : [], requires_acknowledgement: requires_acknowledgement !== false, version: 1, is_active: true, created_by: req.user.id, created_at: nowIso(), updated_at: nowIso() };
+  if (!category) return res.status(400).json({ error: 'Выберите папку для документа' });
+
+  const docType = String(type || 'text').trim() || 'text';
+  let storedPdf = null;
+  let storedPhoto = null;
+  let parsedTtk = null;
+
+  if (file?.data) {
+    storedPdf = saveKnowledgeFile(file, req.user.restaurant_id, 'pdf');
+    if (docType === 'ttk') {
+      try {
+        parsedTtk = await parseTtkPdfBuffer(storedPdf.buffer);
+      } catch (error) {
+        return res.status(400).json({ error: 'PDF загружен, но состав ТТК не удалось прочитать. Загрузите PDF с текстом, не скан.' });
+      }
+    }
+  }
+  if (photo?.data) storedPhoto = saveKnowledgeFile(photo, req.user.restaurant_id, 'image');
+
+  const cleanTitle = String(title || '').trim();
+  const common = {
+    restaurant_id: req.user.restaurant_id,
+    category_id,
+    type: docType,
+    file_url: storedPdf?.url || file_url || '',
+    photo_url: storedPhoto?.url || '',
+    allowed_roles: Array.isArray(allowed_roles) ? allowed_roles : [],
+    requires_acknowledgement: requires_acknowledgement !== false,
+    version: 1,
+    is_active: true,
+    created_by: req.user.id,
+    created_at: nowIso(),
+    updated_at: nowIso(),
+    sort_order: sameRestaurant(db.knowledge_documents, req.user.restaurant_id).filter(d => d.category_id === category_id).length + 1
+  };
+
+  if (docType === 'ttk') {
+    const cards = parsedTtk?.cards?.length ? parsedTtk.cards : [];
+    if (!cards.length) return res.status(400).json({ error: 'Не удалось найти ТТК в PDF' });
+    const docs = cards.map((card, index) => ({
+      id: uid('kdoc'),
+      ...common,
+      title: cleanTitle && cards.length === 1 ? cleanTitle : (card.title || cleanTitle || `ТТК ${index + 1}`),
+      content: buildTtkContent(card),
+      ingredients: card.ingredients || [],
+      sort_order: common.sort_order + index
+    }));
+    docs.forEach(doc => db.knowledge_documents.push(doc));
+    await persist();
+    return res.status(201).json(cards.length === 1 ? docs[0] : { created: docs.length, documents: docs });
+  }
+
+  if (!cleanTitle) return res.status(400).json({ error: 'Укажите название документа' });
+  const doc = {
+    id: uid('kdoc'),
+    ...common,
+    title: cleanTitle,
+    content: content || '',
+    ingredients: []
+  };
   db.knowledge_documents.push(doc);
   await persist();
   res.status(201).json(doc);

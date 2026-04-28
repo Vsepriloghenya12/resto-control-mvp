@@ -1,11 +1,37 @@
 export const roles: Record<string, string> = {
   owner: 'Владелец',
   manager: 'Менеджер',
+  senior_waiter: 'Старший официант',
+  senior_bartender: 'Старший бармен',
+  senior_cook: 'Старший повар',
   hostess: 'Хостес',
   waiter: 'Официант',
   bartender: 'Бармен',
   cook: 'Повар'
 };
+
+export const seniorRoles = ['senior_waiter', 'senior_bartender', 'senior_cook'];
+
+export const departmentRoleMap: Record<string, string[]> = {
+  hall: ['senior_waiter', 'waiter', 'hostess'],
+  bar: ['senior_bartender', 'bartender'],
+  kitchen: ['senior_cook', 'cook'],
+  common: ['manager']
+};
+
+export function roleDepartment(role?: string) {
+  if (role === 'senior_waiter' || role === 'waiter' || role === 'hostess') return 'hall';
+  if (role === 'senior_bartender' || role === 'bartender') return 'bar';
+  if (role === 'senior_cook' || role === 'cook') return 'kitchen';
+  return 'common';
+}
+
+export function manageableRolesFor(user: any) {
+  if (!user) return [];
+  if (user.role === 'manager' || user.role === 'owner' || user.is_super_admin) return Object.keys(roles).filter((key) => key !== 'owner');
+  if (seniorRoles.includes(user.role)) return departmentRoleMap[roleDepartment(user.role)] || [];
+  return [];
+}
 
 export const executableRoles = Object.entries(roles).filter(([key]) => key !== 'owner');
 

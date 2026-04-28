@@ -4,7 +4,7 @@ import { Button, Card } from '../../components/dashboard-ui';
 import { Field, Select, Textarea, Empty } from '../../components/form-controls';
 import { MobileSheetModal } from '../../components/mobile-sheet-modal';
 import { CommentsPanel } from '../../components/comments-panel';
-import { executableRoles, targetTypeLabels, techRequestCategories } from '../../lib/dictionaries';
+import { executableRoles, manageableRolesFor, targetTypeLabels, techRequestCategories } from '../../lib/dictionaries';
 
 export function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer }: any) {
   const [tasks, setTasks] = useState<any[]>([]);
@@ -14,10 +14,17 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
   const [techMsg, setTechMsg] = useState('');
   const [showTechForm, setShowTechForm] = useState(false);
   const [techForm, setTechForm] = useState<any>({ title: '', description: '', category: 'equipment' });
+  const manageableRoleEntries = admin ? executableRoles.filter(([key]) => manageableRolesFor(user).includes(key)) : executableRoles;
+  const roleOptions = manageableRoleEntries.length ? manageableRoleEntries : executableRoles;
+  useEffect(() => {
+    if (admin && roleOptions.length && !roleOptions.some(([key]) => key === form.target_role)) {
+      setForm((current: any) => ({ ...current, target_role: roleOptions[0][0] }));
+    }
+  }, [admin, user.role]);
 
   async function load() {
     const [taskRows, userRows] = await Promise.all([
-      api('/api/tasks'),
+      api(admin ? '/api/tasks?manage=1' : '/api/tasks'),
       admin ? api('/api/admin/users') : Promise.resolve([])
     ]);
     setTasks(taskRows);
@@ -106,7 +113,7 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
         <Field label="Задача" value={form.title} onChange={(e: any) => setForm({ ...form, title: e.target.value })} />
         <Textarea label="Описание" value={form.description} onChange={(e: any) => setForm({ ...form, description: e.target.value })} />
         <Select label="Кому" value={form.target_type} onChange={(e: any) => setForm({ ...form, target_type: e.target.value })}>{Object.entries(targetTypeLabels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</Select>
-        {form.target_type === 'role' && <Select label="Роль" value={form.target_role} onChange={(e: any) => setForm({ ...form, target_role: e.target.value })}>{executableRoles.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>}
+        {form.target_type === 'role' && <Select label="Роль" value={form.target_role} onChange={(e: any) => setForm({ ...form, target_role: e.target.value })}>{roleOptions.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>}
         {form.target_type === 'user' && <Select label="Сотрудник" value={form.target_user_id} onChange={(e: any) => setForm({ ...form, target_user_id: e.target.value })}><option value="">Выбрать</option>{users.filter(u => u.role !== 'owner').map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</Select>}
         <Button>Создать задачу</Button>
       </form>

@@ -35,6 +35,8 @@ import {
   inventorySections,
   problemTypeLabels,
   roles,
+  seniorRoles,
+  manageableRolesFor,
   type InventorySectionId
 } from './lib/dictionaries';
 import {
@@ -535,6 +537,7 @@ function RestaurantWorkspace({
         : null;
 
   const managerMode = user.role === 'manager';
+  const showMobileWorkspace = managerMode;
 
   const mobileNavItems: MobileNavItem[] = [
     { id: 'overview', title: 'Обзор', icon: 'overview', active: active === 'overview', onClick: () => setActive('overview') },
@@ -577,7 +580,7 @@ function RestaurantWorkspace({
       { id: 'logout', title: 'Выйти', subtitle: 'Завершить рабочую сессию', icon: 'logout', onClick: onLogout }
     ];
 
-  return <main className="workspaceLayout">
+  return <main className={cx('workspaceLayout', managerMode ? 'managerWorkspace' : 'ownerDesktopWorkspace')}>
     <SidebarNav
       logoSrc={brandLogoSrc}
       tabs={tabs}
@@ -587,7 +590,7 @@ function RestaurantWorkspace({
       onSupportClick={openSupport}
     />
     <section className="workspaceMain">
-      <div className="mobileWorkspaceChrome">
+      {showMobileWorkspace && <div className="mobileWorkspaceChrome">
         <MobileHeader
           mode={active === 'overview' ? 'overview' : 'page'}
           title={active === 'overview' ? <>Добро пожаловать, <em>{user.name}</em></> : mobileTabTitle(active, tabs)}
@@ -600,7 +603,7 @@ function RestaurantWorkspace({
           onNotifications={() => setActive('tasks')}
           onAction={() => setSheet('profile')}
         />
-      </div>
+      </div>}
 
       <div className="desktopWorkspaceChrome">
         <WorkspaceHeader
@@ -621,10 +624,12 @@ function RestaurantWorkspace({
       </div>
     </section>
     {modal && <WorkspaceInfoModal title={modal.title} text={modal.text} actions={modal.actions} onClose={closeModal} />}
-    <BottomNavigation items={mobileNavItems} onCreate={() => setSheet('create')} />
-    <BottomSheet open={sheet === 'menu'} title="Разделы кабинета" items={mobileMenuItems} onClose={() => setSheet(null)} />
-    <BottomSheet open={sheet === 'create'} title="Быстрые действия" items={mobileCreateItems} onClose={() => setSheet(null)} />
-    <BottomSheet open={sheet === 'profile'} title="Профиль и доступ" items={mobileProfileItems} onClose={() => setSheet(null)} />
+    {showMobileWorkspace && <>
+      <BottomNavigation items={mobileNavItems} onCreate={() => setSheet('create')} />
+      <BottomSheet open={sheet === 'menu'} title="Разделы кабинета" items={mobileMenuItems} onClose={() => setSheet(null)} />
+      <BottomSheet open={sheet === 'create'} title="Быстрые действия" items={mobileCreateItems} onClose={() => setSheet(null)} />
+      <BottomSheet open={sheet === 'profile'} title="Профиль и доступ" items={mobileProfileItems} onClose={() => setSheet(null)} />
+    </>}
   </main>;
 }
 
@@ -696,12 +701,23 @@ function SuperAdmin({ user, onLogout }: any) {
 
 function RestaurantAdmin({ user, restaurant, onLogout }: any) {
   const [tab, setTab] = useState<Tab>('overview');
-  const tabs = withIcons([
-    { id: 'overview', title: 'Обзор' }, { id: 'users', title: 'Сотрудники' }, { id: 'checklists', title: 'Чек-листы' },
-    { id: 'requests', title: 'Заявки' }, { id: 'bookings', title: 'Брони' }, { id: 'inventory', title: 'Инвент.' }, { id: 'tasks', title: 'Задачи' }, { id: 'knowledge', title: 'База знаний' }
-  ]);
+  const tabs = withIcons(user.role === 'manager'
+    ? [
+      { id: 'overview', title: 'Пульт смены' },
+      { id: 'users', title: 'Сотрудники' },
+      { id: 'checklists', title: 'Чек-листы' },
+      { id: 'inventory', title: 'Номенклатура' },
+      { id: 'bookings', title: 'Брони / залы' },
+      { id: 'requests', title: 'Заявки' },
+      { id: 'tasks', title: 'Задачи' },
+      { id: 'knowledge', title: 'База знаний' }
+    ]
+    : [
+      { id: 'overview', title: 'Аккаунт' }
+    ]
+  );
   const section = useMemo(() => {
-    if (tab === 'overview') return <AdminOverview />;
+    if (tab === 'overview') return <AdminOverview mode={user.role === 'manager' ? 'manager' : 'owner'} />;
     if (tab === 'users') return <UsersAdmin />;
     if (tab === 'checklists') return <Checklists user={user} admin />;
     if (tab === 'requests') return <Requests user={user} admin />;
@@ -744,12 +760,13 @@ function SubscriptionBanner({ restaurant, openBilling }: any) {
   return <TrialBanner headline={headline} subline={subline} onAction={openBilling} />;
 }
 
-function AdminOverview() {
+function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager' }) {
   const [data, setData] = useState<any>(null);
   useEffect(() => { api('/api/admin/overview').then(setData); }, []);
   if (!data) return <Card><Empty text="Загружаем обзор" /></Card>;
+  const managerMode = mode === 'manager';
   return <>
-    <div className="statsGrid">
+    <div className={cx('statsGrid', managerMode && 'managerStatsGrid')}>
       <StatCard icon="users" title="Сотрудники" value={data.users} caption="Активных" />
       <StatCard icon="checklists" title="Чек-листы сегодня" value={data.checklists_today} caption="Выполнено" />
       <StatCard icon="requests" title="Открытые заявки" value={data.requests_open} caption="Новых" />
@@ -758,21 +775,36 @@ function AdminOverview() {
       <StatCard icon="inventory" title="Инвентаризации" value={data.inventories} caption="Активных" />
     </div>
 
-    <Card title="Операционный обзор" right={<span className="badge active">Рабочий кабинет</span>}>
+    <Card title={managerMode ? 'Пульт смены' : 'Аккаунт владельца'} right={<span className="badge active">{managerMode ? 'Управление рестораном' : 'Владелец'}</span>}>
       <div className="overviewHero">
         <div className="overviewHeroCopy">
-          <strong>{data.restaurant?.name || 'Ресторан подключён'}</strong>
-          <p>Следите за сотрудниками, чек-листами, заявками и инвентаризациями в одном аккуратном центре управления.</p>
+          <strong>{managerMode ? 'Смена и настройки под контролем' : (data.restaurant?.name || 'Ресторан подключён')}</strong>
+          <p>{managerMode ? 'Менеджер ведёт сотрудников, чек-листы, номенклатуру, залы, базу знаний и ежедневную операционку.' : 'Владелец контролирует аккаунт и подписку. Рабочие настройки ресторана выполняет менеджер.'}</p>
         </div>
         <div className="overviewHighlights">
-          <div><span className="muted">Ресторан</span><b>{data.restaurant?.name || '—'}</b></div>
-          <div><span className="muted">Документы</span><b>{data.docs}</b></div>
-          <div><span className="muted">Задачи в работе</span><b>{data.tasks_open}</b></div>
+          <div><span className="muted">{managerMode ? 'Открытые заявки' : 'Ресторан'}</span><b>{managerMode ? `${data.requests_open || 0}` : (data.restaurant?.name || '—')}</b></div>
+          <div><span className="muted">{managerMode ? 'Сотрудники' : 'Статус'}</span><b>{managerMode ? data.users : 'подключён'}</b></div>
+          <div><span className="muted">{managerMode ? 'Задачи в работе' : 'Настройки'}</span><b>{managerMode ? data.tasks_open : 'у менеджера'}</b></div>
         </div>
       </div>
     </Card>
-    <AdminProblemDashboard />
+    {managerMode ? <AdminProblemDashboard /> : <OwnerAccountNotice />}
   </>;
+}
+
+function OwnerAccountNotice() {
+  return <Card title="Распределение ролей" right={<span className="badge">Настройки у менеджера</span>}>
+    <div className="ownerRoleNotice">
+      <div>
+        <strong>Менеджер управляет рестораном</strong>
+        <p>Сотрудники, чек-листы, номенклатура, залы и база знаний находятся в рабочем кабинете менеджера.</p>
+      </div>
+      <div>
+        <strong>Владелец контролирует аккаунт</strong>
+        <p>На этой странице остаются общий статус ресторана и подписка, без ежедневной операционной настройки.</p>
+      </div>
+    </div>
+  </Card>;
 }
 
 function UsersAdmin() {
@@ -858,9 +890,11 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
   const [notificationCount, setNotificationCount] = useState(0);
   const [openTechComposer, setOpenTechComposer] = useState(false);
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
+  const isSenior = seniorRoles.includes(user.role);
   const tabs = withIcons([
     { id: 'today', title: 'Сегодня' }, { id: 'checklists', title: 'Чек-лист' }, { id: 'bookings', title: 'Брони' }, { id: 'requests', title: 'Заявки' },
-    { id: 'inventory', title: 'Инвент.' }, { id: 'tasks', title: 'Задачи' }, { id: 'knowledge', title: 'База' }
+    { id: 'inventory', title: 'Инвент.' }, { id: 'tasks', title: 'Задачи' }, { id: 'knowledge', title: 'База' },
+    ...(isSenior ? [{ id: 'admin-checklists', title: 'Редактор ЧЛ' }, { id: 'admin-tasks', title: 'Задачи отдела' }] : [])
   ]);
 
   async function refreshNotifications() {
@@ -878,7 +912,8 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     { id: 'today', title: 'Обзор', icon: 'overview', active: tab === 'today', onClick: () => setTab('today') },
     { id: 'checklists', title: 'Чек-листы', icon: 'checklists', active: tab === 'checklists', onClick: () => setTab('checklists') },
     { id: 'bookings', title: 'Брони', icon: 'bookings', active: tab === 'bookings', onClick: () => setTab('bookings') },
-    { id: 'tasks', title: 'Задачи', icon: 'tasks', active: tab === 'tasks', onClick: () => setTab('tasks') }
+    { id: 'tasks', title: 'Задачи', icon: 'tasks', active: tab === 'tasks', onClick: () => setTab('tasks') },
+    ...(isSenior ? [{ id: 'admin-tasks', title: 'Отдел', icon: 'users' as IconName, active: tab === 'admin-tasks' || tab === 'admin-checklists', onClick: () => setTab('admin-tasks') }] : [])
   ];
 
   const mobileMenuItems: MobileActionItem[] = [
@@ -887,14 +922,19 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     { id: 'bookings', title: 'Брони', subtitle: 'Занятость столов и бронь гостей', icon: 'bookings', onClick: () => setTab('bookings') },
     { id: 'requests', title: 'Заявки', subtitle: 'Запросы по товарам и сервису', icon: 'requests', onClick: () => setTab('requests') },
     { id: 'inventory', title: 'Инвентаризация', subtitle: 'Остатки и позиции отдела', icon: 'inventory', onClick: () => setTab('inventory') },
-    { id: 'tasks', title: 'Задачи', subtitle: 'Личные задачи и техзаявки', icon: 'tasks', onClick: () => setTab('tasks') },
-    { id: 'knowledge', title: 'База знаний', subtitle: 'Инструкции и сервис-бук', icon: 'knowledge', onClick: () => setTab('knowledge') }
+    { id: 'tasks', title: 'Задачи', subtitle: 'Личные задачи', icon: 'tasks', onClick: () => setTab('tasks') },
+    { id: 'knowledge', title: 'База знаний', subtitle: 'Инструкции и сервис-бук', icon: 'knowledge', onClick: () => setTab('knowledge') },
+    ...(isSenior ? [
+      { id: 'admin-checklists', title: 'Редактор чек-листов', subtitle: 'Шаблоны своего подразделения', icon: 'checklists' as IconName, onClick: () => setTab('admin-checklists') },
+      { id: 'admin-tasks', title: 'Задачи подразделения', subtitle: 'Создать задачу для своей команды', icon: 'tasks' as IconName, onClick: () => setTab('admin-tasks') }
+    ] : [])
   ];
 
   const mobileCreateItems: MobileActionItem[] = [
     { id: 'booking', title: 'Новая бронь', subtitle: 'Выбрать столы и забронировать гостей', icon: 'bookings', onClick: () => setTab('bookings') },
     { id: 'request', title: 'Создать заявку', subtitle: 'Открыть запросы и отправить новую заявку', icon: 'requests', onClick: () => setTab('requests') },
     { id: 'inventory', title: 'Открыть инвентаризацию', subtitle: 'Быстро заполнить остатки', icon: 'inventory', onClick: () => setTab('inventory') },
+    ...(isSenior ? [{ id: 'department-task', title: 'Задача подразделению', subtitle: 'Поставить задачу своей команде', icon: 'tasks' as IconName, onClick: () => setTab('admin-tasks') }] : []),
     { id: 'tech', title: 'Сообщить о проблеме', subtitle: 'Техзаявка для менеджера', icon: 'tasks', onClick: () => {
       setTab('tasks');
       setOpenTechComposer(true);
@@ -907,7 +947,7 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     { id: 'logout', title: 'Выйти из аккаунта', subtitle: 'Завершить сессию', icon: 'logout', onClick: onLogout }
   ];
 
-  return <BasicWorkspace
+  return <div className="employeeMobileOnly"><BasicWorkspace
     user={user}
     subtitle={`${roles[user.role]} · ${restaurant?.name}`}
     tabs={tabs}
@@ -915,8 +955,8 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     setActive={setTab}
     onLogout={onLogout}
     mobile={{
-      title: tab === 'today' ? <>Добро пожаловать, <em>{user.name}</em></> : mobileTabTitle(tab, tabs),
-      subtitle: tab === 'today' ? roles[user.role] : restaurant?.name,
+      title: tab === 'today' ? <>Добро пожаловать, <em>{user.name}</em></> : '',
+      subtitle: tab === 'today' ? roles[user.role] : '',
       isOverview: tab === 'today',
       showMenuButton: false,
       showNotifications: true,
@@ -936,9 +976,11 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     {tab === 'requests' && <Requests user={user} />}
     {tab === 'inventory' && <Inventory user={user} />}
     {tab === 'tasks' && <Tasks user={user} showTechComposer={openTechComposer} onCloseComposer={() => setOpenTechComposer(false)} />}
+    {tab === 'admin-checklists' && <Checklists user={user} admin />}
+    {tab === 'admin-tasks' && <Tasks user={user} admin />}
     {tab === 'knowledge' && <Knowledge user={user} />}
     <NotificationCenter open={showNotificationCenter} onClose={() => setShowNotificationCenter(false)} onChanged={refreshNotifications} />
-  </BasicWorkspace>;
+  </BasicWorkspace></div>;
 }
 
 function Today({
@@ -1078,6 +1120,13 @@ function Checklists({ user, admin = false }: any) {
     type: 'open',
     items: [{ id: '', text: '', required: true, needs_photo: false, needs_comment: false }]
   });
+  const editableRoleEntries = admin ? executableRoles.filter(([key]) => manageableRolesFor(user).includes(key)) : executableRoles;
+  const editorRoleOptions = editableRoleEntries.length ? editableRoleEntries : executableRoles;
+  useEffect(() => {
+    if (admin && editorRoleOptions.length && !editorRoleOptions.some(([key]) => key === templateForm.role)) {
+      setTemplateForm((current: any) => ({ ...current, role: editorRoleOptions[0][0] }));
+    }
+  }, [admin, user.role]);
 
   function resetTemplateEditor() {
     setEditingTemplateId(null);
@@ -1308,12 +1357,12 @@ function Checklists({ user, admin = false }: any) {
   }
 
   return <>
-    {admin && <Card title="Редактор чек-листов" right={<span className="badge active">Менеджер и владелец</span>}>
+    {admin && <Card title="Редактор чек-листов" right={<span className="badge active">Редактирование</span>}>
       <form className="form" onSubmit={saveTemplate}>
         <div className="form two">
           <Field label="Название чек-листа" value={templateForm.title} onChange={(e: any) => setTemplateForm({ ...templateForm, title: e.target.value })} placeholder="Например: Проверка открытия зала" />
           <Select label="Для роли" value={templateForm.role} onChange={(e: any) => setTemplateForm({ ...templateForm, role: e.target.value })}>
-            {executableRoles.map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+            {editorRoleOptions.map(([key, value]) => <option key={key} value={key}>{value}</option>)}
           </Select>
           <Select label="Тип" value={templateForm.type} onChange={(e: any) => setTemplateForm({ ...templateForm, type: e.target.value })}>
             {Object.entries(checklistTypes).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
@@ -1409,6 +1458,7 @@ function Inventory({ user, admin = false }: any) {
   const [importMsg, setImportMsg] = useState('');
   const [importLoading, setImportLoading] = useState(false);
   const [importForm, setImportForm] = useState<any>({ section: 'bar', file: null });
+  const [importPreview, setImportPreview] = useState<any | null>(null);
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [inventoryFilter, setInventoryFilter] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
@@ -1465,6 +1515,7 @@ function Inventory({ user, admin = false }: any) {
   async function importInventoryBlank(e: FormEvent) {
     e.preventDefault();
     setImportMsg('');
+    setImportPreview(null);
     const file: File | null = importForm.file;
     if (!file) {
       setImportMsg('Выберите PDF или Excel-бланк');
@@ -1475,14 +1526,33 @@ function Inventory({ user, admin = false }: any) {
       const data = await readFileAsDataUrl(file);
       const result = await api('/api/admin/inventory/import-template', {
         method: 'POST',
-        body: JSON.stringify({ section: importForm.section, file_name: file.name, mime_type: file.type, data })
+        body: JSON.stringify({ section: importForm.section, file_name: file.name, mime_type: file.type, data, dry_run: true })
       });
       const section = inventorySectionMeta(importForm.section as InventorySectionId);
-      setImportMsg(`Бланк загружен: найдено ${result.detected?.length || 0}, добавлено ${result.added?.length || 0}, уже было ${result.skipped?.length || 0}. Список "${section.title}" можно редактировать ниже.`);
-      setImportForm({ ...importForm, file: null });
+      setImportPreview({ ...result, section: importForm.section, sectionTitle: section.title, fileName: file.name, data, mime_type: file.type });
+      setImportMsg(`Проверка бланка: найдено ${result.detected?.length || 0}, новых ${result.will_add?.length || 0}, уже есть ${result.skipped?.length || 0}. Проверьте список перед добавлением.`);
+    } catch (error: any) {
+      setImportMsg(error.message || 'Не удалось прочитать бланк');
+    } finally {
+      setImportLoading(false);
+    }
+  }
+
+  async function applyInventoryImport() {
+    if (!importPreview) return;
+    setImportLoading(true);
+    setImportMsg('');
+    try {
+      const result = await api('/api/admin/inventory/import-template', {
+        method: 'POST',
+        body: JSON.stringify({ section: importPreview.section, file_name: importPreview.fileName, mime_type: importPreview.mime_type, data: importPreview.data })
+      });
+      setImportMsg(`Ассортимент обновлён: найдено ${result.detected?.length || 0}, добавлено ${result.added?.length || 0}, уже было ${result.skipped?.length || 0}.`);
+      setImportPreview(null);
+      setImportForm({ section: importPreview.section, file: null });
       load();
     } catch (error: any) {
-      setImportMsg(error.message || 'Не удалось импортировать бланк');
+      setImportMsg(error.message || 'Не удалось добавить товары');
     } finally {
       setImportLoading(false);
     }
@@ -1629,11 +1699,36 @@ function Inventory({ user, admin = false }: any) {
               </label>
             </div>
             <div className="actions">
-              <Button type="submit" disabled={importLoading}>{importLoading ? 'Ищу позиции…' : 'Загрузить бланк и найти товары'}</Button>
+              <Button type="submit" disabled={importLoading}>{importLoading ? 'Ищу позиции…' : 'Проверить бланк'}</Button>
             </div>
           </form>
-          {importMsg && <div className={importMsg.includes('загружен') ? 'notice' : 'error'}>{importMsg}</div>}
-          <div className="inventoryImportHint">Приложение ищет строки с наименованием и единицей измерения. После импорта список можно редактировать вручную ниже.</div>
+          {importMsg && <div className={importMsg.includes('обновл') || importMsg.includes('Проверка') ? 'notice' : 'error'}>{importMsg}</div>}
+          {importPreview && <div className="inventoryImportPreview">
+            <div className="inventoryImportPreviewHead">
+              <div>
+                <strong>Предпросмотр импорта</strong>
+                <span>{importPreview.fileName} · список «{importPreview.sectionTitle}»</span>
+              </div>
+              <div className="inventoryImportPreviewStats">
+                <span>{importPreview.detected?.length || 0} найдено</span>
+                <span>{importPreview.will_add?.length || 0} новых</span>
+                <span>{importPreview.skipped?.length || 0} дублей</span>
+              </div>
+            </div>
+            <div className="inventoryImportPreviewList">
+              {(importPreview.preview || []).slice(0, 18).map((item: any, index: number) => <div className="inventoryImportPreviewRow" key={`${item.name}-${index}`}>
+                <div><strong>{item.name}</strong><span>{item.category || importPreview.sectionTitle}</span></div>
+                <em>{item.unit}</em>
+                <span className={cx('badge', item.status === 'new' ? 'active' : 'trial')}>{item.status === 'new' ? 'добавится' : 'уже есть'}</span>
+              </div>)}
+              {(importPreview.preview || []).length > 18 && <span className="muted">И ещё {(importPreview.preview || []).length - 18} позиций</span>}
+            </div>
+            <div className="actions">
+              <Button type="button" kind="soft" onClick={() => setImportPreview(null)}>Отменить</Button>
+              <Button type="button" disabled={importLoading || !(importPreview.will_add || []).length} onClick={applyInventoryImport}>Добавить новые позиции</Button>
+            </div>
+          </div>}
+          <div className="inventoryImportHint">Приложение сначала показывает найденные позиции: новые товары можно проверить перед добавлением, дубли не попадут в список повторно.</div>
 
           <form className="form inventoryOwnerForm" onSubmit={addProduct}>
             <div className="form two inventoryOwnerFormGrid">
@@ -1730,6 +1825,16 @@ function Inventory({ user, admin = false }: any) {
   </>;
 }
 
+function KnowledgeDocumentBody({ doc }: { doc: any }) {
+  const ingredients = Array.isArray(doc?.ingredients) ? doc.ingredients : [];
+  return <>
+    {doc?.photo_url && <img className="knowledgeDocPhoto" src={doc.photo_url} alt={doc.title || 'Фото'} />}
+    {doc?.file_url && <a className="fileLink" href={doc.file_url} target="_blank" rel="noreferrer">Открыть PDF</a>}
+    {ingredients.length > 0 && <div className="ttkIngredients"><strong>Состав</strong>{ingredients.map((item: any, index: number) => <div key={item.name + index}><span>{item.name}</span><em>{item.display_qty || item.qty} {item.unit}</em></div>)}</div>}
+    {doc?.content && <pre>{doc.content}</pre>}
+  </>;
+}
+
 function Knowledge({ user, admin = false }: any) {
   const [categories, setCategories] = useState<any[]>([]);
   const [stats, setStats] = useState<any[]>([]);
@@ -1738,7 +1843,7 @@ function Knowledge({ user, admin = false }: any) {
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [knowledgeMsg, setKnowledgeMsg] = useState('');
   const [catForm, setCatForm] = useState<any>({ title: '', allowed_roles: [] });
-  const [docForm, setDocForm] = useState<any>({ category_id: '', title: '', content: '', allowed_roles: [], requires_acknowledgement: true });
+  const [docForm, setDocForm] = useState<any>({ category_id: '', title: '', type: 'text', content: '', file: null, photo: null, allowed_roles: [], requires_acknowledgement: true });
 
   async function load() {
     const cats = await api('/api/knowledge');
@@ -1775,6 +1880,18 @@ function Knowledge({ user, admin = false }: any) {
     }
   }
 
+  async function attachDocFile(file?: File | null) {
+    if (!file) return;
+    const data = await readFileAsDataUrl(file);
+    setDocForm((current: any) => ({ ...current, file: { file_name: file.name, mime_type: file.type, data } }));
+  }
+
+  async function attachDocPhoto(file?: File | null) {
+    if (!file) return;
+    const data = await readFileAsDataUrl(file);
+    setDocForm((current: any) => ({ ...current, photo: { file_name: file.name, mime_type: file.type, data } }));
+  }
+
   async function createDoc(e: FormEvent) {
     e.preventDefault();
     setKnowledgeMsg('');
@@ -1785,7 +1902,7 @@ function Knowledge({ user, admin = false }: any) {
         allowed_roles: []
       };
       await api('/api/admin/knowledge/documents', { method: 'POST', body: JSON.stringify(payload) });
-      setDocForm({ ...docForm, category_id: payload.category_id, title: '', content: '', allowed_roles: [] });
+      setDocForm({ ...docForm, category_id: payload.category_id, title: '', content: '', file: null, photo: null, allowed_roles: [] });
       setKnowledgeMsg('Документ сохранён');
       load();
     } catch (error: any) {
@@ -1847,7 +1964,7 @@ function Knowledge({ user, admin = false }: any) {
             <h2>{openDoc.title}</h2>
             <button className="iconBtn" onClick={() => setOpenDoc(null)}>×</button>
           </div>
-          <pre>{openDoc.content}</pre>
+          <KnowledgeDocumentBody doc={openDoc} />
           {openDoc.requires_acknowledgement && !openDoc.acknowledged && <Button onClick={() => ack(openDoc)}>Ознакомился</Button>}
         </div>
       </div>}
@@ -1861,13 +1978,33 @@ function Knowledge({ user, admin = false }: any) {
         <Button kind="soft">Создать папку</Button>
       </form>
       <form className="form" onSubmit={createDoc}>
-        <Select label="Папка" value={docForm.category_id || selectedCategoryId} onChange={(e: any) => {
-          setSelectedCategoryId(e.target.value);
-          setDocForm({ ...docForm, category_id: e.target.value });
-        }}><option value="">Выбрать папку</option>{categories.map(c => <option value={c.id} key={c.id}>{c.title}</option>)}</Select>
-        <Field label="Название документа / ТТК" value={docForm.title} onChange={(e: any) => setDocForm({ ...docForm, title: e.target.value })} />
-        <Textarea label="Текст" rows={8} value={docForm.content} onChange={(e: any) => setDocForm({ ...docForm, content: e.target.value })} />
-        <Button>Добавить документ</Button>
+        <div className="form two">
+          <Select label="Папка" value={docForm.category_id || selectedCategoryId} onChange={(e: any) => {
+            setSelectedCategoryId(e.target.value);
+            setDocForm({ ...docForm, category_id: e.target.value });
+          }}><option value="">Выбрать папку</option>{categories.map(c => <option value={c.id} key={c.id}>{c.title}</option>)}</Select>
+          <Select label="Тип документа" value={docForm.type} onChange={(e: any) => setDocForm({ ...docForm, type: e.target.value })}>
+            <option value="text">Текст</option>
+            <option value="pdf">PDF-документ</option>
+            <option value="ttk">ТТК из PDF</option>
+            <option value="service_book">Сервис-бук PDF</option>
+          </Select>
+        </div>
+        <Field label="Название" value={docForm.title} onChange={(e: any) => setDocForm({ ...docForm, title: e.target.value })} placeholder={docForm.type === 'ttk' ? 'Можно оставить пустым - возьмём из ТТК' : 'Название документа'} />
+        {docForm.type === 'text' && <Textarea label="Текст" rows={8} value={docForm.content} onChange={(e: any) => setDocForm({ ...docForm, content: e.target.value })} />}
+        {docForm.type !== 'text' && <div className="fileUploadGrid">
+          <label className="fileUploadBox">
+            <span>{docForm.type === 'ttk' ? 'PDF с ТТК' : 'PDF-файл'}</span>
+            <input type="file" accept="application/pdf,.pdf" onChange={(e) => attachDocFile(e.target.files?.[0])} />
+            <em>{docForm.file?.file_name || 'Файл не выбран'}</em>
+          </label>
+          {docForm.type === 'ttk' && <label className="fileUploadBox">
+            <span>Фото блюда / напитка</span>
+            <input type="file" accept="image/*" onChange={(e) => attachDocPhoto(e.target.files?.[0])} />
+            <em>{docForm.photo?.file_name || 'Фото можно добавить позже'}</em>
+          </label>}
+        </div>}
+        <Button>{docForm.type === 'ttk' ? 'Загрузить и разобрать ТТК' : 'Добавить документ'}</Button>
       </form>
       {knowledgeMsg && <div className={knowledgeMsg.includes('создан') || knowledgeMsg.includes('сохран') ? 'notice' : 'error'}>{knowledgeMsg}</div>}
     </Card>}
@@ -1875,7 +2012,7 @@ function Knowledge({ user, admin = false }: any) {
       {categories.length === 0 && <Empty text="Документов нет" />}
       <div className="grid">{categories.map(c => <div className="miniCard" key={c.id}><b>{c.title}</b>{c.documents.map((d: any) => <button className="docRow" key={d.id} onClick={() => viewDoc(d)}><span>{d.title}</span><em>{d.acknowledged ? 'ознакомлен' : d.requires_acknowledgement ? 'нужно ознакомиться' : 'документ'}</em></button>)}</div>)}</div>
     </Card>
-    {openDoc && <div className="modal" onClick={() => setOpenDoc(null)}><div className="modalCard" onClick={(e) => e.stopPropagation()}><div className="rowBetween"><h2>{openDoc.title}</h2><button className="iconBtn" onClick={() => setOpenDoc(null)}>×</button></div><pre>{openDoc.content}</pre>{openDoc.requires_acknowledgement && !openDoc.acknowledged && <Button onClick={() => ack(openDoc)}>Ознакомился</Button>}</div></div>}
+    {openDoc && <div className="modal" onClick={() => setOpenDoc(null)}><div className="modalCard" onClick={(e) => e.stopPropagation()}><div className="rowBetween"><h2>{openDoc.title}</h2><button className="iconBtn" onClick={() => setOpenDoc(null)}>×</button></div><KnowledgeDocumentBody doc={openDoc} />{openDoc.requires_acknowledgement && !openDoc.acknowledged && <Button onClick={() => ack(openDoc)}>Ознакомился</Button>}</div></div>}
     {admin && <Card title="Статистика ознакомления"><div className="list">{stats.map(s => <div className="listRow" key={s.id}><div><b>{s.title}</b><span>Просмотры: {s.views}</span></div><span className="badge active">Ознакомились: {s.acknowledgements}</span></div>)}</div></Card>}
   </>;
 }
