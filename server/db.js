@@ -394,10 +394,10 @@ export function createRestaurantWithDefaults(db, data) {
   });
 
   addChecklist(db, restaurant.id, 'waiter', 'open', 'Открытие смены официанта', [
-    'Проверить чистоту столов и посадочных мест', 'Проверить наличие меню', 'Проверить салфетки и приборы', 'Проверить терминал оплаты', 'Сообщить управляющему о готовности зала'
+    'Проверить чистоту столов и посадочных мест', 'Проверить наличие меню', 'Проверить салфетки и приборы', 'Проверить терминал оплаты', 'Сообщить менеджеру о готовности зала'
   ]);
   addChecklist(db, restaurant.id, 'waiter', 'close', 'Закрытие смены официанта', [
-    'Протереть столы', 'Сдать терминал и отчёт', 'Проверить забытые вещи гостей', 'Закрыть кассовую зону', 'Передать смену управляющему'
+    'Протереть столы', 'Сдать терминал и отчёт', 'Проверить забытые вещи гостей', 'Закрыть кассовую зону', 'Передать смену менеджеру'
   ]);
   addChecklist(db, restaurant.id, 'bartender', 'open', 'Открытие бара', [
     'Проверить лёд', 'Проверить заготовки', 'Проверить чистоту станции', 'Проверить стоп-лист бара', 'Подготовить гарниши'
@@ -428,7 +428,7 @@ export function createRestaurantWithDefaults(db, data) {
 
   addKnowledge(db, restaurant.id, 'Сервис-бук', ['waiter', 'hostess', 'manager', 'owner'], [
     { title: 'Стандарт приветствия гостя', content: 'Гость должен получить приветствие в течение 30 секунд. Улыбка, зрительный контакт, предложение помочь с посадкой.' },
-    { title: 'Работа с жалобой', content: 'Выслушать гостя, не спорить, извиниться, позвать управляющего, зафиксировать ситуацию.' }
+    { title: 'Работа с жалобой', content: 'Выслушать гостя, не спорить, извиниться, позвать менеджера, зафиксировать ситуацию.' }
   ]);
   addKnowledge(db, restaurant.id, 'ТТК бара', ['bartender', 'manager', 'owner'], [
     { title: 'Aperol Spritz', content: 'Выход: 250 мл\nСостав: Aperol 60 мл, Prosecco 90 мл, Soda 30 мл, апельсин 1 слайс.\nТехнология: бокал со льдом, налить ингредиенты, аккуратно перемешать, украсить.' }
@@ -437,7 +437,7 @@ export function createRestaurantWithDefaults(db, data) {
     { title: 'Цезарь с курицей', content: 'Выход: 280 г\nАллергены: яйцо, молочные продукты, глютен.\nТехнология: подготовить салат, курицу, соус, выложить по стандарту подачи.' }
   ]);
 
-  const task = { id: uid('task'), restaurant_id: restaurant.id, title: 'Проверить актуальность стоп-листа', description: 'Перед открытием смены проверьте стоп-лист и сообщите управляющему.', target_type: 'all', target_role: null, target_user_id: null, due_at: addDays(1), created_by: null, created_at: nowIso(), active: true };
+  const task = { id: uid('task'), restaurant_id: restaurant.id, title: 'Проверить актуальность стоп-листа', description: 'Перед открытием смены проверьте стоп-лист и сообщите менеджеру.', target_type: 'all', target_role: null, target_user_id: null, due_at: addDays(1), created_by: null, created_at: nowIso(), active: true };
   db.tasks.push(task);
   db.users.filter(u => u.restaurant_id === restaurant.id && !u.is_super_admin).forEach(u => {
     db.task_assignments.push({ id: uid('tasg'), restaurant_id: restaurant.id, task_id: task.id, user_id: u.id, done: false, comment: '', completed_at: null });

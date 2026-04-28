@@ -534,30 +534,41 @@ function RestaurantWorkspace({
           }
         : null;
 
+  const managerMode = user.role === 'manager';
+
   const mobileNavItems: MobileNavItem[] = [
     { id: 'overview', title: 'Обзор', icon: 'overview', active: active === 'overview', onClick: () => setActive('overview') },
-    { id: 'checklists', title: 'Чек-листы', icon: 'checklists', active: active === 'checklists', onClick: () => setActive('checklists') },
+    { id: 'bookings', title: 'Брони', icon: 'bookings', active: active === 'bookings', onClick: () => setActive('bookings') },
+    { id: 'requests', title: 'Заявки', icon: 'requests', active: active === 'requests', onClick: () => setActive('requests') },
     { id: 'tasks', title: 'Задачи', icon: 'tasks', active: active === 'tasks', onClick: () => setActive('tasks') },
-    { id: 'knowledge', title: 'Профиль', icon: 'user', active: active === 'knowledge', onClick: () => setActive('knowledge') }
+    { id: 'knowledge', title: 'База', icon: 'knowledge', active: active === 'knowledge', onClick: () => setActive('knowledge') }
   ];
 
-  const mobileMenuItems: MobileActionItem[] = tabs.map((tab) => ({
-    id: tab.id,
-    title: tab.title,
-    subtitle: restaurant?.name,
-    icon: tab.icon || 'overview',
-    onClick: () => setActive(tab.id)
-  }));
+  const mobileMenuItems: MobileActionItem[] = tabs
+    .filter((tab) => !managerMode || tab.id !== 'users')
+    .map((tab) => ({
+      id: tab.id,
+      title: tab.title,
+      subtitle: restaurant?.name,
+      icon: tab.icon || 'overview',
+      onClick: () => setActive(tab.id)
+    }));
 
-  const mobileCreateItems: MobileActionItem[] = [
-    { id: 'users', title: 'Сотрудники', subtitle: 'Добавить и управлять доступами', icon: 'users', onClick: () => setActive('users') },
-    { id: 'requests', title: 'Заявки', subtitle: 'Открыть закупки и приёмку', icon: 'requests', onClick: () => setActive('requests') },
-    { id: 'inventory', title: 'Инвентаризация', subtitle: 'Проверить остатки и Excel-отчёты', icon: 'inventory', onClick: () => setActive('inventory') }
-  ];
+  const mobileCreateItems: MobileActionItem[] = managerMode
+    ? [
+      { id: 'bookings', title: 'Брони и столы', subtitle: 'Открыть схему зала', icon: 'bookings', onClick: () => setActive('bookings') },
+      { id: 'requests', title: 'Заявки', subtitle: 'Принять и обработать заявки', icon: 'requests', onClick: () => setActive('requests') },
+      { id: 'tasks', title: 'Задачи', subtitle: 'Поставить задачу сотрудникам', icon: 'tasks', onClick: () => setActive('tasks') }
+    ]
+    : [
+      { id: 'users', title: 'Сотрудники', subtitle: 'Добавить и управлять доступами', icon: 'users', onClick: () => setActive('users') },
+      { id: 'requests', title: 'Заявки', subtitle: 'Открыть закупки и приёмку', icon: 'requests', onClick: () => setActive('requests') },
+      { id: 'inventory', title: 'Инвентаризация', subtitle: 'Проверить остатки и Excel-отчёты', icon: 'inventory', onClick: () => setActive('inventory') }
+    ];
 
   const mobileProfileItems: MobileActionItem[] = [
-    { id: 'support', title: 'Поддержка', subtitle: 'База знаний и сопровождение', icon: 'support', onClick: openSupport },
-    { id: 'billing', title: 'Тарифы и оплата', subtitle: 'Статус подписки и продление', icon: 'trial', onClick: openBilling },
+    { id: 'support', title: 'База знаний', subtitle: 'Инструкции и документы', icon: 'knowledge', onClick: () => setActive('knowledge') },
+    ...(!managerMode ? [{ id: 'billing', title: 'Тарифы и оплата', subtitle: 'Статус подписки и продление', icon: 'trial', onClick: openBilling }] : []),
     { id: 'logout', title: 'Выйти', subtitle: 'Завершить рабочую сессию', icon: 'logout', onClick: onLogout }
   ];
 
@@ -702,7 +713,7 @@ function RestaurantAdmin({ user, restaurant, onLogout }: any) {
     active={tab}
     setActive={setTab}
     onLogout={onLogout}
-    banner={(openBilling) => <SubscriptionBanner restaurant={restaurant} openBilling={openBilling} />}
+    banner={(openBilling) => user.role === 'owner' ? <SubscriptionBanner restaurant={restaurant} openBilling={openBilling} /> : null}
   >
     <div className="contentStack">{section}</div>
   </RestaurantWorkspace>;
@@ -985,7 +996,6 @@ function Today({
   const inventoryItems = overview.templates.reduce((total: number, template: any) => total + (template.items?.length || 0), 0);
 
   return <div className="mobileSectionStack">
-    <ShiftControl user={user} />
     <SectionTitle title="Сегодня" action={<button type="button" className="sectionLink" onClick={onOpenTasks}>Все задачи</button>} />
 
     <div className="mobileOverviewList">
@@ -1045,7 +1055,6 @@ function Today({
       </div>
       {completedTasks.length > 0 && <div className="mobileInlineHint">Выполнено за смену: {completedTasks.length}</div>}
     </Card>
-    <Card title="Лента смены" className="mobileCard compactMobileCard"><ActivityFeed limit={6} compact /></Card>
   </div>;
 }
 
@@ -1659,14 +1668,63 @@ function Knowledge({ user, admin = false }: any) {
   const [stats, setStats] = useState<any[]>([]);
   const [openDoc, setOpenDoc] = useState<any>(null);
   const [search, setSearch] = useState('');
-  const [catForm, setCatForm] = useState<any>({ title: '', allowed_roles: ['waiter'] });
-  const [docForm, setDocForm] = useState<any>({ category_id: '', title: '', content: '', allowed_roles: ['waiter'], requires_acknowledgement: true });
-  async function load() { const cats = await api('/api/knowledge'); setCategories(cats); if (admin) setStats(await api('/api/admin/knowledge/stats')); }
+  const [selectedCategoryId, setSelectedCategoryId] = useState('');
+  const [knowledgeMsg, setKnowledgeMsg] = useState('');
+  const [catForm, setCatForm] = useState<any>({ title: '', allowed_roles: [] });
+  const [docForm, setDocForm] = useState<any>({ category_id: '', title: '', content: '', allowed_roles: [], requires_acknowledgement: true });
+
+  async function load() {
+    const cats = await api('/api/knowledge');
+    setCategories(cats);
+    if (admin) setStats(await api('/api/admin/knowledge/stats'));
+    if (!selectedCategoryId && cats.length) setSelectedCategoryId(cats[0].id);
+  }
+
   useEffect(() => { load(); }, []);
-  async function viewDoc(doc: any) { setOpenDoc(doc); await api(`/api/knowledge/${doc.id}/view`, { method: 'POST', body: '{}' }); }
-  async function ack(doc: any) { const result = await api(`/api/knowledge/${doc.id}/ack`, { method: 'POST', body: '{}' }); setOpenDoc({ ...doc, acknowledged: true, offlineAck: !!result?.offline }); load().catch(() => undefined); }
-  async function createCat(e: FormEvent) { e.preventDefault(); await api('/api/admin/knowledge/categories', { method: 'POST', body: JSON.stringify(catForm) }); setCatForm({ title: '', allowed_roles: ['waiter'] }); load(); }
-  async function createDoc(e: FormEvent) { e.preventDefault(); await api('/api/admin/knowledge/documents', { method: 'POST', body: JSON.stringify(docForm) }); setDocForm({ ...docForm, title: '', content: '' }); load(); }
+
+  async function viewDoc(doc: any) {
+    setOpenDoc(doc);
+    await api(`/api/knowledge/${doc.id}/view`, { method: 'POST', body: '{}' });
+  }
+
+  async function ack(doc: any) {
+    const result = await api(`/api/knowledge/${doc.id}/ack`, { method: 'POST', body: '{}' });
+    setOpenDoc({ ...doc, acknowledged: true, offlineAck: !!result?.offline });
+    load().catch(() => undefined);
+  }
+
+  async function createCat(e: FormEvent) {
+    e.preventDefault();
+    setKnowledgeMsg('');
+    try {
+      const created = await api('/api/admin/knowledge/categories', { method: 'POST', body: JSON.stringify({ ...catForm, allowed_roles: [] }) });
+      setCatForm({ title: '', allowed_roles: [] });
+      setDocForm((current: any) => ({ ...current, category_id: created.id }));
+      setSelectedCategoryId(created.id);
+      setKnowledgeMsg('Папка создана');
+      load();
+    } catch (error: any) {
+      setKnowledgeMsg(error.message || 'Не удалось создать папку');
+    }
+  }
+
+  async function createDoc(e: FormEvent) {
+    e.preventDefault();
+    setKnowledgeMsg('');
+    try {
+      const payload = {
+        ...docForm,
+        category_id: docForm.category_id || selectedCategoryId || categories[0]?.id || '',
+        allowed_roles: []
+      };
+      await api('/api/admin/knowledge/documents', { method: 'POST', body: JSON.stringify(payload) });
+      setDocForm({ ...docForm, category_id: payload.category_id, title: '', content: '', allowed_roles: [] });
+      setKnowledgeMsg('Документ сохранён');
+      load();
+    } catch (error: any) {
+      setKnowledgeMsg(error.message || 'Не удалось сохранить документ');
+    }
+  }
 
   if (!admin) {
     const visibleCategories = categories
@@ -1674,40 +1732,48 @@ function Knowledge({ user, admin = false }: any) {
         ...category,
         documents: category.documents.filter((document: any) => {
           const haystack = `${document.title} ${document.content || ''}`.toLowerCase();
-          return !search.trim() || haystack.includes(search.trim().toLowerCase());
+          return !search.trim() || haystack.includes(search.trim().toLowerCase()) || category.title.toLowerCase().includes(search.trim().toLowerCase());
         })
       }))
       .filter((category) => category.documents.length || !search.trim());
 
+    const selectedCategory = visibleCategories.find((category) => category.id === selectedCategoryId) || visibleCategories[0];
+
     return <>
       <div className="mobileSectionStack">
-        <SectionTitle title="База знаний" />
-        <Card className="mobileCard">
-          <Field label="Поиск инструкций" icon="search" value={search} onChange={(e: any) => setSearch(e.target.value)} placeholder="Поиск инструкций..." />
-          <div className="mobileKnowledgeGrid">
-            {visibleCategories.map((category) => <article key={category.id} className="mobileKnowledgeFolder">
-              <div className="mobileKnowledgeFolderHead">
-                <div className="mobileStatBadge blue"><AppIcon name="folder" className="navIcon" /></div>
-                <div>
-                  <strong>{category.title}</strong>
-                  <span>{category.documents.length} документов</span>
-                </div>
-              </div>
-              <div className="mobileKnowledgeDocs">
-                {category.documents.map((document: any) => <button key={document.id} type="button" className="mobileKnowledgeDoc" onClick={() => viewDoc(document)}>
-                  <div className="mobileKnowledgeDocIcon"><AppIcon name="file" className="navIcon" /></div>
-                  <div className="mobileKnowledgeDocCopy">
-                    <strong>{document.title}</strong>
-                    <span>{document.acknowledged ? 'Ознакомлен' : document.requires_acknowledgement ? 'Нужно ознакомиться' : 'Документ'}</span>
-                  </div>
-                  <AppIcon name="chevron" className="navIcon" />
-                </button>)}
-              </div>
-            </article>)}
-            {visibleCategories.length === 0 && <Empty text="Ничего не найдено по этому запросу" />}
-          </div>
-        </Card>
+        <SectionTitle
+          title={selectedCategoryId && selectedCategory ? selectedCategory.title : 'База знаний'}
+          action={selectedCategoryId ? <button type="button" className="sectionLink" onClick={() => setSelectedCategoryId('')}>Папки</button> : undefined}
+        />
+
+        <div className="mobileKnowledgeSearch">
+          <Field label="Поиск" icon="search" value={search} onChange={(e: any) => setSearch(e.target.value)} placeholder="Найти документ" />
+        </div>
+
+        {!selectedCategoryId && <div className="mobileKnowledgeFolderList">
+          {visibleCategories.map((category) => <button key={category.id} type="button" className="mobileKnowledgeFolderRow" onClick={() => setSelectedCategoryId(category.id)}>
+            <div className="mobileKnowledgeFolderIcon"><AppIcon name="folder" className="navIcon" /></div>
+            <div>
+              <strong>{category.title}</strong>
+              <span>{category.documents.length} документов</span>
+            </div>
+            <AppIcon name="chevron" className="navIcon" />
+          </button>)}
+          {visibleCategories.length === 0 && <Empty text="Ничего не найдено по этому запросу" />}
+        </div>}
+
+        {selectedCategoryId && selectedCategory && <div className="mobileKnowledgeDocList">
+          {selectedCategory.documents.map((document: any) => <button key={document.id} type="button" className="mobileKnowledgeDocRow" onClick={() => viewDoc(document)}>
+            <div>
+              <strong>{document.title}</strong>
+              <span>{document.acknowledged ? 'Ознакомлен' : document.requires_acknowledgement ? 'Нужно ознакомиться' : 'Документ'}</span>
+            </div>
+            <AppIcon name="chevron" className="navIcon" />
+          </button>)}
+          {selectedCategory.documents.length === 0 && <Empty text="В этой папке пока нет документов" />}
+        </div>}
       </div>
+
       {openDoc && <div className="modal" onClick={() => setOpenDoc(null)}>
         <div className="modalCard mobileDocModal" onClick={(e) => e.stopPropagation()}>
           <div className="rowBetween">
@@ -1728,11 +1794,15 @@ function Knowledge({ user, admin = false }: any) {
         <Button kind="soft">Создать папку</Button>
       </form>
       <form className="form" onSubmit={createDoc}>
-        <Select label="Папка" value={docForm.category_id} onChange={(e: any) => setDocForm({ ...docForm, category_id: e.target.value })}><option value="">Выбрать папку</option>{categories.map(c => <option value={c.id} key={c.id}>{c.title}</option>)}</Select>
+        <Select label="Папка" value={docForm.category_id || selectedCategoryId} onChange={(e: any) => {
+          setSelectedCategoryId(e.target.value);
+          setDocForm({ ...docForm, category_id: e.target.value });
+        }}><option value="">Выбрать папку</option>{categories.map(c => <option value={c.id} key={c.id}>{c.title}</option>)}</Select>
         <Field label="Название документа / ТТК" value={docForm.title} onChange={(e: any) => setDocForm({ ...docForm, title: e.target.value })} />
         <Textarea label="Текст" rows={8} value={docForm.content} onChange={(e: any) => setDocForm({ ...docForm, content: e.target.value })} />
         <Button>Добавить документ</Button>
       </form>
+      {knowledgeMsg && <div className={knowledgeMsg.includes('создан') || knowledgeMsg.includes('сохран') ? 'notice' : 'error'}>{knowledgeMsg}</div>}
     </Card>}
     <Card title="База знаний / ТТК / сервис-бук">
       {categories.length === 0 && <Empty text="Документов нет" />}

@@ -1315,8 +1315,9 @@ app.get('/api/knowledge', auth, ensureRestaurantActive, (req, res) => {
 
 app.post('/api/admin/knowledge/categories', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
   const { title, allowed_roles } = req.body;
-  if (!title) return res.status(400).json({ error: 'Название обязательно' });
-  const cat = { id: uid('kcat'), restaurant_id: req.user.restaurant_id, title, allowed_roles: allowed_roles || [], sort_order: sameRestaurant(db.knowledge_categories, req.user.restaurant_id).length + 1 };
+  const cleanTitle = String(title || '').trim();
+  if (!cleanTitle) return res.status(400).json({ error: 'Название обязательно' });
+  const cat = { id: uid('kcat'), restaurant_id: req.user.restaurant_id, title: cleanTitle, allowed_roles: Array.isArray(allowed_roles) ? allowed_roles : [], sort_order: sameRestaurant(db.knowledge_categories, req.user.restaurant_id).length + 1 };
   db.knowledge_categories.push(cat);
   await persist();
   res.status(201).json(cat);
@@ -1324,8 +1325,10 @@ app.post('/api/admin/knowledge/categories', auth, ensureRestaurantActive, adminO
 
 app.post('/api/admin/knowledge/documents', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
   const { category_id, title, content, allowed_roles, requires_acknowledgement, type, file_url } = req.body;
-  if (!category_id || !title) return res.status(400).json({ error: 'Нужны category_id и title' });
-  const doc = { id: uid('kdoc'), restaurant_id: req.user.restaurant_id, category_id, title, type: type || 'text', content: content || '', file_url: file_url || '', allowed_roles: allowed_roles || [], requires_acknowledgement: !!requires_acknowledgement, version: 1, is_active: true, created_by: req.user.id, created_at: nowIso(), updated_at: nowIso() };
+  const cleanTitle = String(title || '').trim();
+  const category = db.knowledge_categories.find(c => c.id === category_id && c.restaurant_id === req.user.restaurant_id);
+  if (!category || !cleanTitle) return res.status(400).json({ error: 'Выберите папку и укажите название документа' });
+  const doc = { id: uid('kdoc'), restaurant_id: req.user.restaurant_id, category_id, title: cleanTitle, type: type || 'text', content: content || '', file_url: file_url || '', allowed_roles: Array.isArray(allowed_roles) ? allowed_roles : [], requires_acknowledgement: requires_acknowledgement !== false, version: 1, is_active: true, created_by: req.user.id, created_at: nowIso(), updated_at: nowIso() };
   db.knowledge_documents.push(doc);
   await persist();
   res.status(201).json(doc);

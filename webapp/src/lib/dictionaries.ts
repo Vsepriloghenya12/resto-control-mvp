@@ -1,6 +1,6 @@
 export const roles: Record<string, string> = {
   owner: 'Владелец',
-  manager: 'Управляющий',
+  manager: 'Менеджер',
   hostess: 'Хостес',
   waiter: 'Официант',
   bartender: 'Бармен',
