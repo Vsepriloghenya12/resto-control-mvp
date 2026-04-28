@@ -40,9 +40,15 @@ const techRequestStatuses = { new: 'новая', in_progress: 'в работе',
 const productRequestStatuses = { sent: 'отправлена', ordered: 'заказано', partial: 'частично пришло', received: 'получено', done: 'завершена', not_received: 'не получено', cancelled: 'отменена' };
 const problemTypeLabels = { task: 'Задача', tech_request: 'Техзаявка', product_request: 'Заявка' };
 const bookingStatuses = { booked: 'забронирован', seated: 'гости пришли', completed: 'завершён', cancelled: 'отменён' };
+const inventoryImportSections = {
+  bar: { department: 'bar', title: 'Бар', defaultCategory: 'Бар' },
+  kitchen: { department: 'kitchen', title: 'Кухня', defaultCategory: 'Кухня' },
+  household: { department: 'hall', title: 'Хозтовары', defaultCategory: 'Хозтовары' },
+  dishes: { department: 'hall', title: 'Посуда', defaultCategory: 'Посуда' }
+};
 
 app.use(cors());
-app.use(express.json({ limit: '15mb' }));
+app.use(express.json({ limit: '25mb' }));
 app.use(morgan('tiny'));
 
 let db = await loadDb();
@@ -219,6 +225,151 @@ function parseInventoryQuantity(input) {
   }
 
   return { qty: Math.round(total * 1000) / 1000, expression };
+}
+
+
+function cleanInventoryText(value) {
+  return String(value || '')
+    .replace(/[\u0000-\u001F]+/g, ' ')
+    .replace(/[•·]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizeInventoryUnit(value) {
+  const raw = cleanInventoryText(value).toLowerCase().replace(/[.,:;]+$/g, '');
+  const aliases = {
+    'ед': 'шт.', 'ед.': 'шт.', 'штука': 'шт.', 'штук': 'шт.', 'шт': 'шт.', 'шт.': 'шт.',
+    'килограмм': 'кг', 'килограмма': 'кг', 'кг.': 'кг',
+    'грамм': 'г', 'гр': 'г', 'гр.': 'г',
+    'литр': 'л', 'литра': 'л', 'л.': 'л',
+    'миллилитр': 'мл', 'мл.': 'мл',
+    'уп': 'уп.', 'упак': 'уп.', 'упаковка': 'уп.', 'упаковки': 'уп.',
+    'бут': 'бут.', 'бутылка': 'бут.', 'бутылки': 'бут.',
+    'банка': 'бан.', 'банки': 'бан.', 'бан': 'бан.',
+    'коробка': 'кор.', 'коробки': 'кор.', 'кор': 'кор.',
+    'пачка': 'пач.', 'пачки': 'пач.', 'пач': 'пач.',
+    'порция': 'порц.', 'порции': 'порц.', 'порц': 'порц.',
+    'кега': 'кег', 'кеги': 'кег'
+  };
+  return aliases[raw] || raw;
+}
+
+const inventoryUnitWords = [
+  'шт', 'шт.', 'ед', 'ед.', 'кг', 'кг.', 'г', 'гр', 'гр.', 'л', 'л.', 'мл', 'мл.',
+  'уп', 'уп.', 'упак', 'упаковка', 'бут', 'бут.', 'бутылка', 'банка', 'бан.', 'бан',
+  'коробка', 'кор.', 'кор', 'пачка', 'пач.', 'пач', 'порция', 'порц.', 'порц', 'кег', 'кега',
+  'рул', 'рулон', 'пара', 'компл', 'комплект', 'баллон', 'мешок', 'ящик'
+];
+
+function isInventoryUnit(value) {
+  const unit = normalizeInventoryUnit(value);
+  return inventoryUnitWords.map(normalizeInventoryUnit).includes(unit);
+}
+
+function isInventoryHeader(value) {
+  const text = cleanInventoryText(value).toLowerCase();
+  return /^(№|n|п\/п|наименование|название|товар|продукт|позиция|единица|ед\.?\s*изм\.?|изм\.?|кол-?во|количество|остаток|итого|цена|сумма|комментарий|примечание)$/i.test(text);
+}
+
+function normalizeImportedProductName(value) {
+  return cleanInventoryText(value)
+    .replace(/^\d+[.)\-\s]+/, '')
+    .replace(/^(наименование|название|товар|продукт)\s*[:\-]\s*/i, '')
+    .replace(/\s+(шт\.?|кг\.?|г|гр\.?|л\.?|мл\.?|уп\.?|бут\.?)$/i, '')
+    .trim();
+}
+
+function productKey(name) {
+  return cleanInventoryText(name).toLowerCase().replace(/ё/g, 'е');
+}
+
+function rowFromLine(line) {
+  const text = cleanInventoryText(line);
+  if (!text || text.length < 4) return null;
+  if (/^(наименование|товар|продукт|ед\.?\s*изм|единица|количество|остаток)/i.test(text)) return null;
+
+  const tokens = text.split(/\s+/);
+  const unitIndex = tokens.findIndex(isInventoryUnit);
+  if (unitIndex <= 0) return null;
+
+  const unit = normalizeInventoryUnit(tokens[unitIndex]);
+  const nameTokens = tokens.slice(0, unitIndex).filter(token => !/^\d+[.)]?$/.test(token) && !isInventoryHeader(token));
+  const name = normalizeImportedProductName(nameTokens.join(' '));
+  if (!name || name.length < 2 || isInventoryHeader(name)) return null;
+  return { name, unit };
+}
+
+function rowFromCells(cells) {
+  const cleanCells = cells.map(cleanInventoryText).filter(Boolean);
+  if (cleanCells.length < 2) return null;
+  const lowerJoined = cleanCells.join(' ').toLowerCase();
+  if (/наименование|товар|продукт|ед\.?\s*изм|единица|количество|остаток/.test(lowerJoined)
+    && cleanCells.every(cell => isInventoryHeader(cell) || /^\d+$/.test(cell))) return null;
+
+  const unitIndex = cleanCells.findIndex(isInventoryUnit);
+  if (unitIndex >= 0) {
+    const unit = normalizeInventoryUnit(cleanCells[unitIndex]);
+    const before = cleanCells.slice(0, unitIndex).filter(cell => !isInventoryHeader(cell) && !/^\d+$/.test(cell));
+    const fallback = cleanCells.filter((cell, index) => index !== unitIndex && !isInventoryHeader(cell) && !/^\d+(?:[,.]\d+)?$/.test(cell));
+    const rawName = before.length ? before[before.length - 1] : fallback[0];
+    const name = normalizeImportedProductName(rawName);
+    if (name && name.length >= 2 && !isInventoryHeader(name)) return { name, unit };
+  }
+  return rowFromLine(cleanCells.join(' '));
+}
+
+function uniqueImportedRows(rows) {
+  const seen = new Set();
+  const unique = [];
+  for (const row of rows) {
+    if (!row?.name || !row?.unit) continue;
+    const key = `${productKey(row.name)}::${normalizeInventoryUnit(row.unit)}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push({ name: row.name, unit: normalizeInventoryUnit(row.unit) });
+  }
+  return unique;
+}
+
+async function parseInventoryImportFile({ file_name = '', mime_type = '', data = '' }) {
+  const base64 = String(data || '').replace(/^data:[^;]+;base64,/, '');
+  const buffer = Buffer.from(base64, 'base64');
+  if (!buffer.length) return { error: 'Файл пустой или не удалось прочитать данные' };
+
+  const filename = String(file_name || '').toLowerCase();
+  const type = String(mime_type || '').toLowerCase();
+  const rows = [];
+
+  if (filename.endsWith('.pdf') || type.includes('pdf')) {
+    try {
+      const mod = await import('pdf-parse');
+      const pdfParse = mod.default || mod;
+      const parsed = await pdfParse(buffer);
+      String(parsed.text || '').split(/\r?\n/).map(rowFromLine).filter(Boolean).forEach(row => rows.push(row));
+    } catch (error) {
+      return { error: 'Не удалось прочитать PDF. Если это скан без текста, сохраните бланк в Excel или PDF с распознанным текстом.' };
+    }
+  } else if (filename.endsWith('.xlsx') || filename.endsWith('.xls') || filename.endsWith('.csv') || type.includes('spreadsheet') || type.includes('excel') || type.includes('csv')) {
+    try {
+      const mod = await import('xlsx');
+      const XLSX = mod.default || mod;
+      const workbook = XLSX.read(buffer, { type: 'buffer', raw: false });
+      workbook.SheetNames.forEach(sheetName => {
+        const sheet = workbook.Sheets[sheetName];
+        const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, blankrows: false });
+        matrix.map((cells) => rowFromCells(Array.isArray(cells) ? cells : [])).filter(Boolean).forEach(row => rows.push(row));
+      });
+    } catch (error) {
+      return { error: 'Не удалось прочитать Excel-файл. Загрузите .xlsx, .xls или .csv с колонками «наименование» и «единица».' };
+    }
+  } else {
+    return { error: 'Поддерживаются PDF, Excel .xlsx/.xls и CSV' };
+  }
+
+  const items = uniqueImportedRows(rows);
+  if (!items.length) return { error: 'Не удалось найти наименования и единицы измерения в бланке' };
+  return { items };
 }
 
 function currentTableReservation(restaurant_id, tableId) {
@@ -926,6 +1077,41 @@ app.patch('/api/requests/:id/receive', auth, ensureRestaurantActive, runAsync(as
 }));
 
 // INVENTORY
+app.post('/api/admin/inventory/import-template', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
+  const rid = req.user.restaurant_id;
+  const sectionId = String(req.body.section || 'bar');
+  const section = inventoryImportSections[sectionId] || inventoryImportSections.bar;
+  const parsed = await parseInventoryImportFile(req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+
+  const existing = new Set(sameRestaurant(db.products, rid)
+    .filter(product => product.department === section.department)
+    .map(product => `${productKey(product.name)}::${normalizeInventoryUnit(product.unit)}::${productKey(product.category || '')}`));
+
+  const added = [];
+  const skipped = [];
+  for (const item of parsed.items) {
+    const key = `${productKey(item.name)}::${normalizeInventoryUnit(item.unit)}::${productKey(section.defaultCategory)}`;
+    if (existing.has(key)) {
+      skipped.push(item);
+      continue;
+    }
+    const product = {
+      id: uid('prod'), restaurant_id: rid, department: section.department,
+      name: item.name, unit: item.unit, category: section.defaultCategory,
+      supplier: 'Без поставщика', active: true, created_at: nowIso()
+    };
+    db.products.push(product);
+    syncProductWithInventoryTemplates(db, product);
+    existing.add(key);
+    added.push(product);
+  }
+
+  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'inventory_template_imported', title: `${req.user.name} загрузил бланк инвентаризации: ${section.title}`, entity_type: 'inventory_template', entity_id: null, metadata: { section: sectionId, detected: parsed.items.length, added: added.length, skipped: skipped.length } });
+  await persist();
+  res.status(201).json({ detected: parsed.items, added, skipped });
+}));
+
 app.get('/api/inventory/templates', auth, ensureRestaurantActive, (req, res) => {
   const rid = req.user.restaurant_id;
   const department = req.query.department || (['owner', 'manager'].includes(req.user.role) ? null : req.user.department);

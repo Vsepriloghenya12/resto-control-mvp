@@ -4685,14 +4685,37 @@ textarea {
   }
 }
 
+/* Inventory import + mobile sheet stability */
+.bottomSheetBackdrop {
+  z-index: 180;
+}
 
-/* Hide mobile tab titles: regular tabs start with content, overview keeps welcome copy */
-@media (max-width: 980px) {
-  .mobileHeader {
-    gap: 0;
-  }
+.mobileSheetModal {
+  z-index: 190;
+}
 
-  .mobileHeaderCopy.overview {
-    margin-top: 10px;
-  }
+.techRequestSheet {
+  max-height: calc(100dvh - 24px - env(safe-area-inset-bottom));
+}
+
+.inventoryImportForm {
+  padding: 14px 0 16px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.inventoryImportHint {
+  margin: 0 0 18px;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+}
+
+.inventoryImportForm input[type='file'] {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text);
 }

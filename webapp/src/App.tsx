@@ -1389,6 +1389,16 @@ function Checklists({ user, admin = false }: any) {
   </>;
 }
 
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Не удалось прочитать файл'));
+    reader.readAsDataURL(file);
+  });
+}
+
 function Inventory({ user, admin = false }: any) {
   const [templates, setTemplates] = useState<any[]>([]);
   const [runs, setRuns] = useState<any[]>([]);
@@ -1396,6 +1406,9 @@ function Inventory({ user, admin = false }: any) {
   const [values, setValues] = useState<any>({});
   const [msg, setMsg] = useState('');
   const [productMsg, setProductMsg] = useState('');
+  const [importMsg, setImportMsg] = useState('');
+  const [importLoading, setImportLoading] = useState(false);
+  const [importForm, setImportForm] = useState<any>({ section: 'bar', file: null });
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [inventoryFilter, setInventoryFilter] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
@@ -1446,6 +1459,32 @@ function Inventory({ user, admin = false }: any) {
       load();
     } catch (error: any) {
       setProductMsg(error.message);
+    }
+  }
+
+  async function importInventoryBlank(e: FormEvent) {
+    e.preventDefault();
+    setImportMsg('');
+    const file: File | null = importForm.file;
+    if (!file) {
+      setImportMsg('Выберите PDF или Excel-бланк');
+      return;
+    }
+    setImportLoading(true);
+    try {
+      const data = await readFileAsDataUrl(file);
+      const result = await api('/api/admin/inventory/import-template', {
+        method: 'POST',
+        body: JSON.stringify({ section: importForm.section, file_name: file.name, mime_type: file.type, data })
+      });
+      const section = inventorySectionMeta(importForm.section as InventorySectionId);
+      setImportMsg(`Бланк загружен: найдено ${result.detected?.length || 0}, добавлено ${result.added?.length || 0}, уже было ${result.skipped?.length || 0}. Список "${section.title}" можно редактировать ниже.`);
+      setImportForm({ ...importForm, file: null });
+      load();
+    } catch (error: any) {
+      setImportMsg(error.message || 'Не удалось импортировать бланк');
+    } finally {
+      setImportLoading(false);
     }
   }
 
@@ -1575,6 +1614,27 @@ function Inventory({ user, admin = false }: any) {
     {admin
       ? <>
         <Card title="Списки товаров для инвентаризации" right={<span className="badge active">Бар · Кухня · Хозтовары · Посуда</span>}>
+          <form className="form inventoryImportForm" onSubmit={importInventoryBlank}>
+            <div className="form two inventoryOwnerFormGrid">
+              <Select label="В какой список загрузить" value={importForm.section} onChange={(e: any) => setImportForm({ ...importForm, section: e.target.value })}>
+                {inventorySections.map(section => <option key={section.id} value={section.id}>{section.title}</option>)}
+              </Select>
+              <label className="field">
+                <span>PDF или Excel-бланк</span>
+                <input
+                  type="file"
+                  accept=".pdf,.xlsx,.xls,.csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                  onChange={(e) => setImportForm({ ...importForm, file: e.target.files?.[0] || null })}
+                />
+              </label>
+            </div>
+            <div className="actions">
+              <Button type="submit" disabled={importLoading}>{importLoading ? 'Ищу позиции…' : 'Загрузить бланк и найти товары'}</Button>
+            </div>
+          </form>
+          {importMsg && <div className={importMsg.includes('загружен') ? 'notice' : 'error'}>{importMsg}</div>}
+          <div className="inventoryImportHint">Приложение ищет строки с наименованием и единицей измерения. После импорта список можно редактировать вручную ниже.</div>
+
           <form className="form inventoryOwnerForm" onSubmit={addProduct}>
             <div className="form two inventoryOwnerFormGrid">
               <Select label="Список" value={productForm.section} onChange={(e: any) => setProductForm({ ...productForm, section: e.target.value })}>
