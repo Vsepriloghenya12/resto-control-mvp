@@ -33,6 +33,15 @@ export function manageableRolesFor(user: any) {
   return [];
 }
 
+
+export function taskRecipientRolesFor(user: any) {
+  if (!user) return [];
+  if (user.role === 'senior_bartender') return ['bartender'];
+  if (user.role === 'senior_cook') return ['cook'];
+  if (user.role === 'senior_waiter') return ['waiter', 'hostess'];
+  return manageableRolesFor(user).filter((role) => role !== 'manager' && !seniorRoles.includes(role));
+}
+
 export const executableRoles = Object.entries(roles).filter(([key]) => key !== 'owner');
 
 export const departments: Record<string, string> = {

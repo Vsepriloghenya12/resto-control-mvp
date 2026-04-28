@@ -297,7 +297,7 @@ export function Bookings({ admin = false }: any) {
   if (!admin) {
     return <>
       <div className="mobileSectionStack bookingMobileScreen">
-        <SectionTitle title="Брони" subtitle="Свободный стол можно забронировать или сразу отметить занятым" />
+        <SectionTitle title="Брони" />
         <section className="mobileSection">
           <div className="mobileListSurface mobileFilterSurface"><Field label="Дата" type="date" value={dateFilter} onChange={(e: any) => setDateFilter(e.target.value)} /></div>
         </section>

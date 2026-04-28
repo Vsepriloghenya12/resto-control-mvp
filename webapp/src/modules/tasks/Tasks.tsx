@@ -4,7 +4,7 @@ import { Button, Card } from '../../components/dashboard-ui';
 import { Field, Select, Textarea, Empty } from '../../components/form-controls';
 import { MobileSheetModal } from '../../components/mobile-sheet-modal';
 import { CommentsPanel } from '../../components/comments-panel';
-import { executableRoles, manageableRolesFor, targetTypeLabels, techRequestCategories } from '../../lib/dictionaries';
+import { executableRoles, seniorRoles, targetTypeLabels, taskRecipientRolesFor, techRequestCategories } from '../../lib/dictionaries';
 
 export function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer }: any) {
   const [tasks, setTasks] = useState<any[]>([]);
@@ -12,23 +12,27 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
   const [form, setForm] = useState<any>({ title: '', description: '', target_type: 'all', target_role: 'waiter', target_user_id: '' });
   const [taskMsg, setTaskMsg] = useState('');
   const [techMsg, setTechMsg] = useState('');
+  const [showTaskForm, setShowTaskForm] = useState(false);
   const [showTechForm, setShowTechForm] = useState(false);
   const [techForm, setTechForm] = useState<any>({ title: '', description: '', category: 'equipment' });
-  const manageableRoleEntries = admin ? executableRoles.filter(([key]) => manageableRolesFor(user).includes(key)) : executableRoles;
+  const isSenior = seniorRoles.includes(user?.role);
+  const canCreateTasks = admin || isSenior;
+  const recipientRoleKeys = taskRecipientRolesFor(user);
+  const manageableRoleEntries = canCreateTasks ? executableRoles.filter(([key]) => recipientRoleKeys.includes(key)) : executableRoles;
   const roleOptions = manageableRoleEntries.length ? manageableRoleEntries : executableRoles;
   useEffect(() => {
-    if (admin && roleOptions.length && !roleOptions.some(([key]) => key === form.target_role)) {
+    if (canCreateTasks && roleOptions.length && !roleOptions.some(([key]) => key === form.target_role)) {
       setForm((current: any) => ({ ...current, target_role: roleOptions[0][0] }));
     }
-  }, [admin, user.role]);
+  }, [canCreateTasks, user.role]);
 
   async function load() {
     const [taskRows, userRows] = await Promise.all([
-      api(admin ? '/api/tasks?manage=1' : '/api/tasks'),
-      admin ? api('/api/admin/users') : Promise.resolve([])
+      api(canCreateTasks ? '/api/tasks?manage=1' : '/api/tasks'),
+      canCreateTasks ? api('/api/admin/users') : Promise.resolve([])
     ]);
     setTasks(taskRows);
-    if (admin) setUsers(userRows);
+    if (canCreateTasks) setUsers(userRows);
   }
 
   useEffect(() => { load(); }, []);
@@ -39,6 +43,7 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
     const result = await api('/api/tasks', { method: 'POST', body: JSON.stringify(form) });
     setForm({ ...form, title: '', description: '' });
     setTaskMsg(result?.offline ? 'Задача сохранена офлайн' : 'Задача создана');
+    setShowTaskForm(false);
     load().catch(() => undefined);
   }
 
@@ -62,6 +67,15 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
     if (!admin && showTechComposer) setShowTechForm(true);
   }, [admin, showTechComposer]);
 
+  const filteredTaskUsers = users.filter((candidate: any) => recipientRoleKeys.includes(candidate.role) && candidate.id !== user.id);
+  const taskForm = <form className="form" id="department-task-form" onSubmit={create}>
+    <Field label="Задача" value={form.title} onChange={(e: any) => setForm({ ...form, title: e.target.value })} placeholder="Например: проверить заготовки перед сменой" />
+    <Textarea label="Описание" value={form.description} onChange={(e: any) => setForm({ ...form, description: e.target.value })} placeholder="Что нужно сделать и где" />
+    <Select label="Кому" value={form.target_type} onChange={(e: any) => setForm({ ...form, target_type: e.target.value })}>{Object.entries(targetTypeLabels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</Select>
+    {form.target_type === 'role' && <Select label="Роль" value={form.target_role} onChange={(e: any) => setForm({ ...form, target_role: e.target.value })}>{roleOptions.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>}
+    {form.target_type === 'user' && <Select label="Сотрудник" value={form.target_user_id} onChange={(e: any) => setForm({ ...form, target_user_id: e.target.value })}><option value="">Выбрать</option>{filteredTaskUsers.map((candidate: any) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</Select>}
+  </form>;
+
   if (!admin) {
     const activeTasks = tasks.filter((task) => !task.assignment?.done);
     const completedTasks = tasks.filter((task) => task.assignment?.done);
@@ -69,7 +83,7 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
     return <>
       <div className="mobileSectionStack mobileTasksScreen">
         <section className="mobileSection mobileFlatPanel">
-          <div className="mobileListSectionHead"><h3>Сегодня</h3><span className="mobileSectionCount">{activeTasks.length}</span></div>
+          <div className="mobileListSectionHead"><h3>Сегодня</h3><div className="mobileSectionHeadActions"><span className="mobileSectionCount">{activeTasks.length}</span>{isSenior && <button type="button" className="sectionLink" onClick={() => setShowTaskForm(true)}>+ задача</button>}</div></div>
           <div className="mobileTaskList">
             {activeTasks.length === 0 && <Empty text="Нет активных задач на текущую смену" />}
             {activeTasks.map((task) => <div key={task.id} className="mobileTaskRow static">
@@ -91,6 +105,17 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
         {techMsg && <div className="notice mobileInlineNotice">{techMsg}</div>}
       </div>
 
+      {showTaskForm && <MobileSheetModal
+        title="Задача подразделению"
+        subtitle="Назначьте задачу сотрудникам своего подразделения"
+        onClose={() => setShowTaskForm(false)}
+        className="mobileFormSheet departmentTaskSheet"
+        footer={<Button type="submit" form="department-task-form" className="mobilePrimaryButton">Создать задачу</Button>}
+      >
+        {taskForm}
+        {taskMsg && <div className="notice mobileInlineNotice">{taskMsg}</div>}
+      </MobileSheetModal>}
+
       {showTechForm && <MobileSheetModal
         title="Техзаявка"
         subtitle="Опишите проблему, менеджер увидит её в уведомлениях"
@@ -108,15 +133,9 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
   }
 
   return <>
-    <Card title="Создать задачу">
-      <form className="form two" onSubmit={create}>
-        <Field label="Задача" value={form.title} onChange={(e: any) => setForm({ ...form, title: e.target.value })} />
-        <Textarea label="Описание" value={form.description} onChange={(e: any) => setForm({ ...form, description: e.target.value })} />
-        <Select label="Кому" value={form.target_type} onChange={(e: any) => setForm({ ...form, target_type: e.target.value })}>{Object.entries(targetTypeLabels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</Select>
-        {form.target_type === 'role' && <Select label="Роль" value={form.target_role} onChange={(e: any) => setForm({ ...form, target_role: e.target.value })}>{roleOptions.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>}
-        {form.target_type === 'user' && <Select label="Сотрудник" value={form.target_user_id} onChange={(e: any) => setForm({ ...form, target_user_id: e.target.value })}><option value="">Выбрать</option>{users.filter(u => u.role !== 'owner').map(u => <option key={u.id} value={u.id}>{u.name}</option>)}</Select>}
-        <Button>Создать задачу</Button>
-      </form>
+    <Card title={isSenior ? "Создать задачу подразделению" : "Создать задачу"}>
+      <div className="desktopTaskForm">{taskForm}</div>
+      <div className="actions"><Button type="submit" form="department-task-form">Создать задачу</Button></div>
       {taskMsg && <div className="notice">{taskMsg}</div>}
     </Card>
 

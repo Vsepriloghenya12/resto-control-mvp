@@ -124,6 +124,19 @@ function canManageRole(user, role) {
   return manageableRolesForUser(user).includes(role);
 }
 
+function taskRecipientRolesForUser(user) {
+  if (!user) return [];
+  if (user.role === 'senior_bartender') return ['bartender'];
+  if (user.role === 'senior_cook') return ['cook'];
+  if (user.role === 'senior_waiter') return ['waiter', 'hostess'];
+  return STAFF_ROLES.filter(role => role !== 'manager' && !SENIOR_ROLES.includes(role));
+}
+
+function canAssignTaskToRole(user, role) {
+  if (user?.is_super_admin || MANAGER_ROLES.includes(user?.role)) return STAFF_ROLES.includes(role) && role !== 'manager';
+  return taskRecipientRolesForUser(user).includes(role);
+}
+
 function operationalEditorOnly(req, res, next) {
   if (req.user?.is_super_admin || MANAGER_ROLES.includes(req.user?.role) || SENIOR_ROLES.includes(req.user?.role)) return next();
   return res.status(403).json({ error: 'Доступ только для менеджера или старшего сотрудника подразделения' });
@@ -739,9 +752,12 @@ function buildTtkContent(card) {
   return lines.join('\n');
 }
 function makeAssignmentsForTask(task) {
+  const creator = db.users.find(user => user.id === task.created_by && user.restaurant_id === task.restaurant_id);
+  const seniorRecipientRoles = SENIOR_ROLES.includes(creator?.role) ? taskRecipientRolesForUser(creator) : null;
   const candidates = db.users.filter(u => u.restaurant_id === task.restaurant_id && u.active && STAFF_ROLES.includes(u.role));
   const selected = candidates.filter(u => {
     if (task.target_department && u.department !== task.target_department) return false;
+    if (seniorRecipientRoles && !seniorRecipientRoles.includes(u.role)) return false;
     if (task.target_type === 'all') return true;
     if (task.target_type === 'role') return u.role === task.target_role;
     if (task.target_type === 'user') return u.id === task.target_user_id;
@@ -1705,15 +1721,18 @@ app.post('/api/tasks', auth, ensureRestaurantActive, operationalEditorOnly, runA
   let targetDepartment = null;
   if (SENIOR_ROLES.includes(req.user.role)) {
     targetDepartment = manageableDepartment(req.user);
-    if (target_type === 'role' && !canManageRole(req.user, target_role)) {
-      return res.status(403).json({ error: 'Старший сотрудник может ставить задачи только своему подразделению' });
+    const recipientRoles = taskRecipientRolesForUser(req.user);
+    if (target_type === 'role' && !recipientRoles.includes(target_role)) {
+      return res.status(403).json({ error: 'Старший сотрудник может ставить задачи только сотрудникам своего подразделения' });
     }
     if (target_type === 'user') {
       const targetUser = db.users.find(user => user.id === target_user_id && user.restaurant_id === req.user.restaurant_id && user.active);
-      if (!targetUser || targetUser.department !== targetDepartment) {
+      if (!targetUser || targetUser.department !== targetDepartment || !recipientRoles.includes(targetUser.role)) {
         return res.status(403).json({ error: 'Можно выбрать только сотрудника своего подразделения' });
       }
     }
+  } else if (target_type === 'role' && !canAssignTaskToRole(req.user, target_role)) {
+    return res.status(403).json({ error: 'Нельзя назначить задачу этой роли' });
   }
 
   const task = {
