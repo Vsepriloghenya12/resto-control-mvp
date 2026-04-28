@@ -1867,6 +1867,7 @@ function KnowledgeDocumentBody({ doc }: { doc: any }) {
 }
 
 function Knowledge({ user, admin = false }: any) {
+  const emptyDocForm = { category_id: '', title: '', type: 'text', content: '', file: null, photo: null, allowed_roles: [], requires_acknowledgement: true };
   const [categories, setCategories] = useState<any[]>([]);
   const [stats, setStats] = useState<any[]>([]);
   const [openDoc, setOpenDoc] = useState<any>(null);
@@ -1874,7 +1875,11 @@ function Knowledge({ user, admin = false }: any) {
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
   const [knowledgeMsg, setKnowledgeMsg] = useState('');
   const [catForm, setCatForm] = useState<any>({ title: '', allowed_roles: [] });
-  const [docForm, setDocForm] = useState<any>({ category_id: '', title: '', type: 'text', content: '', file: null, photo: null, allowed_roles: [], requires_acknowledgement: true });
+  const [docForm, setDocForm] = useState<any>(emptyDocForm);
+  const [editingCategoryId, setEditingCategoryId] = useState('');
+  const [categoryEditTitle, setCategoryEditTitle] = useState('');
+  const [editingDocId, setEditingDocId] = useState('');
+  const [docEditForm, setDocEditForm] = useState<any>(emptyDocForm);
 
   async function load() {
     const cats = await api('/api/knowledge');
@@ -1911,6 +1916,38 @@ function Knowledge({ user, admin = false }: any) {
     }
   }
 
+  function startEditCategory(category: any) {
+    setEditingCategoryId(category.id);
+    setCategoryEditTitle(category.title || '');
+    setKnowledgeMsg('');
+  }
+
+  async function saveCategory(categoryId: string) {
+    setKnowledgeMsg('');
+    try {
+      await api(`/api/admin/knowledge/categories/${categoryId}`, { method: 'PATCH', body: JSON.stringify({ title: categoryEditTitle, allowed_roles: [] }) });
+      setEditingCategoryId('');
+      setCategoryEditTitle('');
+      setKnowledgeMsg('Папка сохранена');
+      load();
+    } catch (error: any) {
+      setKnowledgeMsg(error.message || 'Не удалось сохранить папку');
+    }
+  }
+
+  async function deleteCategory(category: any) {
+    if (!window.confirm(`Удалить папку "${category.title}" и все документы внутри?`)) return;
+    setKnowledgeMsg('');
+    try {
+      await api(`/api/admin/knowledge/categories/${category.id}`, { method: 'DELETE' });
+      if (selectedCategoryId === category.id) setSelectedCategoryId('');
+      setKnowledgeMsg('Папка удалена');
+      load();
+    } catch (error: any) {
+      setKnowledgeMsg(error.message || 'Не удалось удалить папку');
+    }
+  }
+
   async function attachDocFile(file?: File | null) {
     if (!file) return;
     const data = await readFileAsDataUrl(file);
@@ -1923,6 +1960,18 @@ function Knowledge({ user, admin = false }: any) {
     setDocForm((current: any) => ({ ...current, photo: { file_name: file.name, mime_type: file.type, data } }));
   }
 
+  async function attachEditDocFile(file?: File | null) {
+    if (!file) return;
+    const data = await readFileAsDataUrl(file);
+    setDocEditForm((current: any) => ({ ...current, file: { file_name: file.name, mime_type: file.type, data } }));
+  }
+
+  async function attachEditDocPhoto(file?: File | null) {
+    if (!file) return;
+    const data = await readFileAsDataUrl(file);
+    setDocEditForm((current: any) => ({ ...current, photo: { file_name: file.name, mime_type: file.type, data } }));
+  }
+
   async function createDoc(e: FormEvent) {
     e.preventDefault();
     setKnowledgeMsg('');
@@ -1932,12 +1981,54 @@ function Knowledge({ user, admin = false }: any) {
         category_id: docForm.category_id || selectedCategoryId || categories[0]?.id || '',
         allowed_roles: []
       };
-      await api('/api/admin/knowledge/documents', { method: 'POST', body: JSON.stringify(payload) });
-      setDocForm({ ...docForm, category_id: payload.category_id, title: '', content: '', file: null, photo: null, allowed_roles: [] });
+      const created = await api('/api/admin/knowledge/documents', { method: 'POST', body: JSON.stringify(payload) });
+      setDocForm({ ...emptyDocForm, category_id: payload.category_id, type: docForm.type });
+      setKnowledgeMsg(created?.created ? `Документы сохранены: ${created.created}` : 'Документ сохранён');
+      load();
+    } catch (error: any) {
+      setKnowledgeMsg(error.message || 'Не удалось сохранить документ');
+    }
+  }
+
+  function startEditDoc(doc: any, fallbackCategoryId = '') {
+    setEditingDocId(doc.id);
+    setDocEditForm({
+      category_id: doc.category_id || fallbackCategoryId,
+      title: doc.title || '',
+      type: doc.type || 'text',
+      content: doc.content || '',
+      file: null,
+      photo: null,
+      allowed_roles: Array.isArray(doc.allowed_roles) ? doc.allowed_roles : [],
+      requires_acknowledgement: doc.requires_acknowledgement !== false
+    });
+    setKnowledgeMsg('');
+  }
+
+  async function saveDoc(docId: string) {
+    setKnowledgeMsg('');
+    try {
+      await api(`/api/admin/knowledge/documents/${docId}`, { method: 'PATCH', body: JSON.stringify({ ...docEditForm, allowed_roles: [] }) });
+      setEditingDocId('');
+      setDocEditForm(emptyDocForm);
       setKnowledgeMsg('Документ сохранён');
       load();
     } catch (error: any) {
       setKnowledgeMsg(error.message || 'Не удалось сохранить документ');
+    }
+  }
+
+  async function deleteDoc(doc: any) {
+    if (!window.confirm(`Удалить документ "${doc.title}"?`)) return;
+    setKnowledgeMsg('');
+    try {
+      await api(`/api/admin/knowledge/documents/${doc.id}`, { method: 'DELETE' });
+      if (openDoc?.id === doc.id) setOpenDoc(null);
+      if (editingDocId === doc.id) setEditingDocId('');
+      setKnowledgeMsg('Документ удалён');
+      load();
+    } catch (error: any) {
+      setKnowledgeMsg(error.message || 'Не удалось удалить документ');
     }
   }
 
@@ -2003,7 +2094,7 @@ function Knowledge({ user, admin = false }: any) {
   }
 
   return <>
-    {admin && <Card title="Добавить документацию">
+    <Card title="Добавить документацию">
       <form className="form two" onSubmit={createCat}>
         <Field label="Новая папка" value={catForm.title} onChange={(e: any) => setCatForm({ ...catForm, title: e.target.value })} placeholder="Например: Сервис-бук" />
         <Button kind="soft">Создать папку</Button>
@@ -2037,13 +2128,74 @@ function Knowledge({ user, admin = false }: any) {
         </div>}
         <Button>{docForm.type === 'ttk' ? 'Загрузить и разобрать ТТК' : 'Добавить документ'}</Button>
       </form>
-      {knowledgeMsg && <div className={knowledgeMsg.includes('создан') || knowledgeMsg.includes('сохран') ? 'notice' : 'error'}>{knowledgeMsg}</div>}
-    </Card>}
+      {knowledgeMsg && <div className={knowledgeMsg.includes('создан') || knowledgeMsg.includes('сохран') || knowledgeMsg.includes('удал') ? 'notice' : 'error'}>{knowledgeMsg}</div>}
+    </Card>
+
     <Card title="База знаний / ТТК / сервис-бук">
       {categories.length === 0 && <Empty text="Документов нет" />}
-      <div className="grid">{categories.map(c => <div className="miniCard" key={c.id}><b>{c.title}</b>{c.documents.map((d: any) => <button className="docRow" key={d.id} onClick={() => viewDoc(d)}><span>{d.title}</span><em>{d.acknowledged ? 'ознакомлен' : d.requires_acknowledgement ? 'нужно ознакомиться' : 'документ'}</em></button>)}</div>)}</div>
+      <div className="knowledgeAdminList">{categories.map(c => <div className="knowledgeAdminFolder" key={c.id}>
+        <div className="knowledgeAdminFolderHead">
+          {editingCategoryId === c.id
+            ? <input value={categoryEditTitle} onChange={(e) => setCategoryEditTitle(e.target.value)} placeholder="Название папки" />
+            : <div><b>{c.title}</b><span>{c.documents.length} документов</span></div>}
+          <div className="adminInlineActions">
+            {editingCategoryId === c.id ? <>
+              <Button kind="soft" type="button" onClick={() => setEditingCategoryId('')}>Отмена</Button>
+              <Button type="button" onClick={() => saveCategory(c.id)}>Сохранить</Button>
+            </> : <>
+              <Button kind="soft" type="button" onClick={() => startEditCategory(c)}>Редактировать</Button>
+              <Button kind="danger" type="button" onClick={() => deleteCategory(c)}>Удалить</Button>
+            </>}
+          </div>
+        </div>
+
+        <div className="knowledgeAdminDocs">
+          {c.documents.map((d: any) => <div className="knowledgeAdminDocRow" key={d.id}>
+            {editingDocId === d.id ? <div className="knowledgeDocEditForm">
+              <div className="form two">
+                <Select label="Папка" value={docEditForm.category_id || c.id} onChange={(e: any) => setDocEditForm({ ...docEditForm, category_id: e.target.value })}>{categories.map(cat => <option value={cat.id} key={cat.id}>{cat.title}</option>)}</Select>
+                <Select label="Тип" value={docEditForm.type} onChange={(e: any) => setDocEditForm({ ...docEditForm, type: e.target.value })}>
+                  <option value="text">Текст</option>
+                  <option value="pdf">PDF-документ</option>
+                  <option value="ttk">ТТК из PDF</option>
+                  <option value="service_book">Сервис-бук PDF</option>
+                </Select>
+              </div>
+              <Field label="Название" value={docEditForm.title} onChange={(e: any) => setDocEditForm({ ...docEditForm, title: e.target.value })} />
+              {docEditForm.type === 'text' && <Textarea label="Текст" rows={6} value={docEditForm.content} onChange={(e: any) => setDocEditForm({ ...docEditForm, content: e.target.value })} />}
+              {docEditForm.type !== 'text' && <div className="fileUploadGrid">
+                <label className="fileUploadBox">
+                  <span>{docEditForm.type === 'ttk' ? 'Новый PDF с ТТК' : 'Новый PDF-файл'}</span>
+                  <input type="file" accept="application/pdf,.pdf" onChange={(e) => attachEditDocFile(e.target.files?.[0])} />
+                  <em>{docEditForm.file?.file_name || 'Оставьте пустым, чтобы не менять файл'}</em>
+                </label>
+                {docEditForm.type === 'ttk' && <label className="fileUploadBox">
+                  <span>Новое фото</span>
+                  <input type="file" accept="image/*" onChange={(e) => attachEditDocPhoto(e.target.files?.[0])} />
+                  <em>{docEditForm.photo?.file_name || 'Оставьте пустым, чтобы не менять фото'}</em>
+                </label>}
+              </div>}
+              <div className="actions">
+                <Button kind="soft" type="button" onClick={() => setEditingDocId('')}>Отмена</Button>
+                <Button type="button" onClick={() => saveDoc(d.id)}>Сохранить</Button>
+              </div>
+            </div> : <>
+              <button className="docRow knowledgeDocOpenButton" type="button" onClick={() => viewDoc(d)}>
+                <span>{d.title}</span>
+                <em>{d.type === 'ttk' ? 'ТТК' : d.type === 'service_book' ? 'сервис-бук' : d.acknowledged ? 'ознакомлен' : d.requires_acknowledgement ? 'нужно ознакомиться' : 'документ'}</em>
+              </button>
+              <div className="adminInlineActions">
+                <Button kind="soft" type="button" onClick={() => startEditDoc(d, c.id)}>Редактировать</Button>
+                <Button kind="danger" type="button" onClick={() => deleteDoc(d)}>Удалить</Button>
+              </div>
+            </>}
+          </div>)}
+          {c.documents.length === 0 && <Empty text="В папке пока нет документов" />}
+        </div>
+      </div>)}</div>
     </Card>
+
     {openDoc && <div className="modal" onClick={() => setOpenDoc(null)}><div className="modalCard" onClick={(e) => e.stopPropagation()}><div className="rowBetween"><h2>{openDoc.title}</h2><button className="iconBtn" onClick={() => setOpenDoc(null)}>×</button></div><KnowledgeDocumentBody doc={openDoc} />{openDoc.requires_acknowledgement && !openDoc.acknowledged && <Button onClick={() => ack(openDoc)}>Ознакомился</Button>}</div></div>}
-    {admin && <Card title="Статистика ознакомления"><div className="list">{stats.map(s => <div className="listRow" key={s.id}><div><b>{s.title}</b><span>Просмотры: {s.views}</span></div><span className="badge active">Ознакомились: {s.acknowledgements}</span></div>)}</div></Card>}
+    <Card title="Статистика ознакомления"><div className="list">{stats.map(s => <div className="listRow" key={s.id}><div><b>{s.title}</b><span>Просмотры: {s.views}</span></div><span className="badge active">Ознакомились: {s.acknowledgements}</span></div>)}</div></Card>
   </>;
 }

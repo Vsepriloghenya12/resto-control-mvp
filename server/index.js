@@ -680,51 +680,94 @@ function lineLooksLikeTtkName(line) {
   return /[а-яёa-z]/i.test(text);
 }
 
+function parseTtkTitle(source, lines) {
+  const dateIndex = lines.findIndex(line => /\d{2}\.\d{2}\.\d{4}/.test(line));
+  if (dateIndex >= 0) {
+    const titleLines = [];
+    for (let i = dateIndex + 1; i < Math.min(lines.length, dateIndex + 6); i += 1) {
+      if (/^(Название на чеке|Область применения|Хранение|Срок Хранения|Органолептические)/i.test(lines[i])) break;
+      if (lineLooksLikeTtkName(lines[i])) titleLines.push(lines[i]);
+    }
+    const title = cleanTtkText(titleLines.join(' '));
+    if (title) return title;
+  }
+  const afterOrganoleptic = source.match(/Органолептические показатели:\s*([\s\S]*?)(?:NoНаименование|№\s*Наименование|Наименование продукта|Брутто в ед)/i)?.[1] || '';
+  const fallback = afterOrganoleptic.split('\n').map(line => cleanTtkText(line)).filter(lineLooksLikeTtkName).slice(0, 2).join(' ');
+  return cleanTtkText(fallback);
+}
+
+function extractTtkAmountsAndTail(value) {
+  let text = cleanTtkText(value);
+  const amounts = [];
+  while (true) {
+    const match = text.match(/^(\d+[,.]\d{3})(.*)$/);
+    if (!match) break;
+    amounts.push(match[1]);
+    text = cleanTtkText(match[2]);
+  }
+  if (!amounts.length) {
+    const loose = text.match(/\d+[,.]\d+/g) || [];
+    loose.forEach(item => amounts.push(item));
+    if (loose.length) text = cleanTtkText(text.replace(/^(?:\d+[,.]\d+\s*)+/, ''));
+  }
+  return { amounts, tail: text };
+}
+
+function lineIsTtkRowStart(line) {
+  return /^\d+\s*(?:кг|г|л|мл|шт\.?|порц\.?)$/i.test(cleanTtkText(line)) || /^\d+\s+.+?\s+(?:кг|г|л|мл|шт\.?|порц\.?)\b/i.test(cleanTtkText(line));
+}
+
+function findTtkNameAfter(lines, startIndex) {
+  for (let j = startIndex; j < Math.min(lines.length, startIndex + 7); j += 1) {
+    const candidate = cleanTtkText(lines[j]);
+    if (!candidate) continue;
+    if (lineIsTtkRowStart(candidate) || /^ИТОГО/i.test(candidate)) break;
+    if (lineLooksLikeTtkName(candidate)) return normalizeTtkIngredientName(candidate);
+  }
+  return '';
+}
+
+function addTtkIngredient(ingredients, name, unit, amounts) {
+  const cleanName = normalizeTtkIngredientName(name);
+  const cleanUnit = cleanTtkText(unit).replace(/\.$/, '');
+  const rawQty = amounts[amounts.length - 1];
+  const qty = parseTtkNumber(rawQty);
+  if (!cleanName || !cleanUnit || qty === null) return;
+  const key = `${cleanName.toLowerCase()}::${cleanUnit.toLowerCase()}::${qty}`;
+  if (!ingredients.some(item => `${item.name.toLowerCase()}::${item.unit.toLowerCase()}::${item.qty}` === key)) {
+    ingredients.push({ name: cleanName, unit: cleanUnit, qty, display_qty: String(rawQty || qty).replace('.', ',') });
+  }
+}
+
 function parseTtkBlock(block) {
   const source = String(block || '').replace(/\r/g, '');
-  const number = cleanTtkText(source.match(/^(\s*\d+)/)?.[1] || source.match(/№\s*(\d+)/)?.[1] || '');
-  const titleMatch = source.match(/(\d{2}\.\d{2}\.\d{4})\s+([\s\S]*?)(?:Название на чеке|Область применения|№\s+Наименование)/i);
-  const date = titleMatch?.[1] || '';
-  const title = cleanTtkText(titleMatch?.[2] || source.split('\n').slice(0, 3).join(' ')).replace(/^\d+\s*/, '');
+  const number = cleanTtkText(source.match(/Технологическая карта\s*(?:№|No|Nº|N)\s*(\d+)/i)?.[1] || source.match(/^\s*(\d+)/)?.[1] || '');
+  const date = cleanTtkText(source.match(/(\d{2}\.\d{2}\.\d{4})/)?.[1] || '');
   const lines = source.split('\n').map(line => cleanTtkText(line)).filter(Boolean);
+  const title = parseTtkTitle(source, lines) || (number ? `ТТК № ${number}` : 'ТТК');
   const ingredients = [];
 
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
-    const row = line.match(/^(\d+)\s+(.+)$/);
-    if (!row) continue;
-    const rest = row[2];
-    const withName = rest.match(/^(.+?)\s+(кг|г|л|мл|шт\.?|порц\.?)\s+((?:\d+[,.]?\d*\s*)+)$/i);
-    const noName = rest.match(/^(кг|г|л|мл|шт\.?|порц\.?)\s+((?:\d+[,.]?\d*\s*)+)$/i);
-    let name = '';
-    let unit = '';
-    let amounts = [];
 
-    if (withName) {
-      name = normalizeTtkIngredientName(withName[1]);
-      unit = withName[2];
-      amounts = withName[3].trim().split(/\s+/);
-    } else if (noName) {
-      unit = noName[1];
-      amounts = noName[2].trim().split(/\s+/);
-      for (let j = i + 1; j < Math.min(lines.length, i + 5); j += 1) {
-        if (lineLooksLikeTtkName(lines[j])) {
-          name = normalizeTtkIngredientName(lines[j]);
-          break;
-        }
-      }
+    const fullRow = line.match(/^(\d+)\s+(.+?)\s+(кг|г|л|мл|шт\.?|порц\.?)\s+(.+)$/i);
+    if (fullRow) {
+      const parsed = extractTtkAmountsAndTail(fullRow[4]);
+      addTtkIngredient(ingredients, fullRow[2], fullRow[3], parsed.amounts);
+      continue;
     }
 
-    const qty = parseTtkNumber(amounts[amounts.length - 1]);
-    if (name && unit && qty !== null) {
-      const key = `${name.toLowerCase()}::${unit}::${qty}`;
-      if (!ingredients.some(item => `${item.name.toLowerCase()}::${item.unit}::${item.qty}` === key)) {
-        ingredients.push({ name, unit, qty, display_qty: String(amounts[amounts.length - 1] || '').replace('.', ',') });
-      }
+    const compactRow = line.match(/^(\d+)\s*(кг|г|л|мл|шт\.?|порц\.?)$/i);
+    if (compactRow) {
+      const amountLine = cleanTtkText(lines[i + 1] || '');
+      const parsed = extractTtkAmountsAndTail(amountLine);
+      const name = parsed.tail ? normalizeTtkIngredientName(parsed.tail) : findTtkNameAfter(lines, i + 2);
+      addTtkIngredient(ingredients, name, compactRow[2], parsed.amounts);
+      continue;
     }
   }
 
-  return { number, date, title: title || (number ? `ТТК № ${number}` : 'ТТК'), ingredients };
+  return { number, date, title, ingredients };
 }
 
 async function parseTtkPdfBuffer(buffer) {
@@ -732,7 +775,7 @@ async function parseTtkPdfBuffer(buffer) {
   const pdfParse = mod.default || mod;
   const parsed = await pdfParse(buffer);
   const text = parsed.text || '';
-  const parts = text.split(/Технологическая карта\s*№/i).map(part => part.trim()).filter(Boolean);
+  const parts = text.split(/(?=Технологическая карта\s*(?:№|No|Nº|N)\s*\d+)/i).map(part => part.trim()).filter(Boolean);
   const cards = (parts.length ? parts : [text]).map(parseTtkBlock).filter(card => card.title || card.ingredients.length);
   return { text, cards };
 }
@@ -1864,6 +1907,29 @@ app.post('/api/admin/knowledge/categories', auth, ensureRestaurantActive, adminO
   res.status(201).json(cat);
 }));
 
+app.patch('/api/admin/knowledge/categories/:id', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
+  const category = db.knowledge_categories.find(c => c.id === req.params.id && c.restaurant_id === req.user.restaurant_id);
+  if (!category) return res.status(404).json({ error: 'Папка не найдена' });
+  const cleanTitle = String(req.body.title || '').trim();
+  if (!cleanTitle) return res.status(400).json({ error: 'Название папки обязательно' });
+  category.title = cleanTitle;
+  if (Array.isArray(req.body.allowed_roles)) category.allowed_roles = req.body.allowed_roles;
+  if (Number.isFinite(Number(req.body.sort_order))) category.sort_order = Number(req.body.sort_order);
+  await persist();
+  res.json(category);
+}));
+
+app.delete('/api/admin/knowledge/categories/:id', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
+  const category = db.knowledge_categories.find(c => c.id === req.params.id && c.restaurant_id === req.user.restaurant_id);
+  if (!category) return res.status(404).json({ error: 'Папка не найдена' });
+  const now = nowIso();
+  const affectedDocs = db.knowledge_documents.filter(d => d.restaurant_id === req.user.restaurant_id && d.category_id === category.id && d.is_active);
+  affectedDocs.forEach(doc => { doc.is_active = false; doc.updated_at = now; });
+  db.knowledge_categories = db.knowledge_categories.filter(c => !(c.id === category.id && c.restaurant_id === req.user.restaurant_id));
+  await persist();
+  res.json({ ok: true, deleted_documents: affectedDocs.length });
+}));
+
 app.post('/api/admin/knowledge/documents', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
   const { category_id, title, content, allowed_roles, requires_acknowledgement, type, file_url, file, photo } = req.body;
   const category = db.knowledge_categories.find(c => c.id === category_id && c.restaurant_id === req.user.restaurant_id);
@@ -1930,6 +1996,67 @@ app.post('/api/admin/knowledge/documents', auth, ensureRestaurantActive, adminOn
   db.knowledge_documents.push(doc);
   await persist();
   res.status(201).json(doc);
+}));
+
+app.patch('/api/admin/knowledge/documents/:id', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
+  const doc = db.knowledge_documents.find(d => d.id === req.params.id && d.restaurant_id === req.user.restaurant_id && d.is_active);
+  if (!doc) return res.status(404).json({ error: 'Документ не найден' });
+  const { category_id, title, content, allowed_roles, requires_acknowledgement, type, file_url, file, photo } = req.body;
+  const nextCategoryId = category_id || doc.category_id;
+  const category = db.knowledge_categories.find(c => c.id === nextCategoryId && c.restaurant_id === req.user.restaurant_id);
+  if (!category) return res.status(400).json({ error: 'Выберите папку для документа' });
+
+  const nextType = String(type || doc.type || 'text').trim() || 'text';
+  const cleanTitle = String(title || '').trim();
+  let storedPdf = null;
+  let storedPhoto = null;
+  let parsedTtk = null;
+
+  if (file?.data) {
+    storedPdf = saveKnowledgeFile(file, req.user.restaurant_id, 'pdf');
+    if (nextType === 'ttk') {
+      try {
+        parsedTtk = await parseTtkPdfBuffer(storedPdf.buffer);
+      } catch (error) {
+        return res.status(400).json({ error: 'PDF загружен, но состав ТТК не удалось прочитать. Загрузите PDF с текстом, не скан.' });
+      }
+    }
+  }
+  if (photo?.data) storedPhoto = saveKnowledgeFile(photo, req.user.restaurant_id, 'image');
+
+  doc.category_id = nextCategoryId;
+  doc.type = nextType;
+  doc.allowed_roles = Array.isArray(allowed_roles) ? allowed_roles : doc.allowed_roles;
+  doc.requires_acknowledgement = requires_acknowledgement !== false;
+  if (storedPdf?.url) doc.file_url = storedPdf.url;
+  else if (typeof file_url === 'string') doc.file_url = file_url;
+  if (storedPhoto?.url) doc.photo_url = storedPhoto.url;
+
+  if (nextType === 'ttk' && parsedTtk?.cards?.length) {
+    const card = parsedTtk.cards[0];
+    doc.title = cleanTitle || card.title || doc.title;
+    doc.content = buildTtkContent(card);
+    doc.ingredients = card.ingredients || [];
+  } else {
+    if (!cleanTitle) return res.status(400).json({ error: 'Укажите название документа' });
+    doc.title = cleanTitle;
+    doc.content = content || '';
+    if (nextType !== 'ttk') doc.ingredients = [];
+  }
+
+  doc.version = Number(doc.version || 1) + 1;
+  doc.updated_at = nowIso();
+  await persist();
+  res.json(doc);
+}));
+
+app.delete('/api/admin/knowledge/documents/:id', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
+  const doc = db.knowledge_documents.find(d => d.id === req.params.id && d.restaurant_id === req.user.restaurant_id && d.is_active);
+  if (!doc) return res.status(404).json({ error: 'Документ не найден' });
+  doc.is_active = false;
+  doc.updated_at = nowIso();
+  await persist();
+  res.json({ ok: true });
 }));
 
 app.post('/api/knowledge/:id/view', auth, ensureRestaurantActive, runAsync(async (req, res) => {

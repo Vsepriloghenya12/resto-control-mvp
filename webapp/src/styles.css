@@ -5041,3 +5041,89 @@ textarea {
     white-space: normal;
   }
 }
+
+/* Knowledge base editing */
+.knowledgeAdminList {
+  display: grid;
+  gap: 12px;
+}
+
+.knowledgeAdminFolder {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.025);
+  overflow: hidden;
+}
+
+.knowledgeAdminFolderHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.knowledgeAdminFolderHead > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.knowledgeAdminFolderHead span {
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+}
+
+.knowledgeAdminFolderHead input {
+  min-width: min(420px, 58vw);
+}
+
+.knowledgeAdminDocs {
+  display: grid;
+}
+
+.knowledgeAdminDocRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.knowledgeAdminDocRow:first-child {
+  border-top: 0;
+}
+
+.knowledgeDocOpenButton {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  padding: 8px 0;
+}
+
+.knowledgeDocEditForm {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 12px;
+  padding: 10px 0 4px;
+}
+
+@media (max-width: 980px) {
+  .knowledgeAdminFolderHead,
+  .knowledgeAdminDocRow {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .knowledgeAdminFolderHead {
+    display: grid;
+  }
+
+  .knowledgeAdminDocRow .adminInlineActions,
+  .knowledgeAdminFolderHead .adminInlineActions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
