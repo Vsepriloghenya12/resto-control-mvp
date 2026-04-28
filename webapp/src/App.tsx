@@ -701,21 +701,17 @@ function SuperAdmin({ user, onLogout }: any) {
 
 function RestaurantAdmin({ user, restaurant, onLogout }: any) {
   const [tab, setTab] = useState<Tab>('overview');
-  const tabs = withIcons(user.role === 'manager'
-    ? [
-      { id: 'overview', title: 'Пульт смены' },
-      { id: 'users', title: 'Сотрудники' },
-      { id: 'checklists', title: 'Чек-листы' },
-      { id: 'inventory', title: 'Номенклатура' },
-      { id: 'bookings', title: 'Брони / залы' },
-      { id: 'requests', title: 'Заявки' },
-      { id: 'tasks', title: 'Задачи' },
-      { id: 'knowledge', title: 'База знаний' }
-    ]
-    : [
-      { id: 'overview', title: 'Аккаунт' }
-    ]
-  );
+  const isManager = user.role === 'manager';
+  const tabs = withIcons([
+    { id: 'overview', title: isManager ? 'Пульт смены' : 'Аккаунт' },
+    { id: 'users', title: 'Сотрудники' },
+    { id: 'checklists', title: 'Чек-листы' },
+    { id: 'inventory', title: 'Номенклатура' },
+    { id: 'bookings', title: 'Брони / залы' },
+    { id: 'requests', title: 'Заявки' },
+    { id: 'tasks', title: 'Задачи' },
+    { id: 'knowledge', title: 'База знаний' }
+  ]);
   const section = useMemo(() => {
     if (tab === 'overview') return <AdminOverview mode={user.role === 'manager' ? 'manager' : 'owner'} />;
     if (tab === 'users') return <UsersAdmin />;
@@ -779,12 +775,12 @@ function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager' }) {
       <div className="overviewHero">
         <div className="overviewHeroCopy">
           <strong>{managerMode ? 'Смена и настройки под контролем' : (data.restaurant?.name || 'Ресторан подключён')}</strong>
-          <p>{managerMode ? 'Менеджер ведёт сотрудников, чек-листы, номенклатуру, залы, базу знаний и ежедневную операционку.' : 'Владелец контролирует аккаунт и подписку. Рабочие настройки ресторана выполняет менеджер.'}</p>
+          <p>{managerMode ? 'Менеджер ведёт сотрудников, чек-листы, номенклатуру, залы, базу знаний и ежедневную операционку.' : 'Владелец снова имеет полный доступ к управлению рестораном: сотрудники, чек-листы, номенклатура, залы, заявки, задачи и база знаний.'}</p>
         </div>
         <div className="overviewHighlights">
           <div><span className="muted">{managerMode ? 'Открытые заявки' : 'Ресторан'}</span><b>{managerMode ? `${data.requests_open || 0}` : (data.restaurant?.name || '—')}</b></div>
-          <div><span className="muted">{managerMode ? 'Сотрудники' : 'Статус'}</span><b>{managerMode ? data.users : 'подключён'}</b></div>
-          <div><span className="muted">{managerMode ? 'Задачи в работе' : 'Настройки'}</span><b>{managerMode ? data.tasks_open : 'у менеджера'}</b></div>
+          <div><span className="muted">{managerMode ? 'Сотрудники' : 'Сотрудники'}</span><b>{managerMode ? data.users : data.users}</b></div>
+          <div><span className="muted">{managerMode ? 'Задачи в работе' : 'Доступ'}</span><b>{managerMode ? data.tasks_open : 'полный'}</b></div>
         </div>
       </div>
     </Card>
@@ -793,15 +789,15 @@ function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager' }) {
 }
 
 function OwnerAccountNotice() {
-  return <Card title="Распределение ролей" right={<span className="badge">Настройки у менеджера</span>}>
+  return <Card title="Доступ владельца" right={<span className="badge active">Полное управление</span>}>
     <div className="ownerRoleNotice">
       <div>
-        <strong>Менеджер управляет рестораном</strong>
-        <p>Сотрудники, чек-листы, номенклатура, залы и база знаний находятся в рабочем кабинете менеджера.</p>
+        <strong>Владелец управляет рестораном</strong>
+        <p>Доступны сотрудники, чек-листы, номенклатура, залы, заявки, задачи, база знаний, ТТК и сервис-буки.</p>
       </div>
       <div>
-        <strong>Владелец контролирует аккаунт</strong>
-        <p>На этой странице остаются общий статус ресторана и подписка, без ежедневной операционной настройки.</p>
+        <strong>Менеджер сохраняет рабочие права</strong>
+        <p>Менеджер тоже может вести операционные настройки ресторана, но владелец не ограничен только подпиской.</p>
       </div>
     </div>
   </Card>;
