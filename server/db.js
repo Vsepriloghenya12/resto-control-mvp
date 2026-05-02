@@ -47,6 +47,7 @@ const SNAPSHOT_TABLES = [
 ];
 
 let pool;
+let saveQueue = Promise.resolve();
 
 export const ROLES = ['owner', 'manager', 'senior_waiter', 'senior_bartender', 'senior_cook', 'hostess', 'waiter', 'bartender', 'cook'];
 export const DEPARTMENTS = ['hall', 'bar', 'kitchen', 'common'];
@@ -73,6 +74,17 @@ function getPool() {
 function readJsonDb() {
   if (!fs.existsSync(DB_FILE)) return null;
   return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+}
+
+function cloneDbSnapshot(db) {
+  return JSON.parse(JSON.stringify(db));
+}
+
+function writeJsonDb(db) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const tmpFile = `${DB_FILE}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(tmpFile, JSON.stringify(db, null, 2));
+  fs.renameSync(tmpFile, DB_FILE);
 }
 
 function encodeColumnValue(column, value) {
@@ -207,12 +219,14 @@ export function loadDb() {
 }
 
 export function saveDb(db) {
-  if (hasPostgres()) {
-    return savePostgresSnapshot(db);
-  }
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
-  return Promise.resolve();
+  const snapshot = cloneDbSnapshot(db);
+  const writeSnapshot = () => hasPostgres()
+    ? savePostgresSnapshot(snapshot)
+    : Promise.resolve(writeJsonDb(snapshot));
+
+  const result = saveQueue.then(writeSnapshot, writeSnapshot);
+  saveQueue = result.catch(() => undefined);
+  return result;
 }
 
 export function resetDb() {
