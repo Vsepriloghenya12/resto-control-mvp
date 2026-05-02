@@ -244,14 +244,16 @@ export function StatCard({
   icon,
   title,
   value,
-  caption
+  caption,
+  onClick
 }: {
   icon: IconName;
   title: string;
   value: string | number;
   caption: string;
+  onClick?: () => void;
 }) {
-  return <article className="statCard" data-icon={icon}>
+  const content = <>
     <div className="statBadge">
       <AppIcon name={icon} className="navIcon" />
     </div>
@@ -260,5 +262,11 @@ export function StatCard({
       <strong className="statValue">{value}</strong>
       <span className="statCaption">{caption}</span>
     </div>
-  </article>;
+  </>;
+
+  if (onClick) {
+    return <button type="button" className="statCard statCardButton" data-icon={icon} onClick={onClick}>{content}</button>;
+  }
+
+  return <article className="statCard" data-icon={icon}>{content}</article>;
 }

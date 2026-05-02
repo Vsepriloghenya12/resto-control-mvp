@@ -49,6 +49,18 @@ const techRequestStatuses = { new: 'новая', in_progress: 'в работе',
 const productRequestStatuses = { sent: 'отправлена', ordered: 'заказано', partial: 'частично пришло', received: 'получено', done: 'завершена', not_received: 'не получено', cancelled: 'отменена' };
 const problemTypeLabels = { task: 'Задача', tech_request: 'Техзаявка', product_request: 'Заявка' };
 const bookingStatuses = { booked: 'забронирован', seated: 'гости пришли', completed: 'завершён', cancelled: 'отменён' };
+const tariffEmployeeLimits = {
+  trial: 10,
+  start: 10,
+  старт: 10,
+  team: 25,
+  команда: 25,
+  business: 50,
+  бизнес: 50,
+  network: 100,
+  сеть: 100,
+  enterprise: null
+};
 const inventoryImportSections = {
   bar: { department: 'bar', title: 'Бар', defaultCategory: 'Бар' },
   kitchen: { department: 'kitchen', title: 'Кухня', defaultCategory: 'Кухня' },
@@ -156,6 +168,12 @@ function ensureRestaurantActive(req, res, next) {
 
 function sameRestaurant(items, restaurant_id) {
   return (items || []).filter(i => i.restaurant_id === restaurant_id);
+}
+
+function employeeLimitForRestaurant(restaurant) {
+  const plan = String(restaurant?.plan || restaurant?.tariff || 'trial').trim().toLowerCase();
+  if (plan.includes('enterprise')) return null;
+  return tariffEmployeeLimits[plan] ?? 10;
 }
 
 function fmtDate(value) {
@@ -1082,9 +1100,14 @@ app.patch('/api/super/restaurants/:id/subscription', auth, superOnly, runAsync(a
 app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, res) => {
   const rid = req.user.is_super_admin ? req.query.restaurant_id : req.user.restaurant_id;
   const today = new Date().toISOString().slice(0, 10);
+  const restaurant = db.restaurants.find(r => r.id === rid);
+  const staffUsers = sameRestaurant(db.users, rid).filter(u => !u.is_super_admin && u.role !== 'owner');
+  const activeStaffUsers = staffUsers.filter(u => u.active !== false);
   res.json({
-    restaurant: db.restaurants.find(r => r.id === rid),
-    users: sameRestaurant(db.users, rid).filter(u => !u.is_super_admin).length,
+    restaurant,
+    users: activeStaffUsers.length,
+    users_total: staffUsers.length,
+    employee_limit: employeeLimitForRestaurant(restaurant),
     checklists_today: sameRestaurant(db.checklist_runs, rid).filter(r => r.created_at?.slice(0, 10) === today).length,
     requests_open: sameRestaurant(db.product_requests, rid).filter(r => !['received', 'cancelled'].includes(r.status)).length,
     inventories: sameRestaurant(db.inventory_runs, rid).length,

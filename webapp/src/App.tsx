@@ -740,7 +740,7 @@ function RestaurantAdmin({ user, restaurant, onLogout }: any) {
     { id: 'knowledge', title: 'База знаний' }
   ]);
   const section = useMemo(() => {
-    if (tab === 'overview') return <AdminOverview mode={user.role === 'manager' ? 'manager' : 'owner'} />;
+    if (tab === 'overview') return <AdminOverview mode={user.role === 'manager' ? 'manager' : 'owner'} onNavigate={setTab} />;
     if (tab === 'users') return <UsersAdmin />;
     if (tab === 'checklists') return <Checklists user={user} admin />;
     if (tab === 'requests') return <Requests user={user} admin />;
@@ -783,19 +783,21 @@ function SubscriptionBanner({ restaurant, openBilling }: any) {
   return <TrialBanner headline={headline} subline={subline} onAction={openBilling} />;
 }
 
-function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager' }) {
+function AdminOverview({ mode = 'owner', onNavigate }: { mode?: 'owner' | 'manager'; onNavigate?: (tab: string) => void }) {
   const [data, setData] = useState<any>(null);
   useEffect(() => { api('/api/admin/overview').then(setData); }, []);
   if (!data) return <Card><Empty text="Загружаем обзор" /></Card>;
   const managerMode = mode === 'manager';
+  const employeeLimit = data.employee_limit === null ? '∞' : data.employee_limit;
+  const employeesValue = employeeLimit ? `${data.users} из ${employeeLimit}` : data.users;
   return <>
     <div className={cx('statsGrid', managerMode && 'managerStatsGrid')}>
-      <StatCard icon="users" title="Сотрудники" value={data.users} caption="Активных" />
-      <StatCard icon="checklists" title="Чек-листы сегодня" value={data.checklists_today} caption="Выполнено" />
-      <StatCard icon="requests" title="Открытые заявки" value={data.requests_open} caption="Новых" />
-      <StatCard icon="tasks" title="Задачи открыты" value={data.tasks_open} caption="В работе" />
-      <StatCard icon="document" title="Документы" value={data.docs} caption="Всего" />
-      <StatCard icon="inventory" title="Инвентаризации" value={data.inventories} caption="Активных" />
+      <StatCard icon="users" title="Сотрудники" value={employeesValue} caption="Активных по тарифу" onClick={() => onNavigate?.('users')} />
+      <StatCard icon="checklists" title="Чек-листы сегодня" value={data.checklists_today} caption="Выполнено" onClick={() => onNavigate?.('checklists')} />
+      <StatCard icon="requests" title="Открытые заявки" value={data.requests_open} caption="Новых" onClick={() => onNavigate?.('requests')} />
+      <StatCard icon="tasks" title="Задачи открыты" value={data.tasks_open} caption="В работе" onClick={() => onNavigate?.('tasks')} />
+      <StatCard icon="document" title="Документы" value={data.docs} caption="Всего" onClick={() => onNavigate?.('knowledge')} />
+      <StatCard icon="inventory" title="Инвентаризации" value={data.inventories} caption="Активных" onClick={() => onNavigate?.('inventory')} />
     </div>
 
     <Card title={managerMode ? 'Пульт смены' : 'Аккаунт владельца'} right={<span className="badge active">{managerMode ? 'Управление рестораном' : 'Владелец'}</span>}>
@@ -806,7 +808,7 @@ function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager' }) {
         </div>
         <div className="overviewHighlights">
           <div><span className="muted">{managerMode ? 'Открытые заявки' : 'Ресторан'}</span><b>{managerMode ? `${data.requests_open || 0}` : (data.restaurant?.name || '—')}</b></div>
-          <div><span className="muted">{managerMode ? 'Сотрудники' : 'Сотрудники'}</span><b>{managerMode ? data.users : data.users}</b></div>
+          <div><span className="muted">{managerMode ? 'Сотрудники' : 'Сотрудники'}</span><b>{employeesValue}</b></div>
           <div><span className="muted">{managerMode ? 'Задачи в работе' : 'Доступ'}</span><b>{managerMode ? data.tasks_open : 'полный'}</b></div>
         </div>
       </div>
@@ -1877,11 +1879,32 @@ function Inventory({ user, admin = false }: any) {
 
 function KnowledgeDocumentBody({ doc }: { doc: any }) {
   const ingredients = Array.isArray(doc?.ingredients) ? doc.ingredients : [];
+  const contentLines = String(doc?.content || '').split('\n').map(line => line.trim()).filter(Boolean);
+  const ttkMeta = contentLines.filter(line => !line.startsWith('-') && !['Состав:'].includes(line));
+  const isTtk = doc?.type === 'ttk';
+
+  if (isTtk) {
+    return <div className="ttkRecipeView">
+      {doc?.photo_url && <img className="knowledgeDocPhoto ttkHeroPhoto" src={doc.photo_url} alt={doc.title || 'Фото'} />}
+      <div className="ttkRecipeHeader">
+        <span className="badge active">ТТК</span>
+        <strong>{doc.title}</strong>
+        {ttkMeta.slice(0, 3).map((line, index) => <em key={`${line}-${index}`}>{line}</em>)}
+      </div>
+      <div className="ttkIngredients">
+        <strong>Состав</strong>
+        {ingredients.length > 0
+          ? ingredients.map((item: any, index: number) => <div key={item.name + index}><span>{item.name}</span><em>{item.display_qty || item.qty} {item.unit}</em></div>)
+          : <p>Состав не удалось извлечь автоматически. Проверьте исходный PDF или обновите ТТК.</p>}
+      </div>
+      {doc?.file_url && <a className="fileLink ttkSourceLink" href={doc.file_url} target="_blank" rel="noreferrer">Исходный PDF</a>}
+    </div>;
+  }
+
   return <>
     {doc?.photo_url && <img className="knowledgeDocPhoto" src={doc.photo_url} alt={doc.title || 'Фото'} />}
-    {doc?.file_url && <a className="fileLink" href={doc.file_url} target="_blank" rel="noreferrer">Открыть PDF</a>}
-    {ingredients.length > 0 && <div className="ttkIngredients"><strong>Состав</strong>{ingredients.map((item: any, index: number) => <div key={item.name + index}><span>{item.name}</span><em>{item.display_qty || item.qty} {item.unit}</em></div>)}</div>}
     {doc?.content && <pre>{doc.content}</pre>}
+    {doc?.file_url && <a className="fileLink" href={doc.file_url} target="_blank" rel="noreferrer">Открыть PDF</a>}
   </>;
 }
 
@@ -2096,11 +2119,11 @@ function Knowledge({ user, admin = false }: any) {
           {visibleCategories.length === 0 && <Empty text="Ничего не найдено по этому запросу" />}
         </div>}
 
-        {selectedCategoryId && selectedCategory && <div className="mobileKnowledgeDocList">
+          {selectedCategoryId && selectedCategory && <div className="mobileKnowledgeDocList">
           {selectedCategory.documents.map((document: any) => <button key={document.id} type="button" className="mobileKnowledgeDocRow" onClick={() => viewDoc(document)}>
             <div>
               <strong>{document.title}</strong>
-              <span>{document.acknowledged ? 'Ознакомлен' : document.requires_acknowledgement ? 'Нужно ознакомиться' : 'Документ'}</span>
+              <span>{document.type === 'ttk' ? 'ТТК · рецепт и состав' : document.acknowledged ? 'Ознакомлен' : document.requires_acknowledgement ? 'Нужно ознакомиться' : 'Документ'}</span>
             </div>
             <AppIcon name="chevron" className="navIcon" />
           </button>)}
