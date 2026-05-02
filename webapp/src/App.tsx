@@ -1138,6 +1138,7 @@ function Checklists({ user, admin = false }: any) {
   const [editorMsg, setEditorMsg] = useState('');
   const [cameraTarget, setCameraTarget] = useState<{ itemId: string; title: string } | null>(null);
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [isTemplateEditorOpen, setTemplateEditorOpen] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [templateForm, setTemplateForm] = useState<any>({
     title: '',
@@ -1155,6 +1156,7 @@ function Checklists({ user, admin = false }: any) {
 
   function resetTemplateEditor() {
     setEditingTemplateId(null);
+    setTemplateEditorOpen(false);
     setTemplateForm({
       title: '',
       role: 'manager',
@@ -1206,6 +1208,7 @@ function Checklists({ user, admin = false }: any) {
   function startTemplateEdit(template: any) {
     setEditorMsg('');
     setEditingTemplateId(template.id);
+    setTemplateEditorOpen(true);
     setTemplateForm({
       title: template.title,
       role: template.role,
@@ -1258,6 +1261,7 @@ function Checklists({ user, admin = false }: any) {
   const availableTemplates = admin
     ? templates
     : templates.filter((template) => !template.role || template.role === user.role);
+  const completedRuns = runs.filter((run) => ['completed', 'done'].includes(run.status));
 
   useEffect(() => {
     if (admin) return;
@@ -1387,37 +1391,56 @@ function Checklists({ user, admin = false }: any) {
   }
 
   return <>
-    {admin && <Card title="Редактор чек-листов" right={<span className="badge active">Редактирование</span>}>
-      <form className="form" onSubmit={saveTemplate}>
-        <div className="form two">
-          <Field label="Название чек-листа" value={templateForm.title} onChange={(e: any) => setTemplateForm({ ...templateForm, title: e.target.value })} placeholder="Например: Проверка открытия зала" />
-          <Select label="Для роли" value={templateForm.role} onChange={(e: any) => setTemplateForm({ ...templateForm, role: e.target.value })}>
-            {editorRoleOptions.map(([key, value]) => <option key={key} value={key}>{value}</option>)}
-          </Select>
-          <Select label="Тип" value={templateForm.type} onChange={(e: any) => setTemplateForm({ ...templateForm, type: e.target.value })}>
-            {Object.entries(checklistTypes).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
-          </Select>
+    {admin && <Card title="Выполненные чек-листы" right={<span className="badge active">{completedRuns.length} выполнено</span>}>
+      {completedRuns.length === 0 && <Empty text="Пока нет выполненных чек-листов" />}
+      <div className="list adminChecklistReportList">{completedRuns.map(r => <div className="miniCard" key={r.id}>
+        <div className="rowBetween"><div><b>{r.template?.title}</b><span>{r.user?.name} · {roles[r.user?.role] || 'Сотрудник'} · {fmtDate(r.created_at)}</span></div><span className="badge active">{checklistRunStatuses[r.status] || r.status}</span></div>
+        <div className="thumbRow">
+          {r.answers?.filter((answer: any) => answer.photo_url).map((answer: any) => <a key={answer.id} className="thumbLink" href={answer.photo_url} target="_blank" rel="noreferrer">
+            <img src={answer.photo_url} alt="Фото подтверждения" />
+          </a>)}
+          {r.answers?.filter((answer: any) => answer.photo_url).length === 0 && <span className="muted">Без фото</span>}
         </div>
+      </div>)}</div>
+    </Card>}
 
-        <div className="editorItems">
-          {templateForm.items.map((item: any, index: number) => <div className="editorItemRow smartChecklistEditorRow" key={item.id || `new-${index}`}>
-            <input value={item.text} onChange={(e) => updateTemplateItem(index, e.target.value)} placeholder={`Пункт ${index + 1}`} />
-            <div className="smartChecklistFlags">
-              <label><input type="checkbox" checked={item.required !== false} onChange={(e) => updateTemplateItemFlag(index, 'required', e.target.checked)} />Обяз.</label>
-              <label><input type="checkbox" checked={!!item.needs_photo} onChange={(e) => updateTemplateItemFlag(index, 'needs_photo', e.target.checked)} />Фото</label>
-              <label><input type="checkbox" checked={!!item.needs_comment} onChange={(e) => updateTemplateItemFlag(index, 'needs_comment', e.target.checked)} />Коммент.</label>
-            </div>
-            <button type="button" className="iconBtn" onClick={() => removeTemplateItem(index)}>×</button>
-          </div>)}
-        </div>
+    {admin && <Card title="Редактор чек-листов" right={<Button kind="soft" type="button" onClick={() => setTemplateEditorOpen((open) => !open)}>{isTemplateEditorOpen ? 'Свернуть' : 'Развернуть'}</Button>}>
+      {!isTemplateEditorOpen && <div className="adminChecklistEditorIntro">
+        <b>{editingTemplateId ? 'Редактирование подготовлено' : 'Редактор свернут'}</b>
+        <span>{editingTemplateId ? 'Разверните форму, чтобы продолжить изменение шаблона.' : 'Разверните форму, чтобы создать новый чек-лист, или выберите шаблон ниже для редактирования.'}</span>
+      </div>}
+      {isTemplateEditorOpen && <>
+        <form className="form" onSubmit={saveTemplate}>
+          <div className="form two">
+            <Field label="Название чек-листа" value={templateForm.title} onChange={(e: any) => setTemplateForm({ ...templateForm, title: e.target.value })} placeholder="Например: Проверка открытия зала" />
+            <Select label="Для роли" value={templateForm.role} onChange={(e: any) => setTemplateForm({ ...templateForm, role: e.target.value })}>
+              {editorRoleOptions.map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+            </Select>
+            <Select label="Тип" value={templateForm.type} onChange={(e: any) => setTemplateForm({ ...templateForm, type: e.target.value })}>
+              {Object.entries(checklistTypes).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+            </Select>
+          </div>
 
-        <div className="actions">
-          <Button kind="soft" type="button" onClick={addTemplateItem}>Добавить пункт</Button>
-          {editingTemplateId && <Button kind="soft" type="button" onClick={resetTemplateEditor}>Отмена</Button>}
-          <Button>{editingTemplateId ? 'Сохранить изменения' : 'Создать чек-лист'}</Button>
-        </div>
-      </form>
-      {editorMsg && <div className={editorMsg.includes('обновл') || editorMsg.includes('создан') ? 'notice' : 'error'}>{editorMsg}</div>}
+          <div className="editorItems">
+            {templateForm.items.map((item: any, index: number) => <div className="editorItemRow smartChecklistEditorRow" key={item.id || `new-${index}`}>
+              <input value={item.text} onChange={(e) => updateTemplateItem(index, e.target.value)} placeholder={`Пункт ${index + 1}`} />
+              <div className="smartChecklistFlags">
+                <label><input type="checkbox" checked={item.required !== false} onChange={(e) => updateTemplateItemFlag(index, 'required', e.target.checked)} />Обяз.</label>
+                <label><input type="checkbox" checked={!!item.needs_photo} onChange={(e) => updateTemplateItemFlag(index, 'needs_photo', e.target.checked)} />Фото</label>
+                <label><input type="checkbox" checked={!!item.needs_comment} onChange={(e) => updateTemplateItemFlag(index, 'needs_comment', e.target.checked)} />Коммент.</label>
+              </div>
+              <button type="button" className="iconBtn" onClick={() => removeTemplateItem(index)}>×</button>
+            </div>)}
+          </div>
+
+          <div className="actions">
+            <Button kind="soft" type="button" onClick={addTemplateItem}>Добавить пункт</Button>
+            {editingTemplateId && <Button kind="soft" type="button" onClick={resetTemplateEditor}>Отмена</Button>}
+            <Button>{editingTemplateId ? 'Сохранить изменения' : 'Создать чек-лист'}</Button>
+          </div>
+        </form>
+        {editorMsg && <div className={editorMsg.includes('обновл') || editorMsg.includes('создан') ? 'notice' : 'error'}>{editorMsg}</div>}
+      </>}
     </Card>}
 
     {admin ? <Card title="Шаблоны чек-листов" right={<span className="badge active">Только редактирование</span>}>
@@ -1451,15 +1474,6 @@ function Checklists({ user, admin = false }: any) {
       </div>)}</div>
       {runMsg && <div className="notice">{runMsg}</div>}
     </Card>}
-    {admin && <Card title="Отчёты по выполнению чек-листов" right={<span className="badge active">Доступно менеджеру</span>}><div className="list">{runs.map(r => <div className="miniCard" key={r.id}>
-      <div className="rowBetween"><div><b>{r.template?.title}</b><span>{r.user?.name} · {roles[r.user?.role] || 'Сотрудник'} · {fmtDate(r.created_at)}</span></div><span className="badge active">{checklistRunStatuses[r.status] || r.status}</span></div>
-      <div className="thumbRow">
-        {r.answers?.filter((answer: any) => answer.photo_url).map((answer: any) => <a key={answer.id} className="thumbLink" href={answer.photo_url} target="_blank" rel="noreferrer">
-          <img src={answer.photo_url} alt="Фото подтверждения" />
-        </a>)}
-        {r.answers?.filter((answer: any) => answer.photo_url).length === 0 && <span className="muted">Без фото</span>}
-      </div>
-    </div>)}</div></Card>}
     {cameraTarget && <CameraCapture
       title={cameraTarget.title}
       onClose={() => setCameraTarget(null)}
