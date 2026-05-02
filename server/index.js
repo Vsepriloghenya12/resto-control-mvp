@@ -1234,6 +1234,9 @@ app.patch('/api/admin/checklists/templates/:id', auth, ensureRestaurantActive, o
 
     const existingItems = db.checklist_items.filter(item => item.template_id === template.id);
     const nextIds = new Set(normalized.items.map(item => item.id));
+    const removedItemIds = existingItems
+      .filter(item => !nextIds.has(item.id))
+      .map(item => item.id);
 
     normalized.items.forEach(item => {
       const current = existingItems.find(existing => existing.id === item.id);
@@ -1252,6 +1255,10 @@ app.patch('/api/admin/checklists/templates/:id', auth, ensureRestaurantActive, o
       }
     });
 
+    if (removedItemIds.length) {
+      const removedSet = new Set(removedItemIds);
+      db.checklist_answers = db.checklist_answers.filter(answer => !removedSet.has(answer.item_id));
+    }
     db.checklist_items = db.checklist_items.filter(item => item.template_id !== template.id || nextIds.has(item.id));
   }
 
