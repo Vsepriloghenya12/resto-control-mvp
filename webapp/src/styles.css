@@ -4334,6 +4334,28 @@ textarea {
   color: var(--text-muted);
 }
 
+.adminChecklistEditorIntro {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px dashed rgba(148, 163, 184, 0.24);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.adminChecklistEditorIntro b {
+  font-size: 0.95rem;
+}
+
+.adminChecklistEditorIntro span {
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+}
+
+.adminChecklistReportList {
+  gap: 12px;
+}
+
 .hallSummaryGrid,
 .problemMetrics,
 .overviewHighlights {
