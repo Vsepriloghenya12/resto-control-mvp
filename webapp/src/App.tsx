@@ -1292,7 +1292,7 @@ function Checklists({ user, admin = false }: any) {
 
   if (!admin) {
     return <div className="mobileSectionStack">
-      <SectionTitle title="Чек-листы" />
+      <SectionTitle title="Чек-листы" subtitle="Отмечайте пункты по смене. Фото и комментарии появятся там, где они нужны." />
 
       {!availableTemplates.length && <Card className="mobileCard compactMobileCard">
         <Empty text="Для вашей роли пока нет активных чек-листов" />
@@ -1310,9 +1310,12 @@ function Checklists({ user, admin = false }: any) {
         </button>)}
       </div>}
 
-      {selectedTemplate && <Card className="mobileCard compactMobileCard">
+      {selectedTemplate && <Card className="mobileCard compactMobileCard mobileChecklistProgressCard">
         <div className="mobileProgressCardCopy compact">
-          <h3>{selectedTemplate.title}</h3>
+          <div>
+            <h3>{selectedTemplate.title}</h3>
+            <p>Выполнено {completedChecklistItems} из {selectedTemplate.items.length}</p>
+          </div>
           <span className="badge active mobileProgressBadge">{completedChecklistItems}/{selectedTemplate.items.length}</span>
         </div>
         <ProgressBar value={completedChecklistItems} max={selectedTemplate.items.length} />
@@ -1322,21 +1325,22 @@ function Checklists({ user, admin = false }: any) {
         {selectedTemplate.items.map((item: any, index: number) => {
           const itemAnswer = answers[item.id] || {};
           const isDone = !!itemAnswer.done;
-          return <div key={item.id} className={cx('mobileChecklistLine', itemAnswer.done && 'done')}>
+          return <div key={item.id} className={cx('mobileChecklistLine', isDone && 'done', item.required !== false && 'required')}>
             <button
               type="button"
-              className={cx('mobileChecklistToggle', itemAnswer.done && 'done')}
+              className={cx('mobileChecklistToggle', isDone && 'done')}
               onClick={() => toggleChecklistItem(item)}
-              aria-label={itemAnswer.done ? 'Снять отметку' : 'Отметить выполненным'}
+              aria-label={isDone ? 'Снять отметку' : 'Отметить выполненным'}
+              aria-pressed={isDone}
             >
-              {itemAnswer.done && <span>✓</span>}
+              {isDone && <span>✓</span>}
             </button>
             <div className="mobileChecklistLineBody">
               <div className="mobileChecklistLineHead">
                 <strong>{item.text}</strong>
-                <span>{index + 1}</span>
+                <span className="mobileChecklistIndex">{index + 1}</span>
               </div>
-              <div className="mobileChecklistSmartTags">{item.required !== false && <em>обязательный</em>}{item.needs_photo && <em>фото</em>}{item.needs_comment && <em>комментарий</em>}<b>{isDone ? 'готово' : 'ожидает'}</b></div>
+              <div className="mobileChecklistSmartTags">{item.required !== false && <em>обязательный</em>}{item.needs_photo && <em>фото</em>}{item.needs_comment && <em>комментарий</em>}<b className={isDone ? 'done' : 'pending'}>{isDone ? 'готово' : 'ожидает'}</b></div>
               {itemAnswer.done && item.needs_photo && <div className="mobileChecklistLineMeta">
                 <span className="mobileChecklistPhotoStatus">
                   <AppIcon name="camera" className="navIcon" />
@@ -1352,7 +1356,7 @@ function Checklists({ user, admin = false }: any) {
               </div>}
               {itemAnswer.done && itemAnswer.photo_url && <img className="mobileChecklistPhoto" src={itemAnswer.photo_url} alt={`Фото: ${item.text}`} />}
               {itemAnswer.done && <Textarea
-                label="Комментарий"
+                label={item.needs_comment ? 'Комментарий обязателен' : 'Комментарий'}
                 value={itemAnswer.comment || ''}
                 onChange={(e: any) => updateAnswer(item.id, { comment: e.target.value })}
                 placeholder="Комментарий"
