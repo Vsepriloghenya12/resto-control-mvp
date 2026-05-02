@@ -73,7 +73,7 @@ const brandLogoSrc = '/resto-control-logo.png';
 
 const subscriptionTariffs = [
   { title: 'Старт', employees: 'до 10 сотрудников', price: '1 490 ₽', period: '/ мес', note: 'Для небольших команд', featured: false },
-  { title: 'Команда', employees: 'до 25 сотрудников', price: '2 990 ₽', period: '/ мес', note: 'Для растущего заведения', featured: true },
+  { title: 'Команда', employees: 'до 25 сотрудников', price: '2 590 ₽', period: '/ мес', note: 'Для растущего заведения', featured: true },
   { title: 'Бизнес', employees: 'до 50 сотрудников', price: '4 990 ₽', period: '/ мес', note: 'Для нескольких смен', featured: false },
   { title: 'Сеть', employees: 'до 100 сотрудников', price: '7 990 ₽', period: '/ мес', note: 'Для крупных ресторанов', featured: false },
   { title: 'Enterprise', employees: '100+ сотрудников', price: 'Индивидуально', period: '', note: 'Персональные условия', featured: false }
