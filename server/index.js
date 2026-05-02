@@ -1097,8 +1097,10 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
 app.get('/api/admin/users', auth, ensureRestaurantActive, operationalEditorOnly, (req, res) => {
   const rid = req.user.restaurant_id || req.query.restaurant_id;
   const manageableDepartmentName = manageableDepartment(req.user);
+  const includeInactive = String(req.query.include_inactive || '') === '1';
   const rows = sameRestaurant(db.users, rid)
     .filter(u => !u.is_super_admin)
+    .filter(u => includeInactive || u.active !== false)
     .filter(u => !manageableDepartmentName || u.department === manageableDepartmentName || canManageRole(req.user, u.role))
     .map(publicUser);
   res.json(rows);
