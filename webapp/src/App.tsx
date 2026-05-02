@@ -1319,6 +1319,7 @@ function Checklists({ user, admin = false }: any) {
       {selectedTemplate && <div className="mobileChecklistPlainList">
         {selectedTemplate.items.map((item: any, index: number) => {
           const itemAnswer = answers[item.id] || {};
+          const isDone = !!itemAnswer.done;
           return <div key={item.id} className={cx('mobileChecklistLine', itemAnswer.done && 'done')}>
             <button
               type="button"
@@ -1331,9 +1332,9 @@ function Checklists({ user, admin = false }: any) {
             <div className="mobileChecklistLineBody">
               <div className="mobileChecklistLineHead">
                 <strong>{item.text}</strong>
-                <span>{index + 1} / {selectedTemplate.items.length}</span>
+                <span>{index + 1}</span>
               </div>
-              <div className="mobileChecklistSmartTags">{item.required !== false && <em>обязательный</em>}{item.needs_photo && <em>фото</em>}{item.needs_comment && <em>комментарий</em>}</div>
+              <div className="mobileChecklistSmartTags">{item.required !== false && <em>обязательный</em>}{item.needs_photo && <em>фото</em>}{item.needs_comment && <em>комментарий</em>}<b>{isDone ? 'готово' : 'ожидает'}</b></div>
               {itemAnswer.done && item.needs_photo && <div className="mobileChecklistLineMeta">
                 <span className="mobileChecklistPhotoStatus">
                   <AppIcon name="camera" className="navIcon" />
