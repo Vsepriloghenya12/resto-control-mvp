@@ -832,6 +832,10 @@ input[type='checkbox'] {
 .bottomNavItem.active {
   color: var(--text);
   background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  text-align: left;
+  border: 1px solid transparent;
+  width: 100%;
 }
 
 .bottomNavItem.active::before {
@@ -2719,10 +2723,19 @@ input[type='checkbox'] {
   margin-bottom: 16px;
 }
 
-.problemMetrics div {
+.problemMetrics button {
   padding: 14px;
   border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  text-align: left;
+}
+
+.problemMetrics button:hover,
+.problemRow:hover {
+  border-color: rgba(34, 197, 94, 0.22);
+  background: rgba(34, 197, 94, 0.08);
 }
 
 .problemMetrics strong,
@@ -2751,7 +2764,11 @@ input[type='checkbox'] {
   gap: 12px;
   padding: 12px;
   border-radius: 16px;
+  border: 1px solid transparent;
   background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  text-align: left;
+  width: 100%;
 }
 
 .problemRow.danger {
@@ -4796,36 +4813,23 @@ textarea {
 }
 
 @media (max-width: 980px) {
-  .ownerDesktopWorkspace {
-    display: grid !important;
-    grid-template-columns: 224px minmax(840px, 1fr) !important;
-    width: max(1100px, 100%) !important;
-    padding: 16px 18px 36px !important;
+  .ownerDesktopWorkspace,
+  .managerWorkspace {
+    display: block !important;
   }
 
-  .ownerDesktopWorkspace .dashboardSidebar {
-    display: grid !important;
-    position: sticky;
-    top: 16px;
-    min-height: calc(100dvh - 32px);
-  }
-
-  .ownerDesktopWorkspace .desktopWorkspaceChrome {
-    display: grid !important;
-  }
-
-  .ownerDesktopWorkspace .mobileWorkspaceChrome,
-  .ownerDesktopWorkspace .bottomNavigation {
-    display: none !important;
-  }
-
-  .ownerDesktopWorkspace .workspacePageContainer {
-    padding: 0 0 32px !important;
-  }
-
+  .ownerDesktopWorkspace .desktopWorkspaceChrome,
+  .ownerDesktopWorkspace .dashboardSidebar,
   .managerWorkspace .desktopWorkspaceChrome,
   .managerWorkspace .dashboardSidebar {
     display: none !important;
+  }
+
+  .ownerDesktopWorkspace .mobileWorkspaceChrome,
+  .ownerDesktopWorkspace .bottomNavigation,
+  .managerWorkspace .mobileWorkspaceChrome,
+  .managerWorkspace .bottomNavigation {
+    display: block !important;
   }
 }
 

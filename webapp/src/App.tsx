@@ -347,12 +347,31 @@ function ActivityFeed({ limit = 6, compact = false }: { limit?: number; compact?
   return <div className={cx('activityFeed', compact && 'compact')}>{events.length === 0 && <Empty text="Событий пока нет" />}{events.map(event => <article key={event.id} className="activityItem"><span className="activityDot" /><div><strong>{event.title}</strong><span>{event.actor?.name || 'Система'} · {fmtDate(event.created_at)}</span></div></article>)}</div>;
 }
 
-function AdminProblemDashboard() {
+function AdminProblemDashboard({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const [data, setData] = useState<any>(null);
   useEffect(() => { api('/api/admin/problems').then(setData).catch(() => setData(null)); }, []);
   if (!data) return <Card title="Проблемы"><Empty text="Загружаем проблемный дашборд" /></Card>;
   const metrics = data.metrics || {};
-  return <><Card title="Проблемный дашборд" right={<Button kind="soft" onClick={() => download('/api/admin/reports/operations.csv', 'operations-report.csv')}>Экспорт CSV</Button>}><div className="problemMetrics"><div><strong>{metrics.open_shifts || 0}</strong><span>смен сейчас</span></div><div><strong>{metrics.overdue_tasks || 0}</strong><span>просрочено</span></div><div><strong>{metrics.open_tech_requests || 0}</strong><span>техзаявок</span></div><div><strong>{metrics.pending_acknowledgements || 0}</strong><span>ознакомлений ждут</span></div></div><div className="problemList">{(data.problems || []).length === 0 && <Empty text="Критичных проблем сейчас нет" />}{(data.problems || []).map((problem: any) => <div className={cx('problemRow', problem.tone)} key={problem.id}><div><strong>{problem.title}</strong><span>{problem.subtitle}</span></div><span className="badge">{problem.type_label || problemTypeLabels[problem.type] || problem.type}</span></div>)}</div></Card><Card title="Лента событий"><ActivityFeed limit={12} /></Card></>;
+  function openProblem(problem: any) {
+    if (problem.type === 'product_request') onNavigate?.('requests');
+    else if (problem.type === 'tech_request' || problem.type === 'task') onNavigate?.('tasks');
+    else if (problem.type === 'checklist_run') onNavigate?.('checklists');
+  }
+  return <><Card title="Пульт контроля" right={<Button kind="soft" onClick={() => download('/api/admin/reports/operations.csv', 'operations-report.csv')}>Экспорт CSV</Button>}>
+    <div className="problemMetrics">
+      <button type="button" onClick={() => onNavigate?.('checklists')}><strong>{metrics.open_shifts || 0}</strong><span>смен сейчас</span></button>
+      <button type="button" onClick={() => onNavigate?.('tasks')}><strong>{metrics.overdue_tasks || 0}</strong><span>просрочено</span></button>
+      <button type="button" onClick={() => onNavigate?.('tasks')}><strong>{metrics.open_tech_requests || 0}</strong><span>техзаявок</span></button>
+      <button type="button" onClick={() => onNavigate?.('knowledge')}><strong>{metrics.pending_acknowledgements || 0}</strong><span>ознакомлений ждут</span></button>
+    </div>
+    <div className="problemList">
+      {(data.problems || []).length === 0 && <Empty text="Критичных проблем сейчас нет" />}
+      {(data.problems || []).map((problem: any) => <button type="button" className={cx('problemRow', problem.tone)} key={problem.id} onClick={() => openProblem(problem)}>
+        <div><strong>{problem.title}</strong><span>{problem.subtitle}</span></div>
+        <span className="badge">{problem.type_label || problemTypeLabels[problem.type] || problem.type}</span>
+      </button>)}
+    </div>
+  </Card><Card title="Лента событий"><ActivityFeed limit={12} /></Card></>;
 }
 
 
@@ -564,7 +583,7 @@ function RestaurantWorkspace({
         : null;
 
   const managerMode = user.role === 'manager';
-  const showMobileWorkspace = managerMode;
+  const showMobileWorkspace = true;
 
   const mobileNavItems: MobileNavItem[] = [
     { id: 'overview', title: 'Обзор', icon: 'overview', active: active === 'overview', onClick: () => setActive('overview') },
@@ -575,7 +594,6 @@ function RestaurantWorkspace({
   ];
 
   const mobileMenuItems: MobileActionItem[] = tabs
-    .filter((tab) => !managerMode || tab.id !== 'users')
     .map((tab) => ({
       id: tab.id,
       title: tab.title,
@@ -586,14 +604,15 @@ function RestaurantWorkspace({
 
   const mobileCreateItems: MobileActionItem[] = managerMode
     ? [
-      { id: 'bookings', title: 'Брони и столы', subtitle: 'Открыть схему зала', icon: 'bookings', onClick: () => setActive('bookings') },
-      { id: 'requests', title: 'Заявки', subtitle: 'Принять и обработать заявки', icon: 'requests', onClick: () => setActive('requests') },
-      { id: 'tasks', title: 'Задачи', subtitle: 'Поставить задачу сотрудникам', icon: 'tasks', onClick: () => setActive('tasks') }
+      { id: 'bookings', title: 'Открыть брони', subtitle: 'Схема зала и посадка гостей', icon: 'bookings', onClick: () => setActive('bookings') },
+      { id: 'requests', title: 'Открыть заявки', subtitle: 'Приёмка и комментарии по заказам', icon: 'requests', onClick: () => setActive('requests') },
+      { id: 'tasks', title: 'Создать задачу', subtitle: 'Поставить задачу или обработать техзаявку', icon: 'tasks', onClick: () => setActive('tasks') },
+      { id: 'users', title: 'Сотрудники', subtitle: 'Доступы и роли команды', icon: 'users', onClick: () => setActive('users') }
     ]
     : [
       { id: 'users', title: 'Сотрудники', subtitle: 'Добавить и управлять доступами', icon: 'users', onClick: () => setActive('users') },
-      { id: 'requests', title: 'Заявки', subtitle: 'Открыть закупки и приёмку', icon: 'requests', onClick: () => setActive('requests') },
-      { id: 'inventory', title: 'Инвентаризация', subtitle: 'Проверить остатки и Excel-отчёты', icon: 'inventory', onClick: () => setActive('inventory') }
+      { id: 'requests', title: 'Открыть заявки', subtitle: 'Закупки, приёмка и комментарии', icon: 'requests', onClick: () => setActive('requests') },
+      { id: 'inventory', title: 'Номенклатура', subtitle: 'Товары, бланки и Excel-отчёты', icon: 'inventory', onClick: () => setActive('inventory') }
     ];
 
   const mobileProfileItems: MobileActionItem[] = managerMode
@@ -730,7 +749,7 @@ function RestaurantAdmin({ user, restaurant, onLogout }: any) {
   const [tab, setTab] = useState<Tab>('overview');
   const isManager = user.role === 'manager';
   const tabs = withIcons([
-    { id: 'overview', title: isManager ? 'Пульт смены' : 'Аккаунт' },
+    { id: 'overview', title: isManager ? 'Пульт смены' : 'Обзор' },
     { id: 'users', title: 'Сотрудники' },
     { id: 'checklists', title: 'Чек-листы' },
     { id: 'inventory', title: 'Номенклатура' },
@@ -813,7 +832,7 @@ function AdminOverview({ mode = 'owner', onNavigate }: { mode?: 'owner' | 'manag
         </div>
       </div>
     </Card>
-    {managerMode ? <AdminProblemDashboard /> : <OwnerAccountNotice />}
+    {managerMode ? <AdminProblemDashboard onNavigate={onNavigate} /> : <OwnerAccountNotice />}
   </>;
 }
 
@@ -956,9 +975,9 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
   ];
 
   const mobileCreateItems: MobileActionItem[] = [
-    { id: 'booking', title: 'Новая бронь', subtitle: 'Выбрать столы и забронировать гостей', icon: 'bookings', onClick: () => setTab('bookings') },
-    { id: 'request', title: 'Создать заявку', subtitle: 'Открыть запросы и отправить новую заявку', icon: 'requests', onClick: () => setTab('requests') },
-    { id: 'inventory', title: 'Открыть инвентаризацию', subtitle: 'Быстро заполнить остатки', icon: 'inventory', onClick: () => setTab('inventory') },
+    { id: 'booking', title: 'Открыть брони', subtitle: 'Зал, посадка гостей и новая бронь', icon: 'bookings', onClick: () => setTab('bookings') },
+    { id: 'request', title: 'Открыть заявки', subtitle: 'Создать заявку по товарам отдела', icon: 'requests', onClick: () => setTab('requests') },
+    { id: 'inventory', title: 'Инвентаризация', subtitle: 'Заполнить фактические остатки', icon: 'inventory', onClick: () => setTab('inventory') },
     ...(isSenior ? [{ id: 'department-task', title: 'Задача подразделению', subtitle: 'Поставить задачу своей команде', icon: 'tasks' as IconName, onClick: () => setTab('admin-tasks') }] : []),
     { id: 'tech', title: 'Сообщить о проблеме', subtitle: 'Техзаявка для менеджера', icon: 'tasks', onClick: () => {
       setTab('tasks');
@@ -983,7 +1002,7 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
       title: tab === 'today' ? <>Добро пожаловать, <em>{user.name}</em></> : '',
       subtitle: tab === 'today' ? roles[user.role] : '',
       isOverview: tab === 'today',
-      showMenuButton: false,
+      showMenuButton: true,
       showNotifications: true,
       navItems: mobileNavItems,
       menuItems: mobileMenuItems,
