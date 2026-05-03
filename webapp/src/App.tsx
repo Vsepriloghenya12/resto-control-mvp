@@ -1368,6 +1368,7 @@ function Checklists({ user, admin = false }: any) {
   });
   const editableRoleEntries = admin ? executableRoles.filter(([key]) => manageableRolesFor(user).includes(key)) : executableRoles;
   const editorRoleOptions = editableRoleEntries.length ? editableRoleEntries : executableRoles;
+  const defaultTemplateRole = editorRoleOptions[0]?.[0] || 'manager';
   useEffect(() => {
     if (admin && editorRoleOptions.length && !editorRoleOptions.some(([key]) => key === templateForm.role)) {
       setTemplateForm((current: any) => ({ ...current, role: editorRoleOptions[0][0] }));
@@ -1379,7 +1380,7 @@ function Checklists({ user, admin = false }: any) {
     setTemplateEditorOpen(false);
     setTemplateForm({
       title: '',
-      role: 'manager',
+      role: defaultTemplateRole,
       type: 'open',
       items: [{ id: '', text: '', required: true, needs_photo: false, needs_comment: false }]
     });
@@ -1422,6 +1423,17 @@ function Checklists({ user, admin = false }: any) {
         ...current,
         items: nextItems.length ? nextItems : [{ id: '', text: '', required: true, needs_photo: false, needs_comment: false }]
       };
+    });
+  }
+
+  function moveTemplateItem(index: number, direction: number) {
+    setTemplateForm((current: any) => {
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= current.items.length) return current;
+      const nextItems = [...current.items];
+      const [movedItem] = nextItems.splice(index, 1);
+      nextItems.splice(targetIndex, 0, movedItem);
+      return { ...current, items: nextItems };
     });
   }
 
@@ -1481,6 +1493,9 @@ function Checklists({ user, admin = false }: any) {
   const availableTemplates = admin
     ? templates
     : templates.filter((template) => !template.role || template.role === user.role);
+  const adminTemplates = admin
+    ? [...availableTemplates].sort((a, b) => String(roles[a.role] || a.role).localeCompare(String(roles[b.role] || b.role), 'ru') || String(a.title || '').localeCompare(String(b.title || ''), 'ru'))
+    : [];
   const completedRuns = runs.filter((run) => ['completed', 'done'].includes(run.status));
 
   useEffect(() => {
@@ -1611,17 +1626,29 @@ function Checklists({ user, admin = false }: any) {
   }
 
   return <>
-    {admin && <Card title="Выполненные чек-листы" right={<span className="badge active">{completedRuns.length} выполнено</span>}>
-      {completedRuns.length === 0 && <Empty text="Пока нет выполненных чек-листов" />}
-      <div className="list adminChecklistReportList">{completedRuns.map(r => <div className="miniCard" key={r.id}>
-        <div className="rowBetween"><div><b>{r.template?.title}</b><span>{r.user?.name} · {roles[r.user?.role] || 'Сотрудник'} · {fmtDate(r.created_at)}</span></div><span className="badge active">{checklistRunStatuses[r.status] || r.status}</span></div>
-        <div className="thumbRow">
-          {r.answers?.filter((answer: any) => answer.photo_url).map((answer: any) => <a key={answer.id} className="thumbLink" href={answer.photo_url} target="_blank" rel="noreferrer">
-            <img src={answer.photo_url} alt="Фото подтверждения" />
-          </a>)}
-          {r.answers?.filter((answer: any) => answer.photo_url).length === 0 && <span className="muted">Без фото</span>}
-        </div>
-      </div>)}</div>
+    {admin && <Card title="Все чек-листы" right={<span className="badge active">{adminTemplates.length} шаблонов</span>}>
+      {adminTemplates.length === 0 && <Empty text="Пока нет созданных чек-листов" />}
+      {adminTemplates.length > 0 && <div className="adminChecklistTemplateList">
+        {adminTemplates.map((template) => <button
+          key={template.id}
+          type="button"
+          className={cx('checklistTemplateCard', editingTemplateId === template.id && 'active')}
+          onClick={() => startTemplateEdit(template)}
+        >
+          <div className="checklistTemplateCardHead">
+            <div>
+              <strong>{template.title}</strong>
+              <span>{roles[template.role] || template.role} · {checklistTypes[template.type] || template.type}</span>
+            </div>
+            <em>{template.items?.length || 0} пунктов</em>
+          </div>
+          <div className="checklistTemplatePreview">
+            {(template.items || []).slice(0, 4).map((item: any, index: number) => <span key={item.id || index}>{index + 1}. {item.text}</span>)}
+            {(template.items || []).length > 4 && <span>+ ещё {(template.items || []).length - 4}</span>}
+          </div>
+          <div className="checklistTemplateCardFoot">Открыть для редактирования</div>
+        </button>)}
+      </div>}
     </Card>}
 
     {admin && <Card title="Редактор чек-листов" right={<Button kind="soft" type="button" onClick={() => setTemplateEditorOpen((open) => !open)}>{isTemplateEditorOpen ? 'Свернуть' : 'Развернуть'}</Button>}>
@@ -1643,13 +1670,20 @@ function Checklists({ user, admin = false }: any) {
 
           <div className="editorItems">
             {templateForm.items.map((item: any, index: number) => <div className="editorItemRow smartChecklistEditorRow" key={item.id || `new-${index}`}>
-              <input value={item.text} onChange={(e) => updateTemplateItem(index, e.target.value)} placeholder={`Пункт ${index + 1}`} />
-              <div className="smartChecklistFlags">
-                <label><input type="checkbox" checked={item.required !== false} onChange={(e) => updateTemplateItemFlag(index, 'required', e.target.checked)} />Обяз.</label>
-                <label><input type="checkbox" checked={!!item.needs_photo} onChange={(e) => updateTemplateItemFlag(index, 'needs_photo', e.target.checked)} />Фото</label>
-                <label><input type="checkbox" checked={!!item.needs_comment} onChange={(e) => updateTemplateItemFlag(index, 'needs_comment', e.target.checked)} />Коммент.</label>
+              <div className="checklistItemOrderControls">
+                <button type="button" className="iconBtn" onClick={() => moveTemplateItem(index, -1)} disabled={index === 0} aria-label="Поднять пункт выше">↑</button>
+                <span>{index + 1}</span>
+                <button type="button" className="iconBtn" onClick={() => moveTemplateItem(index, 1)} disabled={index === templateForm.items.length - 1} aria-label="Опустить пункт ниже">↓</button>
               </div>
-              <button type="button" className="iconBtn" onClick={() => removeTemplateItem(index)}>×</button>
+              <div className="checklistItemEditorBody">
+                <input value={item.text} onChange={(e) => updateTemplateItem(index, e.target.value)} placeholder={`Пункт ${index + 1}`} />
+                <div className="smartChecklistFlags">
+                  <label><input type="checkbox" checked={item.required !== false} onChange={(e) => updateTemplateItemFlag(index, 'required', e.target.checked)} />Обяз.</label>
+                  <label><input type="checkbox" checked={!!item.needs_photo} onChange={(e) => updateTemplateItemFlag(index, 'needs_photo', e.target.checked)} />Фото</label>
+                  <label><input type="checkbox" checked={!!item.needs_comment} onChange={(e) => updateTemplateItemFlag(index, 'needs_comment', e.target.checked)} />Коммент.</label>
+                </div>
+              </div>
+              <button type="button" className="iconBtn checklistItemRemove" onClick={() => removeTemplateItem(index)} aria-label="Удалить пункт">×</button>
             </div>)}
           </div>
 
