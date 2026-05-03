@@ -238,18 +238,23 @@ export function Bookings({ admin = false }: any) {
     return (reservation.tables || []).map((table: any) => table.label).join(', ');
   }
 
+  function tableNumberLabel(label: string) {
+    const text = String(label || '').trim();
+    const match = text.match(/(\d+)$/);
+    if (match) return match[1];
+    return text.replace(/^стол\s*/i, '').trim() || text || '—';
+  }
+
   function tableStateForDay(table: any) {
     const tableReservations = bookingsForDate
       .filter((reservation: any) => (Array.isArray(reservation.table_ids) ? reservation.table_ids : []).includes(table.id))
       .filter((reservation: any) => ['booked', 'seated'].includes(reservation.status))
       .sort((a: any, b: any) => String(a.reserved_for || '').localeCompare(String(b.reserved_for || '')));
-    if (!tableReservations.length) return { tone: 'free', badge: 'Свободен', text: 'Нажмите для действия', reservation: null as any };
+    if (!tableReservations.length) return { tone: 'free', badge: 'Свободен', reservation: null as any };
     const nextReservation = tableReservations[0];
-    const time = new Date(nextReservation.reserved_for).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
     return {
       tone: nextReservation.status === 'seated' ? 'occupied' : 'reserved',
       badge: nextReservation.status === 'seated' ? 'Занято' : 'Забронировано',
-      text: `${time} · ${nextReservation.guests_count || 1} гост.`,
       reservation: nextReservation
     };
   }
@@ -297,7 +302,6 @@ export function Bookings({ admin = false }: any) {
   if (!admin) {
     return <>
       <div className="mobileSectionStack bookingMobileScreen">
-        <SectionTitle title="Брони" />
         <section className="mobileSection">
           <div className="mobileListSurface mobileFilterSurface"><Field label="Дата" type="date" value={dateFilter} onChange={(e: any) => setDateFilter(e.target.value)} /></div>
         </section>
@@ -308,9 +312,11 @@ export function Bookings({ admin = false }: any) {
             {hall.tables.map((table: any) => {
               const state = tableStateForDay(table);
               return <button key={table.id} type="button" className={cx('bookingTableButton', 'floorTableTile', state.tone)} onClick={() => openTable(table)}>
-                <div className="floorTableTileHead"><strong>{table.label}</strong><span className={cx('floorTableStatusBadge', state.tone)}>{state.badge}</span></div>
-                <span>{table.seats} мест</span>
-                <em>{state.text}</em>
+                <div className="floorTableTileHead">
+                  <strong className="floorTableNumber">{tableNumberLabel(table.label)}</strong>
+                  <span className={cx('floorTableStatusBadge', state.tone)}>{state.badge}</span>
+                </div>
+                <span className="floorTableSeats">{table.seats} мест</span>
               </button>;
             })}
           </div>

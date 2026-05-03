@@ -9,7 +9,7 @@ import { cx } from '../../lib/cx';
 import { departments, requestStatuses, roleDepartment, roles, seniorRoles } from '../../lib/dictionaries';
 import { fmtDate } from '../../lib/format';
 
-export function Requests({ user, admin = false }: any) {
+export function Requests({ user, admin = false, openComposer = false, onCloseComposer }: any) {
   const [products, setProducts] = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
   const [qty, setQty] = useState<any>({});
@@ -27,6 +27,13 @@ export function Requests({ user, admin = false }: any) {
     setRequests(await api('/api/requests'));
   }
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (!admin && openComposer) setShowComposer(true);
+  }, [admin, openComposer]);
+  function closeComposer() {
+    setShowComposer(false);
+    onCloseComposer?.();
+  }
   async function submit() {
     const items = Object.entries(qty).map(([product_id, q]) => ({ product_id, qty_ordered: Number(q) })).filter(i => i.qty_ordered > 0);
     if (items.length === 0) {
@@ -35,7 +42,7 @@ export function Requests({ user, admin = false }: any) {
     }
     const result = await api('/api/requests', { method: 'POST', body: JSON.stringify({ department: userDepartment, items }) });
     setQty({});
-    setShowComposer(false);
+    closeComposer();
     setMsg(result?.offline ? 'Заявка сохранена офлайн и отправится после сети' : 'Заявка отправлена');
     load().catch(() => undefined);
   }
@@ -116,7 +123,7 @@ export function Requests({ user, admin = false }: any) {
       {showComposer && <MobileSheetModal
         title="Новая заявка"
         subtitle={selectedCount > 0 ? `Выбрано позиций: ${selectedCount}` : 'Укажите фактическую потребность'}
-        onClose={() => setShowComposer(false)}
+        onClose={closeComposer}
         className="mobileRequestComposer"
         footer={<Button type="button" className="mobilePrimaryButton" onClick={submit}>Отправить заявку</Button>}
       >

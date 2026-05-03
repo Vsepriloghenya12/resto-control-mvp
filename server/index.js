@@ -1276,44 +1276,134 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
   const employeeMetrics = activeStaffUsers
     .map(user => {
       const userChecklistTemplates = activeChecklistTemplates.filter(template => template.role === user.role);
+      const completedChecklistRuns = checklistRunsToday
+        .filter(run => run.user_id === user.id && ['completed', 'done'].includes(run.status));
+      const latestChecklistRunByTemplate = new Map();
+      completedChecklistRuns.forEach(run => {
+        const current = latestChecklistRunByTemplate.get(run.template_id);
+        if (!current || String(run.created_at || '').localeCompare(String(current.created_at || '')) > 0) {
+          latestChecklistRunByTemplate.set(run.template_id, run);
+        }
+      });
       const userChecklistDoneKeys = new Set(
-        checklistRunsToday
-          .filter(run => run.user_id === user.id && ['completed', 'done'].includes(run.status))
-          .map(run => `${run.user_id}:${run.template_id}`)
+        Array.from(latestChecklistRunByTemplate.keys())
+          .map(templateId => `${user.id}:${templateId}`)
           .filter(key => userChecklistTemplates.some(template => key === `${user.id}:${template.id}`))
       );
+      const checklistDetails = userChecklistTemplates.map(template => {
+        const run = latestChecklistRunByTemplate.get(template.id);
+        const items = db.checklist_items
+          .filter(item => item.template_id === template.id)
+          .sort((a, b) => a.sort_order - b.sort_order);
+        const answers = run ? db.checklist_answers.filter(answer => answer.run_id === run.id) : [];
+        return {
+          id: template.id,
+          title: template.title,
+          type: template.type,
+          status: run ? 'done' : 'not_done',
+          completed_at: run?.completed_at || run?.created_at || null,
+          done_items: run ? answers.filter(answer => answer.done).map(answer => {
+            const item = items.find(candidate => candidate.id === answer.item_id);
+            return { id: answer.item_id, text: item?.text || 'Пункт чек-листа', comment: answer.comment || '', photo_url: answer.photo_url || '' };
+          }) : [],
+          not_done_items: run ? answers.filter(answer => !answer.done).map(answer => {
+            const item = items.find(candidate => candidate.id === answer.item_id);
+            return { id: answer.item_id, text: item?.text || 'Пункт чек-листа', comment: answer.comment || '' };
+          }) : items.map(item => ({ id: item.id, text: item.text, required: item.required !== false }))
+        };
+      });
       const userTaskAssignments = taskAssignments.filter(assignment => assignment.user_id === user.id && activeTaskIds.has(assignment.task_id));
+      const userTaskDetails = userTaskAssignments.map(assignment => {
+        const task = taskById.get(assignment.task_id);
+        return {
+          id: task?.id || assignment.task_id,
+          title: task?.title || 'Задача',
+          description: task?.description || '',
+          due_at: task?.due_at || null,
+          created_at: task?.created_at || null,
+          done: Boolean(assignment.done),
+          completed_at: assignment.completed_at || null,
+          comment: assignment.comment || '',
+          overdue: !assignment.done && task?.due_at && new Date(task.due_at).getTime() < now
+        };
+      });
       const userInventoryTemplates = activeInventoryTemplates.filter(template => template.department === user.department);
+      const latestInventoryRunByTemplate = new Map();
+      inventoryRunsToday
+        .filter(run => run.user_id === user.id && run.status === 'completed')
+        .forEach(run => {
+          const current = latestInventoryRunByTemplate.get(run.template_id);
+          if (!current || String(run.created_at || '').localeCompare(String(current.created_at || '')) > 0) {
+            latestInventoryRunByTemplate.set(run.template_id, run);
+          }
+        });
       const userReadyInventoryTemplateIds = new Set(
-        inventoryRunsToday
-          .filter(run => run.user_id === user.id && run.status === 'completed')
-          .map(run => run.template_id)
+        Array.from(latestInventoryRunByTemplate.keys())
           .filter(templateId => userInventoryTemplates.some(template => template.id === templateId))
       );
+      const inventoryDetails = userInventoryTemplates.map(template => {
+        const run = latestInventoryRunByTemplate.get(template.id);
+        return {
+          id: template.id,
+          title: template.title,
+          department: template.department,
+          status: run ? 'ready' : 'not_ready',
+          completed_at: run?.completed_at || run?.created_at || null
+        };
+      });
       const userRequiredDocuments = requiredDocuments.filter(doc => hasRoleAccess(user, doc.allowed_roles));
-      const acknowledgedDocuments = userRequiredDocuments.filter(doc => db.knowledge_acknowledgements.some(a => (
-        a.document_id === doc.id && a.user_id === user.id && a.version === doc.version
-      )));
+      const documentDetails = userRequiredDocuments.map(doc => {
+        const acknowledgement = db.knowledge_acknowledgements.find(a => (
+          a.document_id === doc.id && a.user_id === user.id && a.version === doc.version
+        ));
+        return {
+          id: doc.id,
+          title: doc.title,
+          category_id: doc.category_id,
+          version: doc.version,
+          status: acknowledgement ? 'acknowledged' : 'pending',
+          acknowledged_at: acknowledgement?.acknowledged_at || null
+        };
+      });
+      const acknowledgedDocuments = documentDetails.filter(doc => doc.status === 'acknowledged');
+      const userRequests = productRequests.filter(request => request.created_by === user.id);
+      const requestDetails = userRequests
+        .slice()
+        .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+        .map(request => ({
+          id: request.id,
+          department: request.department,
+          status: request.status,
+          created_at: request.created_at,
+          updated_at: request.updated_at,
+          items_count: db.request_items.filter(item => item.request_id === request.id).length
+        }));
       return {
         user: publicUser(user),
         checklists: {
           done: userChecklistDoneKeys.size,
-          not_done: Math.max(0, userChecklistTemplates.length - userChecklistDoneKeys.size)
+          not_done: Math.max(0, userChecklistTemplates.length - userChecklistDoneKeys.size),
+          details: checklistDetails
         },
         requests: {
-          new: productRequests.filter(request => request.created_by === user.id && request.status === 'sent').length
+          new: productRequests.filter(request => request.created_by === user.id && request.status === 'sent').length,
+          details: requestDetails
         },
         tasks: {
           new: userTaskAssignments.filter(assignment => String(taskById.get(assignment.task_id)?.created_at || '').slice(0, 10) === today).length,
           done: userTaskAssignments.filter(assignment => assignment.done).length,
-          not_done: userTaskAssignments.filter(assignment => !assignment.done).length
+          not_done: userTaskAssignments.filter(assignment => !assignment.done).length,
+          details: userTaskDetails
         },
         documents: {
-          pending: Math.max(0, userRequiredDocuments.length - acknowledgedDocuments.length)
+          pending: Math.max(0, userRequiredDocuments.length - acknowledgedDocuments.length),
+          acknowledged: acknowledgedDocuments.length,
+          details: documentDetails
         },
         inventories: {
           ready: userReadyInventoryTemplateIds.size,
-          not_ready: Math.max(0, userInventoryTemplates.length - userReadyInventoryTemplateIds.size)
+          not_ready: Math.max(0, userInventoryTemplates.length - userReadyInventoryTemplateIds.size),
+          details: inventoryDetails
         }
       };
     })

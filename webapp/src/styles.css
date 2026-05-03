@@ -5933,3 +5933,351 @@ body {
     margin-left: 0;
   }
 }
+
+.employeeMetricsDetails.detailed {
+  padding: 12px 0 18px;
+}
+
+.employeeDetailsSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.employeeDetailsSummaryGrid > div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.32);
+}
+
+.employeeDetailsSummaryGrid span,
+.employeeDetailSectionHead span,
+.employeeDetailCard p,
+.employeeDetailEmpty,
+.employeeDetailHint {
+  color: var(--text-secondary);
+}
+
+.employeeDetailsSummaryGrid span {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.employeeDetailsSummaryGrid strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: 1.2rem;
+  line-height: 1;
+  font-weight: 900;
+}
+
+.employeeDetailColumns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.employeeDetailSection {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.24);
+}
+
+.employeeDetailSectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.employeeDetailSectionHead strong {
+  font-size: 0.88rem;
+  font-weight: 860;
+}
+
+.employeeDetailSectionHead span {
+  display: inline-flex;
+  min-width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.76rem;
+  font-weight: 900;
+}
+
+.employeeDetailSectionBody {
+  display: grid;
+  gap: 10px;
+}
+
+.employeeDetailCard {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.employeeDetailCard.compact {
+  gap: 5px;
+}
+
+.employeeDetailCardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.employeeDetailCardHead strong {
+  min-width: 0;
+  font-size: 0.84rem;
+  line-height: 1.25;
+}
+
+.employeeDetailCard p {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.employeeDetailBullets {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.employeeDetailBullets li {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  padding-left: 14px;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.employeeDetailBullets li::before {
+  content: '';
+  position: absolute;
+  left: 1px;
+  top: 0.55em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #f59e0b;
+}
+
+.employeeDetailBullets li.done::before {
+  background: #22c55e;
+}
+
+.employeeDetailBullets span {
+  color: var(--text-primary);
+}
+
+.employeeDetailBullets em {
+  color: var(--text-secondary);
+  font-style: normal;
+}
+
+.employeeDetailEmpty,
+.employeeDetailHint {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 980px) {
+  .employeeDetailsSummaryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .employeeDetailColumns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .employeeDetailsSummaryGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Booking mobile: clearer table number cards */
+.floorTableTile {
+  overflow: hidden;
+  min-height: 118px;
+  align-content: space-between;
+  padding: 14px;
+}
+
+.floorTableTileHead {
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.floorTableIdentity {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.floorTablePrefix {
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.floorTableNumber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.055));
+  color: var(--text);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), 0 12px 24px rgba(0, 0, 0, 0.22);
+  font-size: 2rem;
+  font-weight: 950;
+  line-height: 1;
+  letter-spacing: -0.06em;
+}
+
+.floorTableNumber.full {
+  width: auto;
+  min-width: 64px;
+  max-width: 132px;
+  padding: 0 14px;
+  font-size: 1.15rem;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.floorTableSeats {
+  color: var(--text-soft) !important;
+  font-size: 0.86rem !important;
+  font-weight: 800;
+}
+
+.floorTableTile.free {
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.075), rgba(255, 255, 255, 0.025));
+}
+
+.floorTableTile.reserved {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.085), rgba(255, 255, 255, 0.025));
+}
+
+.floorTableTile.occupied {
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.085), rgba(255, 255, 255, 0.025));
+}
+
+@media (max-width: 520px) {
+  .floorTableTile {
+    min-height: 112px;
+    padding: 12px;
+  }
+
+  .floorTableNumber {
+    width: 52px;
+    height: 52px;
+    border-radius: 16px;
+    font-size: 1.9rem;
+  }
+
+  .floorTableStatusBadge {
+    padding: 0 7px;
+    font-size: 0.68rem;
+  }
+}
+
+/* Booking table cards: number-first compact employee view */
+.floorTableTile::after {
+  content: none;
+  display: none;
+}
+
+.floorTableTile {
+  min-height: 92px;
+  padding: 14px;
+  align-content: space-between;
+}
+
+.floorTableTileHead {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.floorTableNumber {
+  display: block;
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text);
+  font-size: 3.35rem;
+  font-weight: 950;
+  line-height: 0.85;
+  letter-spacing: -0.08em;
+  white-space: nowrap;
+}
+
+.floorTableSeats {
+  color: var(--text-soft) !important;
+  font-size: 0.92rem !important;
+  font-weight: 850;
+}
+
+@media (max-width: 520px) {
+  .floorTableTile {
+    min-height: 88px;
+    padding: 12px;
+  }
+
+  .floorTableNumber {
+    width: auto;
+    min-width: 0;
+    height: auto;
+    border-radius: 0;
+    font-size: 3.05rem;
+  }
+}
+
+/* Booking table cards: final mobile number emphasis */
+.bookingMobileScreen .floorTableTileHead .floorTableNumber {
+  font-size: 5.9rem !important;
+  line-height: 0.78;
+  letter-spacing: -0.1em;
+}
+
+@media (max-width: 520px) {
+  .bookingMobileScreen .floorTableTileHead .floorTableNumber {
+    font-size: 5.4rem !important;
+  }
+}

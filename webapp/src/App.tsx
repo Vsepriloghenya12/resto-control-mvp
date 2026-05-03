@@ -34,6 +34,7 @@ import {
   executableRoles,
   inventorySections,
   problemTypeLabels,
+  requestStatuses,
   roles,
   seniorRoles,
   manageableRolesFor,
@@ -896,6 +897,115 @@ function AdminOverview({ mode = 'owner', onNavigate }: { mode?: 'owner' | 'manag
   </>;
 }
 
+function EmployeeDetailList({ title, count, empty, children }: { title: string; count?: number; empty: string; children: ReactNode }) {
+  return <section className="employeeDetailSection">
+    <div className="employeeDetailSectionHead"><strong>{title}</strong>{count !== undefined && <span>{count}</span>}</div>
+    {count === 0 ? <p className="employeeDetailEmpty">{empty}</p> : <div className="employeeDetailSectionBody">{children}</div>}
+  </section>;
+}
+
+function EmployeeDetailBullets({ items, done = false }: { items: any[]; done?: boolean }) {
+  const visibleItems = items.slice(0, 6);
+  return <ul className="employeeDetailBullets">
+    {visibleItems.map((item: any) => <li key={item.id || item.text} className={done ? 'done' : ''}>
+      <span>{item.text || item.title || 'Пункт'}</span>
+      {item.comment && <em>{item.comment}</em>}
+      {item.photo_url && <em>Фото приложено</em>}
+    </li>)}
+    {items.length > visibleItems.length && <li><span>Ещё {items.length - visibleItems.length}</span></li>}
+  </ul>;
+}
+
+function EmployeeMetricsExpanded({ row }: { row: any }) {
+  const checklistDetails = row.checklists?.details || [];
+  const doneChecklists = checklistDetails.filter((item: any) => item.status === 'done');
+  const notDoneChecklists = checklistDetails.filter((item: any) => item.status !== 'done');
+  const taskDetails = row.tasks?.details || [];
+  const openTasks = taskDetails.filter((task: any) => !task.done);
+  const doneTasks = taskDetails.filter((task: any) => task.done);
+  const documentDetails = row.documents?.details || [];
+  const pendingDocuments = documentDetails.filter((doc: any) => doc.status === 'pending');
+  const acknowledgedDocuments = documentDetails.filter((doc: any) => doc.status === 'acknowledged');
+  const inventoryDetails = row.inventories?.details || [];
+  const readyInventories = inventoryDetails.filter((item: any) => item.status === 'ready');
+  const notReadyInventories = inventoryDetails.filter((item: any) => item.status !== 'ready');
+  const requestDetails = row.requests?.details || [];
+  const openRequests = requestDetails.filter((request: any) => !['received', 'done', 'cancelled'].includes(request.status));
+
+  return <div className="employeeMetricsDetails detailed">
+    <div className="employeeDetailsSummaryGrid">
+      <div><span>Чек-листы выполнены</span><strong>{doneChecklists.length}</strong></div>
+      <div><span>Чек-листы не выполнены</span><strong>{notDoneChecklists.length}</strong></div>
+      <div><span>Документы ждут</span><strong>{pendingDocuments.length}</strong></div>
+      <div><span>Документы ознакомлены</span><strong>{acknowledgedDocuments.length}</strong></div>
+      <div><span>Открытые задачи</span><strong>{openTasks.length}</strong></div>
+    </div>
+
+    <div className="employeeDetailColumns">
+      <EmployeeDetailList title="Чек-листы: не выполнено" count={notDoneChecklists.length} empty="Нет невыполненных чек-листов">
+        {notDoneChecklists.map((checklist: any) => <article className="employeeDetailCard" key={checklist.id}>
+          <div className="employeeDetailCardHead"><strong>{checklist.title}</strong><span className="badge warning">не выполнено</span></div>
+          <p>{checklistTypes[checklist.type] || checklist.type || 'Чек-лист'} · {checklist.not_done_items?.length || 0} пунктов</p>
+          <EmployeeDetailBullets items={checklist.not_done_items || []} />
+        </article>)}
+      </EmployeeDetailList>
+
+      <EmployeeDetailList title="Чек-листы: выполнено" count={doneChecklists.length} empty="Выполненных чек-листов сегодня нет">
+        {doneChecklists.map((checklist: any) => <article className="employeeDetailCard" key={checklist.id}>
+          <div className="employeeDetailCardHead"><strong>{checklist.title}</strong><span className="badge active">выполнено</span></div>
+          <p>{checklist.completed_at ? `Завершён: ${fmtDate(checklist.completed_at)}` : checklistTypes[checklist.type] || 'Чек-лист'}</p>
+          {!!checklist.done_items?.length && <EmployeeDetailBullets items={checklist.done_items} done />}
+          {!!checklist.not_done_items?.length && <><p>Неотмеченные пункты:</p><EmployeeDetailBullets items={checklist.not_done_items} /></>}
+        </article>)}
+      </EmployeeDetailList>
+
+      <EmployeeDetailList title="Документы ждут ознакомления" count={pendingDocuments.length} empty="Нет документов, ожидающих ознакомления">
+        {pendingDocuments.map((doc: any) => <article className="employeeDetailCard compact" key={doc.id}>
+          <div className="employeeDetailCardHead"><strong>{doc.title}</strong><span className="badge warning">ждёт</span></div>
+          <p>Версия {doc.version || 1}</p>
+        </article>)}
+      </EmployeeDetailList>
+
+      <EmployeeDetailList title="Документы ознакомлены" count={acknowledgedDocuments.length} empty="Ознакомленных документов пока нет">
+        {acknowledgedDocuments.map((doc: any) => <article className="employeeDetailCard compact" key={doc.id}>
+          <div className="employeeDetailCardHead"><strong>{doc.title}</strong><span className="badge active">ознакомлен</span></div>
+          <p>{doc.acknowledged_at ? fmtDate(doc.acknowledged_at) : `Версия ${doc.version || 1}`}</p>
+        </article>)}
+      </EmployeeDetailList>
+
+      <EmployeeDetailList title="Задачи" count={taskDetails.length} empty="Задач для сотрудника нет">
+        {openTasks.map((task: any) => <article className="employeeDetailCard" key={task.id}>
+          <div className="employeeDetailCardHead"><strong>{task.title}</strong><span className={cx('badge', task.overdue ? 'cancelled' : 'warning')}>{task.overdue ? 'просрочено' : 'в работе'}</span></div>
+          <p>{task.description || 'Без описания'}{task.due_at ? ` · срок: ${fmtDate(task.due_at)}` : ''}</p>
+        </article>)}
+        {doneTasks.map((task: any) => <article className="employeeDetailCard compact" key={task.id}>
+          <div className="employeeDetailCardHead"><strong>{task.title}</strong><span className="badge active">выполнено</span></div>
+          <p>{task.completed_at ? fmtDate(task.completed_at) : task.comment || 'Задача закрыта'}</p>
+        </article>)}
+      </EmployeeDetailList>
+
+      <EmployeeDetailList title="Инвентаризации" count={inventoryDetails.length} empty="Инвентаризаций для подразделения нет">
+        {notReadyInventories.map((item: any) => <article className="employeeDetailCard compact" key={item.id}>
+          <div className="employeeDetailCardHead"><strong>{item.title}</strong><span className="badge warning">не готово</span></div>
+          <p>{departments[item.department] || item.department || 'Подразделение'}</p>
+        </article>)}
+        {readyInventories.map((item: any) => <article className="employeeDetailCard compact" key={item.id}>
+          <div className="employeeDetailCardHead"><strong>{item.title}</strong><span className="badge active">готово</span></div>
+          <p>{item.completed_at ? fmtDate(item.completed_at) : departments[item.department] || item.department || 'Подразделение'}</p>
+        </article>)}
+      </EmployeeDetailList>
+
+      <EmployeeDetailList title="Заявки сотрудника" count={requestDetails.length} empty="Сотрудник ещё не создавал заявки">
+        {requestDetails.slice(0, 8).map((request: any) => <article className="employeeDetailCard compact" key={request.id}>
+          <div className="employeeDetailCardHead"><strong>{departments[request.department] || request.department || 'Заявка'}</strong><span className={cx('badge', request.status)}>{requestStatuses[request.status] || request.status}</span></div>
+          <p>{request.items_count || 0} позиций · {fmtDate(request.created_at)}</p>
+        </article>)}
+        {openRequests.length > 0 && <p className="employeeDetailHint">Открытых заявок: {openRequests.length}</p>}
+      </EmployeeDetailList>
+    </div>
+  </div>;
+}
+
 function OverviewEmployeeMetrics({ rows }: { rows: any[] }) {
   const [expandedEmployeeId, setExpandedEmployeeId] = useState('');
   const metricNumber = (value: any, tone: 'done' | 'todo' | 'neutral' = 'neutral') => {
@@ -943,15 +1053,7 @@ function OverviewEmployeeMetrics({ rows }: { rows: any[] }) {
             <span className="employeeMetricValue" data-label="Док">{metricNumber(row.documents?.pending, 'todo')}</span>
             <span className="employeeMetricValue" data-label="Инв">{metricPair(row.inventories?.ready, row.inventories?.not_ready)}</span>
           </button>
-          {expanded && <div className="employeeMetricsDetails">
-            <div className="employeeDetailsGrid">
-              <div><span>Чек-листы</span><strong>{metricPair(row.checklists?.done, row.checklists?.not_done)}</strong><em>выполнено / не выполнено</em></div>
-              <div><span>Заявки</span><strong>{metricNumber(row.requests?.new, 'todo')}</strong><em>новые заявки</em></div>
-              <div><span>Задачи</span><strong>{taskNumbers(row.tasks)}</strong><em>новые / выполнено / не выполнено</em></div>
-              <div><span>Документы</span><strong>{metricNumber(row.documents?.pending, 'todo')}</strong><em>ждут ознакомления</em></div>
-              <div><span>Инвентаризации</span><strong>{metricPair(row.inventories?.ready, row.inventories?.not_ready)}</strong><em>готово / не готово</em></div>
-            </div>
-          </div>}
+          {expanded && <EmployeeMetricsExpanded row={row} />}
         </div>;
       })}
     </div>
@@ -1045,6 +1147,7 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
   const [tab, setTab] = useState<Tab>('today');
   const [notificationCount, setNotificationCount] = useState(0);
   const [openTechComposer, setOpenTechComposer] = useState(false);
+  const [openRequestComposer, setOpenRequestComposer] = useState(false);
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
   const isSenior = seniorRoles.includes(user.role);
   const tabs = withIcons([
@@ -1087,11 +1190,11 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
   ];
 
   const mobileCreateItems: MobileActionItem[] = [
-    { id: 'booking', title: 'Открыть брони', subtitle: 'Зал, посадка гостей и новая бронь', icon: 'bookings', onClick: () => setTab('bookings') },
-    { id: 'request', title: 'Открыть заявки', subtitle: 'Создать заявку по товарам отдела', icon: 'requests', onClick: () => setTab('requests') },
-    { id: 'inventory', title: 'Инвентаризация', subtitle: 'Заполнить фактические остатки', icon: 'inventory', onClick: () => setTab('inventory') },
-    ...(isSenior ? [{ id: 'department-task', title: 'Задача подразделению', subtitle: 'Поставить задачу своей команде', icon: 'tasks' as IconName, onClick: () => setTab('admin-tasks') }] : []),
-    { id: 'tech', title: 'Сообщить о проблеме', subtitle: 'Техзаявка для менеджера', icon: 'tasks', onClick: () => {
+    { id: 'request', title: 'Создать заявку', subtitle: 'Заявка по товарам отдела', icon: 'requests', onClick: () => {
+      setTab('requests');
+      setOpenRequestComposer(true);
+    } },
+    { id: 'tech', title: 'Создать техзаявку', subtitle: 'Проблема для менеджера', icon: 'support', onClick: () => {
       setTab('tasks');
       setOpenTechComposer(true);
     } }
@@ -1125,11 +1228,10 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     }}
   >
     <OfflineSyncBanner />
-    <div className="hello"><b>{user.name}</b><span>{roles[user.role]} · {restaurant?.name}</span></div>
-    {tab === 'today' && <Today user={user} onOpenTasks={() => setTab('tasks')} onOpenChecklists={() => setTab('checklists')} onOpenBookings={() => setTab('bookings')} onOpenRequests={() => setTab('requests')} onOpenInventory={() => setTab('inventory')} />}
+    {tab === 'today' && <Today user={user} onOpenTasks={() => setTab('tasks')} onOpenChecklists={() => setTab('checklists')} onOpenBookings={() => setTab('bookings')} onOpenInventory={() => setTab('inventory')} />}
     {tab === 'checklists' && <Checklists user={user} />}
     {tab === 'bookings' && <Bookings user={user} />}
-    {tab === 'requests' && <Requests user={user} />}
+    {tab === 'requests' && <Requests user={user} openComposer={openRequestComposer} onCloseComposer={() => setOpenRequestComposer(false)} />}
     {tab === 'inventory' && <Inventory user={user} />}
     {tab === 'tasks' && <Tasks user={user} showTechComposer={openTechComposer} onCloseComposer={() => setOpenTechComposer(false)} />}
     {tab === 'admin-checklists' && <Checklists user={user} admin />}
@@ -1144,14 +1246,12 @@ function Today({
   onOpenTasks,
   onOpenChecklists,
   onOpenBookings,
-  onOpenRequests,
   onOpenInventory
 }: {
   user: any;
   onOpenTasks: () => void;
   onOpenChecklists: () => void;
   onOpenBookings: () => void;
-  onOpenRequests: () => void;
   onOpenInventory: () => void;
 }) {
   const [overview, setOverview] = useState<any | null>(null);
@@ -1163,15 +1263,13 @@ function Today({
       api('/api/checklists/templates').catch(() => []),
       api('/api/bookings').catch(() => []),
       api('/api/tasks').catch(() => []),
-      api('/api/requests').catch(() => []),
       api('/api/inventory/templates').catch(() => [])
-    ]).then(([checklists, bookings, tasks, requests, templates]) => {
+    ]).then(([checklists, bookings, tasks, templates]) => {
       if (!active) return;
       setOverview({
         checklists,
         bookings,
         tasks,
-        requests,
         templates
       });
     });
@@ -1195,7 +1293,6 @@ function Today({
   const openTasks = overview.tasks.filter((task: any) => !task.assignment?.done);
   const completedTasks = overview.tasks.filter((task: any) => task.assignment?.done);
   const activeBookings = overview.bookings.filter((booking: any) => ['booked', 'seated'].includes(booking.status));
-  const openRequests = overview.requests.filter((request: any) => !['received', 'done', 'cancelled'].includes(request.status));
   const inventoryItems = overview.templates.reduce((total: number, template: any) => total + (template.items?.length || 0), 0);
 
   return <div className="mobileSectionStack">
@@ -1225,14 +1322,6 @@ function Today({
           <span>{activeBookings.length} активных</span>
         </div>
         <b>{activeBookings.length}</b>
-      </button>
-      <button type="button" className="mobileOverviewRow" onClick={onOpenRequests}>
-        <div className="mobileOverviewIcon amber"><AppIcon name="requests" className="navIcon" /></div>
-        <div className="mobileOverviewCopy">
-          <strong>Заявки</strong>
-          <span>{openRequests.length} открыто</span>
-        </div>
-        <b>{openRequests.length}</b>
       </button>
       <button type="button" className="mobileOverviewRow" onClick={onOpenInventory}>
         <div className="mobileOverviewIcon purple"><AppIcon name="inventory" className="navIcon" /></div>
