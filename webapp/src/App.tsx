@@ -1461,6 +1461,20 @@ function Checklists({ user, admin = false }: any) {
     });
   }
 
+  async function deleteTemplate(template: any) {
+    const title = String(template?.title || 'чек-лист').trim();
+    if (!window.confirm(`Удалить чек-лист «${title}»? Выполненные отчёты останутся в истории.`)) return;
+    setEditorMsg('');
+    try {
+      await api(`/api/admin/checklists/templates/${template.id}`, { method: 'DELETE' });
+      if (editingTemplateId === template.id) resetTemplateEditor();
+      setEditorMsg('Чек-лист удалён');
+      load();
+    } catch (error: any) {
+      setEditorMsg(error.message);
+    }
+  }
+
   async function saveTemplate(e: FormEvent) {
     e.preventDefault();
     setEditorMsg('');
@@ -1710,6 +1724,10 @@ function Checklists({ user, admin = false }: any) {
               </div>}
               <div className="checklistTemplateCardFoot">{isEditing ? 'Редактирование открыто' : 'Редактировать'}</div>
             </button>
+            <div className="checklistTemplateActions">
+              {!isEditing && <Button kind="soft" type="button" onClick={() => startTemplateEdit(template)}>Редактировать</Button>}
+              <Button kind="danger" type="button" onClick={() => deleteTemplate(template)}>Удалить</Button>
+            </div>
             {isEditing && <div className="inlineChecklistEditor">
               {renderTemplateEditorForm()}
             </div>}

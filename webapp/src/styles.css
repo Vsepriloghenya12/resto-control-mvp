@@ -6425,6 +6425,18 @@ body {
   cursor: pointer;
 }
 
+.checklistTemplateActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.checklistTemplateActions .btn {
+  min-height: 38px;
+  padding-inline: 12px;
+}
+
 .inlineChecklistEditor {
   margin-top: 6px;
   padding-top: 12px;

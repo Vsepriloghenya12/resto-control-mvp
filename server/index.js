@@ -1617,6 +1617,19 @@ app.patch('/api/admin/checklists/templates/:id', auth, ensureRestaurantActive, o
   });
 }));
 
+app.delete('/api/admin/checklists/templates/:id', auth, ensureRestaurantActive, operationalEditorOnly, runAsync(async (req, res) => {
+  const rid = req.user.restaurant_id;
+  const template = db.checklist_templates.find(t => t.id === req.params.id && t.restaurant_id === rid && t.active);
+  if (!template) return res.status(404).json({ error: 'Чек-лист не найден' });
+  if (!canManageRole(req.user, template.role)) {
+    return res.status(403).json({ error: 'Можно удалять чек-листы только своего подразделения' });
+  }
+
+  template.active = false;
+  await persist();
+  res.json({ ok: true });
+}));
+
 app.post('/api/checklists/runs', auth, ensureRestaurantActive, runAsync(async (req, res) => {
   const rid = req.user.restaurant_id;
   const { template_id, answers, comment } = req.body;
