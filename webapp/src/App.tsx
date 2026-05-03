@@ -1449,6 +1449,18 @@ function Checklists({ user, admin = false }: any) {
     });
   }
 
+  function startTemplateCreate() {
+    setEditorMsg('');
+    setEditingTemplateId(null);
+    setTemplateEditorOpen(true);
+    setTemplateForm({
+      title: '',
+      role: defaultTemplateRole,
+      type: 'open',
+      items: [{ id: '', text: '', required: true, needs_photo: false, needs_comment: false }]
+    });
+  }
+
   async function saveTemplate(e: FormEvent) {
     e.preventDefault();
     setEditorMsg('');
@@ -1527,6 +1539,48 @@ function Checklists({ user, admin = false }: any) {
     }
     if (item.needs_photo) { setCameraTarget({ itemId: item.id, title: item.text }); return; }
     updateAnswer(item.id, { done: true });
+  }
+
+  function renderTemplateEditorForm() {
+    return <>
+      <form className="form" onSubmit={saveTemplate}>
+        <div className="form two">
+          <Field label="Название чек-листа" value={templateForm.title} onChange={(e: any) => setTemplateForm({ ...templateForm, title: e.target.value })} placeholder="Например: Проверка открытия зала" />
+          <Select label="Для роли" value={templateForm.role} onChange={(e: any) => setTemplateForm({ ...templateForm, role: e.target.value })}>
+            {editorRoleOptions.map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+          </Select>
+          <Select label="Тип" value={templateForm.type} onChange={(e: any) => setTemplateForm({ ...templateForm, type: e.target.value })}>
+            {Object.entries(checklistTypes).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+          </Select>
+        </div>
+
+        <div className="editorItems">
+          {templateForm.items.map((item: any, index: number) => <div className="editorItemRow smartChecklistEditorRow" key={item.id || `new-${index}`}>
+            <div className="checklistItemOrderControls">
+              <button type="button" className="iconBtn" onClick={() => moveTemplateItem(index, -1)} disabled={index === 0} aria-label="Поднять пункт выше">↑</button>
+              <span>{index + 1}</span>
+              <button type="button" className="iconBtn" onClick={() => moveTemplateItem(index, 1)} disabled={index === templateForm.items.length - 1} aria-label="Опустить пункт ниже">↓</button>
+            </div>
+            <div className="checklistItemEditorBody">
+              <input value={item.text} onChange={(e) => updateTemplateItem(index, e.target.value)} placeholder={`Пункт ${index + 1}`} />
+              <div className="smartChecklistFlags">
+                <label><input type="checkbox" checked={item.required !== false} onChange={(e) => updateTemplateItemFlag(index, 'required', e.target.checked)} />Обяз.</label>
+                <label><input type="checkbox" checked={!!item.needs_photo} onChange={(e) => updateTemplateItemFlag(index, 'needs_photo', e.target.checked)} />Фото</label>
+                <label><input type="checkbox" checked={!!item.needs_comment} onChange={(e) => updateTemplateItemFlag(index, 'needs_comment', e.target.checked)} />Коммент.</label>
+              </div>
+            </div>
+            <button type="button" className="iconBtn checklistItemRemove" onClick={() => removeTemplateItem(index)} aria-label="Удалить пункт">×</button>
+          </div>)}
+        </div>
+
+        <div className="actions">
+          <Button kind="soft" type="button" onClick={addTemplateItem}>Добавить пункт</Button>
+          {(editingTemplateId || isTemplateEditorOpen) && <Button kind="soft" type="button" onClick={resetTemplateEditor}>Отмена</Button>}
+          <Button>{editingTemplateId ? 'Сохранить изменения' : 'Создать чек-лист'}</Button>
+        </div>
+      </form>
+      {editorMsg && <div className={editorMsg.includes('обновл') || editorMsg.includes('создан') ? 'notice' : 'error'}>{editorMsg}</div>}
+    </>;
   }
 
   if (!admin) {
@@ -1626,75 +1680,46 @@ function Checklists({ user, admin = false }: any) {
   }
 
   return <>
-    {admin && <Card title="Все чек-листы" right={<span className="badge active">{adminTemplates.length} шаблонов</span>}>
+    {admin && <Card
+      title="Все чек-листы"
+      right={<div className="actions compact"><span className="badge active">{adminTemplates.length} шаблонов</span><Button kind="soft" type="button" onClick={startTemplateCreate}>Создать чек-лист</Button></div>}
+    >
       {adminTemplates.length === 0 && <Empty text="Пока нет созданных чек-листов" />}
       {adminTemplates.length > 0 && <div className="adminChecklistTemplateList">
-        {adminTemplates.map((template) => <button
-          key={template.id}
-          type="button"
-          className={cx('checklistTemplateCard', editingTemplateId === template.id && 'active')}
-          onClick={() => startTemplateEdit(template)}
-        >
-          <div className="checklistTemplateCardHead">
-            <div>
-              <strong>{template.title}</strong>
-              <span>{roles[template.role] || template.role} · {checklistTypes[template.type] || template.type}</span>
-            </div>
-            <em>{template.items?.length || 0} пунктов</em>
-          </div>
-          <div className="checklistTemplatePreview">
-            {(template.items || []).slice(0, 4).map((item: any, index: number) => <span key={item.id || index}>{index + 1}. {item.text}</span>)}
-            {(template.items || []).length > 4 && <span>+ ещё {(template.items || []).length - 4}</span>}
-          </div>
-          <div className="checklistTemplateCardFoot">Открыть для редактирования</div>
-        </button>)}
+        {adminTemplates.map((template) => {
+          const isEditing = editingTemplateId === template.id && isTemplateEditorOpen;
+          return <article
+            key={template.id}
+            className={cx('checklistTemplateCard', isEditing && 'active editing')}
+          >
+            <button
+              type="button"
+              className="checklistTemplateCardSummary"
+              onClick={() => startTemplateEdit(template)}
+            >
+              <div className="checklistTemplateCardHead">
+                <div>
+                  <strong>{template.title}</strong>
+                  <span>{roles[template.role] || template.role} · {checklistTypes[template.type] || template.type}</span>
+                </div>
+                <em>{template.items?.length || 0} пунктов</em>
+              </div>
+              {!isEditing && <div className="checklistTemplatePreview">
+                {(template.items || []).slice(0, 4).map((item: any, index: number) => <span key={item.id || index}>{index + 1}. {item.text}</span>)}
+                {(template.items || []).length > 4 && <span>+ ещё {(template.items || []).length - 4}</span>}
+              </div>}
+              <div className="checklistTemplateCardFoot">{isEditing ? 'Редактирование открыто' : 'Редактировать'}</div>
+            </button>
+            {isEditing && <div className="inlineChecklistEditor">
+              {renderTemplateEditorForm()}
+            </div>}
+          </article>;
+        })}
       </div>}
     </Card>}
 
-    {admin && <Card title="Редактор чек-листов" right={<Button kind="soft" type="button" onClick={() => setTemplateEditorOpen((open) => !open)}>{isTemplateEditorOpen ? 'Свернуть' : 'Развернуть'}</Button>}>
-      {!isTemplateEditorOpen && <div className="adminChecklistEditorIntro">
-        <b>{editingTemplateId ? 'Редактирование подготовлено' : 'Редактор свернут'}</b>
-        <span>{editingTemplateId ? 'Разверните форму, чтобы продолжить изменение шаблона.' : 'Разверните форму, чтобы создать новый чек-лист.'}</span>
-      </div>}
-      {isTemplateEditorOpen && <>
-        <form className="form" onSubmit={saveTemplate}>
-          <div className="form two">
-            <Field label="Название чек-листа" value={templateForm.title} onChange={(e: any) => setTemplateForm({ ...templateForm, title: e.target.value })} placeholder="Например: Проверка открытия зала" />
-            <Select label="Для роли" value={templateForm.role} onChange={(e: any) => setTemplateForm({ ...templateForm, role: e.target.value })}>
-              {editorRoleOptions.map(([key, value]) => <option key={key} value={key}>{value}</option>)}
-            </Select>
-            <Select label="Тип" value={templateForm.type} onChange={(e: any) => setTemplateForm({ ...templateForm, type: e.target.value })}>
-              {Object.entries(checklistTypes).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
-            </Select>
-          </div>
-
-          <div className="editorItems">
-            {templateForm.items.map((item: any, index: number) => <div className="editorItemRow smartChecklistEditorRow" key={item.id || `new-${index}`}>
-              <div className="checklistItemOrderControls">
-                <button type="button" className="iconBtn" onClick={() => moveTemplateItem(index, -1)} disabled={index === 0} aria-label="Поднять пункт выше">↑</button>
-                <span>{index + 1}</span>
-                <button type="button" className="iconBtn" onClick={() => moveTemplateItem(index, 1)} disabled={index === templateForm.items.length - 1} aria-label="Опустить пункт ниже">↓</button>
-              </div>
-              <div className="checklistItemEditorBody">
-                <input value={item.text} onChange={(e) => updateTemplateItem(index, e.target.value)} placeholder={`Пункт ${index + 1}`} />
-                <div className="smartChecklistFlags">
-                  <label><input type="checkbox" checked={item.required !== false} onChange={(e) => updateTemplateItemFlag(index, 'required', e.target.checked)} />Обяз.</label>
-                  <label><input type="checkbox" checked={!!item.needs_photo} onChange={(e) => updateTemplateItemFlag(index, 'needs_photo', e.target.checked)} />Фото</label>
-                  <label><input type="checkbox" checked={!!item.needs_comment} onChange={(e) => updateTemplateItemFlag(index, 'needs_comment', e.target.checked)} />Коммент.</label>
-                </div>
-              </div>
-              <button type="button" className="iconBtn checklistItemRemove" onClick={() => removeTemplateItem(index)} aria-label="Удалить пункт">×</button>
-            </div>)}
-          </div>
-
-          <div className="actions">
-            <Button kind="soft" type="button" onClick={addTemplateItem}>Добавить пункт</Button>
-            {editingTemplateId && <Button kind="soft" type="button" onClick={resetTemplateEditor}>Отмена</Button>}
-            <Button>{editingTemplateId ? 'Сохранить изменения' : 'Создать чек-лист'}</Button>
-          </div>
-        </form>
-        {editorMsg && <div className={editorMsg.includes('обновл') || editorMsg.includes('создан') ? 'notice' : 'error'}>{editorMsg}</div>}
-      </>}
+    {admin && !editingTemplateId && isTemplateEditorOpen && <Card title="Новый чек-лист">
+      {renderTemplateEditorForm()}
     </Card>}
 
     {cameraTarget && <CameraCapture

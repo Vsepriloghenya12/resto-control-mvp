@@ -6407,3 +6407,36 @@ body {
     justify-content: flex-start;
   }
 }
+
+/* Admin checklists: inline expandable editor */
+.checklistTemplateCard {
+  cursor: default;
+}
+
+.checklistTemplateCardSummary {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.inlineChecklistEditor {
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.checklistTemplateCard.editing .checklistTemplatePreview {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .inlineChecklistEditor .form.two {
+    grid-template-columns: 1fr;
+  }
+}
