@@ -2200,13 +2200,13 @@ function KnowledgeDocumentBody({ doc }: { doc: any }) {
 
 
 function KnowledgeDocumentModal({ doc, onClose, onAck }: { doc: any; onClose: () => void; onAck: (doc: any) => void }) {
-  const isPlainText = doc?.type === 'text';
+  const rawContent = String(doc?.content || '').trim();
+  const isPlainText = doc?.type === 'text' || (!!rawContent && !doc?.file_url && doc?.type !== 'ttk');
+
   if (isPlainText) {
     return <div className="plainTextDocOverlay" onClick={onClose}>
       <button className="plainTextDocClose" onClick={onClose} aria-label="Закрыть документ">×</button>
-      <div className="plainTextDocumentText" onClick={(e) => e.stopPropagation()}>
-        <KnowledgeDocumentBody doc={doc} />
-      </div>
+      <pre className="plainTextDocumentOnly" onClick={(e) => e.stopPropagation()}>{rawContent || 'Текст документа не заполнен'}</pre>
       {doc.requires_acknowledgement && !doc.acknowledged && <button className="plainTextAckButton" type="button" onClick={(e) => { e.stopPropagation(); onAck(doc); }}>Ознакомился</button>}
     </div>;
   }
