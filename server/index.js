@@ -778,6 +778,16 @@ function normalizeTtkIngredientName(value) {
     .trim();
 }
 
+function isTtkIngredientNameNoise(value) {
+  const text = cleanTtkText(value).toLowerCase();
+  if (!text) return true;
+  if (/^(№|no|nº)\b/.test(text)) return true;
+  if (/(^|\s)(наименование продукта|ед\.?\s*изм|технология приготовления|брутто в ед|вес брутто|вес нетто|вес готового)(\s|$)/i.test(text)) return true;
+  if (/^(название на чеке|область применения|хранение|срок хранения|органолептические показатели|технологическая карта|требования к оформлению|реализации|итого|вес готового блюда)/i.test(text)) return true;
+  if (/^(брутто|вес|единица|количество)$/i.test(text)) return true;
+  return false;
+}
+
 function lineLooksLikeTtkName(line) {
   const text = normalizeTtkIngredientName(line);
   if (!text || /^\d+[,.]?\d*\s*(?:кг|г|л|мл|шт|порц)?$/i.test(text)) return false;
@@ -849,6 +859,8 @@ function addTtkIngredient(ingredients, name, unit, amounts) {
   const rawQty = amounts[amounts.length - 1];
   const qty = parseTtkNumber(rawQty);
   if (!cleanName || !cleanUnit || qty === null) return;
+  if (isTtkIngredientNameNoise(cleanName)) return;
+  if (!/[а-яёa-z0-9"«»]/i.test(cleanName)) return;
   const key = `${cleanName.toLowerCase()}::${cleanUnit.toLowerCase()}::${qty}`;
   if (!ingredients.some(item => `${item.name.toLowerCase()}::${item.unit.toLowerCase()}::${item.qty}` === key)) {
     ingredients.push({ name: cleanName, unit: cleanUnit, qty, display_qty: String(rawQty || qty).replace('.', ',') });
@@ -976,7 +988,12 @@ function parseTtkBlock(block) {
     }
   }
 
-  return { number, date, title, ingredients };
+  return {
+    number,
+    date,
+    title,
+    ingredients: ingredients.filter(item => item?.name && !isTtkIngredientNameNoise(item.name))
+  };
 }
 
 async function parseTtkPdfBuffer(buffer) {
@@ -1003,12 +1020,30 @@ function buildTtkContent(card) {
   if (card.title) lines.push(`Блюдо/напиток: ${card.title}`);
   lines.push('');
   lines.push('Состав:');
-  if (card.ingredients.length) {
-    card.ingredients.forEach(item => lines.push(`- ${item.name}: ${item.display_qty || item.qty} ${item.unit}`));
+  const cleanIngredients = Array.isArray(card.ingredients)
+    ? card.ingredients.filter(item => item?.name && !isTtkIngredientNameNoise(item.name))
+    : [];
+  if (cleanIngredients.length) {
+    cleanIngredients.forEach(item => lines.push(`- ${item.name}: ${item.display_qty || item.qty} ${item.unit}`));
   } else {
     lines.push('- Состав не удалось извлечь автоматически. Проверьте PDF и заполните вручную.');
   }
   return lines.join('\n');
+}
+
+function sanitizeTtkDocumentForResponse(doc) {
+  if (!doc || doc.type !== 'ttk') return doc;
+  const cleanIngredients = Array.isArray(doc.ingredients)
+    ? doc.ingredients.filter(item => item?.name && !isTtkIngredientNameNoise(item.name))
+    : [];
+  const cleanContent = String(doc.content || '')
+    .split('\n')
+    .filter(line => {
+      const text = cleanTtkText(line.replace(/^[-–—]\s*/, '').split(':')[0]);
+      return !isTtkIngredientNameNoise(text);
+    })
+    .join('\n');
+  return { ...doc, ingredients: cleanIngredients, content: cleanContent };
 }
 function makeAssignmentsForTask(task) {
   const creator = db.users.find(user => user.id === task.created_by && user.restaurant_id === task.restaurant_id);
@@ -2378,7 +2413,7 @@ app.get('/api/knowledge', auth, ensureRestaurantActive, (req, res) => {
   const rid = req.user.restaurant_id;
   const docs = sameRestaurant(db.knowledge_documents, rid).filter(d => d.is_active && hasRoleAccess(req.user, d.allowed_roles));
   const cats = sameRestaurant(db.knowledge_categories, rid).filter(c => hasRoleAccess(req.user, c.allowed_roles));
-  res.json(cats.map(c => ({ ...c, documents: docs.filter(d => d.category_id === c.id).map(d => ({ ...d, acknowledged: db.knowledge_acknowledgements.some(a => a.document_id === d.id && a.user_id === req.user.id && a.version === d.version) })) })));
+  res.json(cats.map(c => ({ ...c, documents: docs.filter(d => d.category_id === c.id).map(d => sanitizeTtkDocumentForResponse({ ...d, acknowledged: db.knowledge_acknowledgements.some(a => a.document_id === d.id && a.user_id === req.user.id && a.version === d.version) })) })));
 });
 
 app.post('/api/admin/knowledge/categories', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {

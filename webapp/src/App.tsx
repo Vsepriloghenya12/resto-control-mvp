@@ -2199,6 +2199,34 @@ function KnowledgeDocumentBody({ doc }: { doc: any }) {
   </>;
 }
 
+
+function KnowledgeDocumentModal({ doc, onClose, onAck }: { doc: any; onClose: () => void; onAck: (doc: any) => void }) {
+  const isPlainText = doc?.type === 'text';
+  if (isPlainText) {
+    return <div className="modal plainTextDocOverlay" onClick={onClose}>
+      <div className="plainTextDocReader" onClick={(e) => e.stopPropagation()}>
+        <div className="plainTextDocHeader">
+          <h2>{doc.title}</h2>
+          <button className="iconBtn" onClick={onClose}>×</button>
+        </div>
+        <KnowledgeDocumentBody doc={doc} />
+        {doc.requires_acknowledgement && !doc.acknowledged && <Button onClick={() => onAck(doc)}>Ознакомился</Button>}
+      </div>
+    </div>;
+  }
+
+  return <div className="modal" onClick={onClose}>
+    <div className="modalCard mobileDocModal" onClick={(e) => e.stopPropagation()}>
+      <div className="rowBetween">
+        <h2>{doc.title}</h2>
+        <button className="iconBtn" onClick={onClose}>×</button>
+      </div>
+      <KnowledgeDocumentBody doc={doc} />
+      {doc.requires_acknowledgement && !doc.acknowledged && <Button onClick={() => onAck(doc)}>Ознакомился</Button>}
+    </div>
+  </div>;
+}
+
 function Knowledge({ user, admin = false }: any) {
   const emptyDocForm = { category_id: '', title: '', type: 'text', content: '', file: null, photo: null, allowed_roles: [], requires_acknowledgement: true };
   const [categories, setCategories] = useState<any[]>([]);
@@ -2422,16 +2450,7 @@ function Knowledge({ user, admin = false }: any) {
         </div>}
       </div>
 
-      {openDoc && <div className="modal" onClick={() => setOpenDoc(null)}>
-        <div className={cx("modalCard mobileDocModal", openDoc?.type === "text" && "mobilePlainTextDocModal")} onClick={(e) => e.stopPropagation()}>
-          <div className="rowBetween">
-            <h2>{openDoc.title}</h2>
-            <button className="iconBtn" onClick={() => setOpenDoc(null)}>×</button>
-          </div>
-          <KnowledgeDocumentBody doc={openDoc} />
-          {openDoc.requires_acknowledgement && !openDoc.acknowledged && <Button onClick={() => ack(openDoc)}>Ознакомился</Button>}
-        </div>
-      </div>}
+      {openDoc && <KnowledgeDocumentModal doc={openDoc} onClose={() => setOpenDoc(null)} onAck={ack} />}
     </>;
   }
 
@@ -2537,7 +2556,7 @@ function Knowledge({ user, admin = false }: any) {
       </div>)}</div>
     </Card>
 
-    {openDoc && <div className="modal" onClick={() => setOpenDoc(null)}><div className={cx("modalCard", openDoc?.type === "text" && "plainTextDocModal")} onClick={(e) => e.stopPropagation()}><div className="rowBetween"><h2>{openDoc.title}</h2><button className="iconBtn" onClick={() => setOpenDoc(null)}>×</button></div><KnowledgeDocumentBody doc={openDoc} />{openDoc.requires_acknowledgement && !openDoc.acknowledged && <Button onClick={() => ack(openDoc)}>Ознакомился</Button>}</div></div>}
+    {openDoc && <KnowledgeDocumentModal doc={openDoc} onClose={() => setOpenDoc(null)} onAck={ack} />}
     <Card title="Статистика ознакомления"><div className="list">{stats.map(s => <div className="listRow" key={s.id}><div><b>{s.title}</b><span>Просмотры: {s.views}</span></div><span className="badge active">Ознакомились: {s.acknowledgements}</span></div>)}</div></Card>
   </>;
 }
