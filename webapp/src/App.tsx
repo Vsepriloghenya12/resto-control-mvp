@@ -2164,7 +2164,9 @@ function Inventory({ user, admin = false }: any) {
 function KnowledgeDocumentBody({ doc }: { doc: any }) {
   const ingredients = Array.isArray(doc?.ingredients) ? doc.ingredients : [];
   const contentLines = String(doc?.content || '').split('\n').map(line => line.trim()).filter(Boolean);
-  const ttkMeta = contentLines.filter(line => !line.startsWith('-') && !['Состав:'].includes(line));
+  const titleFromContent = contentLines.find(line => /^Блюдо\/напиток:/i.test(line))?.replace(/^Блюдо\/напиток:\s*/i, '').trim();
+  const ttkDisplayTitle = (titleFromContent || doc?.title || '').replace(/(\d+)\s+(мл|л|г|кг|шт|порц)\b/gi, '$1$2');
+  const ttkMeta = contentLines.filter(line => !line.startsWith('-') && !['Состав:'].includes(line) && !/^Блюдо\/напиток:/i.test(line));
   const isTtk = doc?.type === 'ttk';
 
   if (isTtk) {
@@ -2172,8 +2174,8 @@ function KnowledgeDocumentBody({ doc }: { doc: any }) {
       {doc?.photo_url && <img className="knowledgeDocPhoto ttkHeroPhoto" src={doc.photo_url} alt={doc.title || 'Фото'} />}
       <div className="ttkRecipeHeader">
         <span className="badge active">ТТК</span>
-        <strong>{doc.title}</strong>
-        {ttkMeta.slice(0, 3).map((line, index) => <em key={`${line}-${index}`}>{line}</em>)}
+        <strong>{ttkDisplayTitle}</strong>
+        {ttkMeta.slice(0, 2).map((line, index) => <em key={`${line}-${index}`}>{line}</em>)}
       </div>
       <div className="ttkIngredients">
         <strong>Состав</strong>
@@ -2186,10 +2188,7 @@ function KnowledgeDocumentBody({ doc }: { doc: any }) {
   }
 
   if (doc?.type === 'text') {
-    return <>
-      {doc?.photo_url && <img className="knowledgeDocPhoto" src={doc.photo_url} alt={doc.title || 'Фото'} />}
-      {doc?.content && <div className="plainTextDocumentView">{doc.content}</div>}
-    </>;
+    return <>{doc?.content || ''}</>;
   }
 
   return <>
@@ -2203,15 +2202,12 @@ function KnowledgeDocumentBody({ doc }: { doc: any }) {
 function KnowledgeDocumentModal({ doc, onClose, onAck }: { doc: any; onClose: () => void; onAck: (doc: any) => void }) {
   const isPlainText = doc?.type === 'text';
   if (isPlainText) {
-    return <div className="modal plainTextDocOverlay" onClick={onClose}>
-      <div className="plainTextDocReader" onClick={(e) => e.stopPropagation()}>
-        <div className="plainTextDocHeader">
-          <h2>{doc.title}</h2>
-          <button className="iconBtn" onClick={onClose}>×</button>
-        </div>
+    return <div className="plainTextDocOverlay" onClick={onClose}>
+      <button className="plainTextDocClose" onClick={onClose} aria-label="Закрыть документ">×</button>
+      <div className="plainTextDocumentText" onClick={(e) => e.stopPropagation()}>
         <KnowledgeDocumentBody doc={doc} />
-        {doc.requires_acknowledgement && !doc.acknowledged && <Button onClick={() => onAck(doc)}>Ознакомился</Button>}
       </div>
+      {doc.requires_acknowledgement && !doc.acknowledged && <button className="plainTextAckButton" type="button" onClick={(e) => { e.stopPropagation(); onAck(doc); }}>Ознакомился</button>}
     </div>;
   }
 

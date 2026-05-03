@@ -800,7 +800,100 @@ function titleContinuationLooksLikeMeasure(line) {
   return /^\d+\s*(?:мл|л|г|кг|шт|порц)(?:$|\s)/i.test(cleanTtkText(line));
 }
 
+function normalizeTtkTitle(value) {
+  return cleanTtkText(value)
+    .replace(/^Блюдо\/напиток:\s*/i, '')
+    .replace(/^Название на чеке:\s*/i, '')
+    .replace(/(\d+)\s+(мл|л|г|кг|шт|порц)\b/gi, '$1$2')
+    .trim();
+}
+
+function collectTtkTitleFromLines(lines) {
+  const titleLines = [];
+  for (const line of lines) {
+    const cleaned = normalizeTtkTitle(line);
+    if (!cleaned || /^Название на чеке:?$/i.test(cleaned)) continue;
+    if (lineLooksLikeTtkName(cleaned) || (titleLines.length && titleContinuationLooksLikeMeasure(cleaned))) {
+      titleLines.push(cleaned);
+    }
+  }
+  return normalizeTtkTitle(titleLines.join(' '));
+}
+
+function takeTrailingTtkTitleLines(lines) {
+  const lead = [];
+  let trimFrom = lines.length;
+  let sawCandidate = false;
+
+  for (let i = lines.length - 1; i >= Math.max(0, lines.length - 10); i -= 1) {
+    const cleaned = cleanTtkText(lines[i]);
+    if (!cleaned) {
+      if (sawCandidate) trimFrom = i;
+      continue;
+    }
+    if (/^Название на чеке:?$/i.test(cleaned)) {
+      sawCandidate = true;
+      trimFrom = i;
+      continue;
+    }
+    const normalized = normalizeTtkTitle(cleaned);
+    if (lineLooksLikeTtkName(normalized) || (lead.length && titleContinuationLooksLikeMeasure(normalized))) {
+      sawCandidate = true;
+      lead.unshift(normalized);
+      trimFrom = i;
+      continue;
+    }
+    break;
+  }
+
+  return { titleLines: lead, trimFrom: sawCandidate ? trimFrom : lines.length };
+}
+
+function splitTtkBlocks(text) {
+  const rows = String(text || '').replace(/\r/g, '').split('\n');
+  const blocks = [];
+  let current = [];
+  let pendingBeforeFirstHeader = [];
+
+  rows.forEach((row) => {
+    const cleaned = cleanTtkText(row);
+    const isHeader = /Технологическая карта\s*(?:№|No|Nº|N)\s*\d+/i.test(cleaned);
+
+    if (isHeader) {
+      let lead = [];
+      if (current.length) {
+        const extracted = takeTrailingTtkTitleLines(current);
+        lead = extracted.titleLines;
+        const previous = current.slice(0, extracted.trimFrom).join('\n').trim();
+        if (previous) blocks.push(previous);
+      } else {
+        lead = takeTrailingTtkTitleLines(pendingBeforeFirstHeader).titleLines;
+      }
+      current = [...lead, row];
+      pendingBeforeFirstHeader = [];
+      return;
+    }
+
+    if (current.length) {
+      current.push(row);
+    } else {
+      pendingBeforeFirstHeader.push(row);
+      if (pendingBeforeFirstHeader.length > 12) pendingBeforeFirstHeader.shift();
+    }
+  });
+
+  const last = current.join('\n').trim();
+  if (last) blocks.push(last);
+  return blocks.length ? blocks : [String(text || '')];
+}
+
 function parseTtkTitle(source, lines) {
+  const headerIndex = lines.findIndex(line => /Технологическая карта\s*(?:№|No|Nº|N)\s*\d+/i.test(line));
+  if (headerIndex > 0) {
+    const titleBeforeHeader = collectTtkTitleFromLines(lines.slice(0, headerIndex));
+    if (titleBeforeHeader) return titleBeforeHeader;
+  }
+
   const dateIndex = lines.findIndex(line => /\d{2}\.\d{2}\.\d{4}/.test(line));
   if (dateIndex >= 0) {
     const titleLines = [];
@@ -811,15 +904,15 @@ function parseTtkTitle(source, lines) {
       if (/^(Название на чеке|Область применения|Хранение|Срок Хранения|Органолептические|№\s*Наименование)/i.test(lines[i])) break;
       if (lineLooksLikeTtkName(lines[i]) || (titleLines.length && titleContinuationLooksLikeMeasure(lines[i]))) titleLines.push(lines[i]);
     }
-    const title = cleanTtkText(titleLines.join(' '));
+    const title = normalizeTtkTitle(titleLines.join(' '));
     if (title) return title;
   }
   const beforeHeader = source.split(/Технологическая карта\s*(?:№|No|Nº|N)/i)[0] || '';
   const beforeTitle = beforeHeader.split('\n').map(line => cleanTtkText(line)).filter(lineLooksLikeTtkName).slice(-2).join(' ');
-  if (beforeTitle) return beforeTitle;
+  if (beforeTitle) return normalizeTtkTitle(beforeTitle);
   const afterOrganoleptic = source.match(/Органолептические показатели:\s*([\s\S]*?)(?:NoНаименование|№\s*Наименование|Наименование продукта|Брутто в ед)/i)?.[1] || '';
   const fallback = afterOrganoleptic.split('\n').map(line => cleanTtkText(line)).filter(lineLooksLikeTtkName).slice(0, 2).join(' ');
-  return cleanTtkText(fallback);
+  return normalizeTtkTitle(fallback);
 }
 
 function extractTtkAmountsAndTail(value) {
@@ -1006,7 +1099,7 @@ async function parseTtkPdfBuffer(buffer) {
     parsed = await pdfParse(buffer);
   }
   const text = parsed.text || '';
-  const parts = text.split(/(?=Технологическая карта\s*(?:№|No|Nº|N)\s*\d+)/i).map(part => part.trim()).filter(Boolean);
+  const parts = splitTtkBlocks(text).map(part => part.trim()).filter(Boolean);
   const cards = (parts.length ? parts : [text])
     .map(parseTtkBlock)
     .filter(card => card.number || card.ingredients.length);
@@ -1017,7 +1110,7 @@ function buildTtkContent(card) {
   const lines = [];
   lines.push(`Технологическая карта${card.number ? ` № ${card.number}` : ''}`);
   if (card.date) lines.push(`Дата: ${card.date}`);
-  if (card.title) lines.push(`Блюдо/напиток: ${card.title}`);
+  if (card.title) lines.push(`Блюдо/напиток: ${normalizeTtkTitle(card.title)}`);
   lines.push('');
   lines.push('Состав:');
   const cleanIngredients = Array.isArray(card.ingredients)
