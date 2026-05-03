@@ -245,22 +245,31 @@ export function StatCard({
   title,
   value,
   caption,
+  details,
   onClick
 }: {
   icon: IconName;
   title: string;
-  value: string | number;
-  caption: string;
+  value: ReactNode;
+  caption?: ReactNode;
+  details?: Array<{ label: string; value: string | number }>;
   onClick?: () => void;
 }) {
+  const compactValue = (typeof value === 'string' || typeof value === 'number') && String(value).length > 5;
   const content = <>
     <div className="statBadge">
       <AppIcon name={icon} className="navIcon" />
     </div>
     <div className="statCopy">
       <span className="statLabel">{title}</span>
-      <strong className="statValue">{value}</strong>
-      <span className="statCaption">{caption}</span>
+      <strong className={cn('statValue', compactValue && 'compact')}>{value}</strong>
+      {caption ? <span className="statCaption">{caption}</span> : null}
+      {details?.length ? <span className="statBreakdown">
+        {details.map((item) => <span className="statBreakdownItem" key={item.label}>
+          <span>{item.label}</span>
+          <b>{item.value}</b>
+        </span>)}
+      </span> : null}
     </div>
   </>;
 

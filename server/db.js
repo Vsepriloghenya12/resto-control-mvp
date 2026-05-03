@@ -19,13 +19,13 @@ types.setTypeParser(1700, value => Number(value));
 
 const SNAPSHOT_TABLES = [
   { name: 'restaurants', columns: ['id', 'name', 'city', 'owner_name', 'phone', 'email', 'status', 'plan', 'subscription_status', 'trial_started_at', 'trial_ends_at', 'subscription_started_at', 'subscription_ends_at', 'created_at'] },
-  { name: 'users', columns: ['id', 'restaurant_id', 'name', 'login', 'password_hash', 'role', 'department', 'active', 'is_super_admin', 'created_at'] },
+  { name: 'users', columns: ['id', 'restaurant_id', 'name', 'login', 'password_hash', 'access_password', 'role', 'department', 'active', 'is_super_admin', 'created_at'] },
   { name: 'checklist_templates', columns: ['id', 'restaurant_id', 'role', 'type', 'title', 'active', 'created_at'] },
   { name: 'checklist_items', columns: ['id', 'restaurant_id', 'template_id', 'text', 'required', 'needs_comment', 'needs_photo', 'sort_order'] },
   { name: 'checklist_runs', columns: ['id', 'restaurant_id', 'template_id', 'user_id', 'status', 'comment', 'created_at', 'completed_at'] },
   { name: 'checklist_answers', columns: ['id', 'restaurant_id', 'run_id', 'item_id', 'done', 'comment', 'photo_url'] },
   { name: 'products', columns: ['id', 'restaurant_id', 'department', 'name', 'unit', 'category', 'supplier', 'active', 'created_at'] },
-  { name: 'product_requests', columns: ['id', 'restaurant_id', 'department', 'created_by', 'status', 'comment', 'created_at', 'updated_at'] },
+  { name: 'product_requests', columns: ['id', 'restaurant_id', 'department', 'created_by', 'target_role', 'target_user_id', 'status', 'comment', 'created_at', 'updated_at'] },
   { name: 'request_items', columns: ['id', 'restaurant_id', 'request_id', 'product_id', 'qty_ordered', 'qty_received', 'status', 'comment'] },
   { name: 'inventory_templates', columns: ['id', 'restaurant_id', 'department', 'title', 'active', 'created_at'] },
   { name: 'inventory_template_items', columns: ['id', 'restaurant_id', 'template_id', 'product_id', 'sort_order'] },
@@ -103,8 +103,11 @@ function hasMeaningfulData(db) {
 async function ensurePostgresSchema() {
   const sql = fs.readFileSync(SCHEMA_FILE, 'utf8');
   await getPool().query(sql);
+  await getPool().query(`alter table if exists users add column if not exists access_password text`);
   await getPool().query('alter table if exists knowledge_documents add column if not exists sort_order int not null default 0');
   await getPool().query(`alter table if exists products add column if not exists supplier text not null default 'Без поставщика'`);
+  await getPool().query(`alter table if exists product_requests add column if not exists target_role text`);
+  await getPool().query(`alter table if exists product_requests add column if not exists target_user_id text references users(id)`);
   await getPool().query(`alter table if exists tasks add column if not exists target_department text`);
   await getPool().query(`alter table if exists knowledge_documents add column if not exists photo_url text`);
   await getPool().query(`alter table if exists knowledge_documents add column if not exists ingredients jsonb not null default '[]'`);
@@ -256,7 +259,7 @@ async function loadDbFromPostgres() {
 
 export function publicUser(user) {
   if (!user) return null;
-  const { password_hash, ...safe } = user;
+  const { password_hash, access_password, ...safe } = user;
   return safe;
 }
 
@@ -313,6 +316,7 @@ function createUser(db, restaurant_id, data) {
     name: data.name,
     login: data.login,
     password_hash: hashPassword(data.password),
+    access_password: data.role === 'owner' ? '' : String(data.access_password ?? data.password ?? ''),
     role: data.role,
     department: data.department || roleToDepartment(data.role),
     active: data.active ?? true,

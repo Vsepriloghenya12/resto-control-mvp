@@ -37,6 +37,7 @@ const knowledgeUploadsDir = path.join(uploadsDir, 'knowledge');
 const MANAGER_ROLES = ['owner', 'manager'];
 const SENIOR_ROLE_DEPARTMENT = { senior_waiter: 'hall', senior_bartender: 'bar', senior_cook: 'kitchen' };
 const SENIOR_ROLES = Object.keys(SENIOR_ROLE_DEPARTMENT);
+const REQUEST_SENIOR_ROLE_BY_DEPARTMENT = { hall: 'senior_waiter', bar: 'senior_bartender', kitchen: 'senior_cook' };
 const DEPARTMENT_ROLE_MAP = {
   hall: ['senior_waiter', 'waiter', 'hostess'],
   bar: ['senior_bartender', 'bartender'],
@@ -192,6 +193,15 @@ function normalizeStaffRole(role) {
   return STAFF_ROLES.includes(value) ? value : '';
 }
 
+function serializeAdminUser(user, viewer) {
+  const safe = publicUser(user);
+  if (!safe) return null;
+  if ((viewer?.is_super_admin || MANAGER_ROLES.includes(viewer?.role)) && user.role !== 'owner') {
+    safe.access_password = user.access_password || '';
+  }
+  return safe;
+}
+
 function normalizeRequestItems(restaurant_id, department, rawItems = []) {
   const positiveItems = Array.isArray(rawItems) ? rawItems.filter(i => Number(i?.qty_ordered) > 0) : [];
   if (!positiveItems.length) {
@@ -215,6 +225,83 @@ function normalizeRequestItems(restaurant_id, department, rawItems = []) {
   }
 
   return { items };
+}
+
+function requestDepartmentForUser(user, requestedDepartment) {
+  const ownDepartment = user.department || roleDepartment(user.role);
+  const department = String(requestedDepartment || ownDepartment || '').trim();
+  if (!departments[department]) {
+    return { error: 'Неизвестное подразделение' };
+  }
+  if (!user.is_super_admin && !MANAGER_ROLES.includes(user.role) && department !== ownDepartment) {
+    return { error: 'Нельзя создавать заявки другого подразделения' };
+  }
+  return { department };
+}
+
+function activeRestaurantUsers(restaurant_id) {
+  return sameRestaurant(db.users, restaurant_id).filter(user => user.active);
+}
+
+function resolveProductRequestTarget(restaurant_id, department) {
+  const seniorRole = REQUEST_SENIOR_ROLE_BY_DEPARTMENT[department];
+  if (seniorRole) {
+    const senior = activeRestaurantUsers(restaurant_id)
+      .find(user => user.role === seniorRole && (user.department === department || roleDepartment(user.role) === department));
+    if (senior) {
+      return { target_role: seniorRole, target_user_id: senior.id, fallback_to_manager: false };
+    }
+  }
+
+  const manager = activeRestaurantUsers(restaurant_id)
+    .find(user => user.role === 'manager')
+    || activeRestaurantUsers(restaurant_id).find(user => user.role === 'owner');
+  return { target_role: 'manager', target_user_id: manager?.id || null, fallback_to_manager: true };
+}
+
+function productRequestRecipientUsers(restaurant_id, request) {
+  const users = activeRestaurantUsers(restaurant_id);
+  if (request.target_role === 'manager') {
+    const managers = users.filter(user => MANAGER_ROLES.includes(user.role));
+    return managers.length ? managers : users.filter(user => user.role === 'owner');
+  }
+
+  if (request.target_role) {
+    const byRole = users.filter(user => user.role === request.target_role && (!request.department || user.department === request.department || roleDepartment(user.role) === request.department));
+    if (byRole.length) return byRole;
+  }
+
+  if (request.target_user_id) {
+    return users.filter(user => user.id === request.target_user_id);
+  }
+
+  return users.filter(user => MANAGER_ROLES.includes(user.role));
+}
+
+function canSeeProductRequest(user, request) {
+  if (user?.is_super_admin || MANAGER_ROLES.includes(user?.role)) return true;
+  if (SENIOR_ROLES.includes(user?.role)) {
+    return request.department === manageableDepartment(user)
+      || request.target_role === user.role
+      || request.target_user_id === user.id;
+  }
+  return request.created_by === user.id || request.department === (user.department || roleDepartment(user.role));
+}
+
+function canHandleProductRequest(user, request) {
+  if (user?.is_super_admin || MANAGER_ROLES.includes(user?.role)) return true;
+  return SENIOR_ROLES.includes(user?.role) && request.department === manageableDepartment(user);
+}
+
+function serializeProductRequest(request) {
+  return {
+    ...request,
+    created_by_user: publicUser(db.users.find(u => u.id === request.created_by)),
+    target_user: publicUser(db.users.find(u => u.id === request.target_user_id)),
+    items: db.request_items
+      .filter(i => i.request_id === request.id)
+      .map(i => ({ ...i, product: db.products.find(p => p.id === i.product_id) }))
+  };
 }
 
 function normalizeChecklistTemplateItems(rawItems = []) {
@@ -1100,19 +1187,161 @@ app.patch('/api/super/restaurants/:id/subscription', auth, superOnly, runAsync(a
 app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, res) => {
   const rid = req.user.is_super_admin ? req.query.restaurant_id : req.user.restaurant_id;
   const today = new Date().toISOString().slice(0, 10);
+  const now = Date.now();
   const restaurant = db.restaurants.find(r => r.id === rid);
   const staffUsers = sameRestaurant(db.users, rid).filter(u => !u.is_super_admin && u.role !== 'owner');
   const activeStaffUsers = staffUsers.filter(u => u.active !== false);
+  const checklistRunsToday = sameRestaurant(db.checklist_runs, rid).filter(r => r.created_at?.slice(0, 10) === today);
+  const activeChecklistTemplates = sameRestaurant(db.checklist_templates, rid).filter(t => t.active);
+  const expectedChecklistKeys = new Set();
+  activeStaffUsers.forEach(user => {
+    activeChecklistTemplates
+      .filter(template => template.role === user.role)
+      .forEach(template => expectedChecklistKeys.add(`${user.id}:${template.id}`));
+  });
+  const completedChecklistKeys = new Set(
+    checklistRunsToday
+      .filter(run => ['completed', 'done'].includes(run.status))
+      .map(run => `${run.user_id}:${run.template_id}`)
+      .filter(key => expectedChecklistKeys.has(key))
+  );
+  const productRequests = sameRestaurant(db.product_requests, rid);
+  const openProductRequests = productRequests.filter(r => !['received', 'done', 'cancelled'].includes(r.status));
+  const inventoryRuns = sameRestaurant(db.inventory_runs, rid);
+  const inventoryRunsToday = inventoryRuns.filter(r => r.created_at?.slice(0, 10) === today);
+  const activeInventoryTemplates = sameRestaurant(db.inventory_templates, rid).filter(t => t.active !== false);
+  const readyInventoryTemplateIds = new Set(
+    inventoryRunsToday
+      .filter(run => run.status === 'completed')
+      .map(run => run.template_id)
+      .filter(templateId => activeInventoryTemplates.some(template => template.id === templateId))
+  );
+  const activeDocuments = sameRestaurant(db.knowledge_documents, rid).filter(d => d.is_active);
+  const requiredDocuments = activeDocuments.filter(d => d.requires_acknowledgement);
+  const pendingAcknowledgements = requiredDocuments.reduce((total, doc) => {
+    const targets = activeStaffUsers.filter(u => hasRoleAccess(u, doc.allowed_roles));
+    const targetIds = new Set(targets.map(u => u.id));
+    const acknowledged = db.knowledge_acknowledgements
+      .filter(a => a.document_id === doc.id && a.version === doc.version && targetIds.has(a.user_id))
+      .length;
+    return total + Math.max(0, targets.length - acknowledged);
+  }, 0);
+  const activeTasks = sameRestaurant(db.tasks, rid).filter(task => task.active !== false);
+  const taskAssignments = sameRestaurant(db.task_assignments, rid);
+  const tasksWithAssignments = activeTasks.map(task => {
+    const assignments = taskAssignments.filter(assignment => assignment.task_id === task.id);
+    const hasOpenAssignments = assignments.some(assignment => !assignment.done);
+    const dueTime = task.due_at ? new Date(task.due_at).getTime() : NaN;
+    return {
+      task,
+      assignments,
+      done: assignments.length > 0 && assignments.every(assignment => assignment.done),
+      overdue: hasOpenAssignments && Number.isFinite(dueTime) && dueTime < now,
+      open: hasOpenAssignments,
+      created_today: String(task.created_at || '').slice(0, 10) === today
+    };
+  });
+  const taskSummary = {
+    new: tasksWithAssignments.filter(item => item.created_today).length,
+    done: tasksWithAssignments.filter(item => item.done).length,
+    not_done: tasksWithAssignments.filter(item => item.open).length,
+    overdue: tasksWithAssignments.filter(item => item.overdue).length,
+    open: tasksWithAssignments.filter(item => item.open).length
+  };
+  const checklistSummary = {
+    done: completedChecklistKeys.size,
+    not_done: Math.max(0, expectedChecklistKeys.size - completedChecklistKeys.size),
+    total: expectedChecklistKeys.size
+  };
+  const requestSummary = {
+    new: productRequests.filter(r => r.status === 'sent').length,
+    in_progress: productRequests.filter(r => ['ordered', 'partial', 'not_received'].includes(r.status)).length,
+    closed: productRequests.filter(r => ['received', 'done', 'cancelled'].includes(r.status)).length,
+    open: openProductRequests.length
+  };
+  const documentSummary = {
+    total: activeDocuments.length,
+    required: requiredDocuments.length,
+    pending: pendingAcknowledgements
+  };
+  const inventorySummary = {
+    ready: readyInventoryTemplateIds.size,
+    not_ready: Math.max(0, activeInventoryTemplates.length - readyInventoryTemplateIds.size),
+    today: inventoryRunsToday.length,
+    total: inventoryRuns.length,
+    active_templates: activeInventoryTemplates.length
+  };
+  const activeTaskIds = new Set(activeTasks.map(task => task.id));
+  const taskById = new Map(activeTasks.map(task => [task.id, task]));
+  const employeeMetrics = activeStaffUsers
+    .map(user => {
+      const userChecklistTemplates = activeChecklistTemplates.filter(template => template.role === user.role);
+      const userChecklistDoneKeys = new Set(
+        checklistRunsToday
+          .filter(run => run.user_id === user.id && ['completed', 'done'].includes(run.status))
+          .map(run => `${run.user_id}:${run.template_id}`)
+          .filter(key => userChecklistTemplates.some(template => key === `${user.id}:${template.id}`))
+      );
+      const userTaskAssignments = taskAssignments.filter(assignment => assignment.user_id === user.id && activeTaskIds.has(assignment.task_id));
+      const userInventoryTemplates = activeInventoryTemplates.filter(template => template.department === user.department);
+      const userReadyInventoryTemplateIds = new Set(
+        inventoryRunsToday
+          .filter(run => run.user_id === user.id && run.status === 'completed')
+          .map(run => run.template_id)
+          .filter(templateId => userInventoryTemplates.some(template => template.id === templateId))
+      );
+      const userRequiredDocuments = requiredDocuments.filter(doc => hasRoleAccess(user, doc.allowed_roles));
+      const acknowledgedDocuments = userRequiredDocuments.filter(doc => db.knowledge_acknowledgements.some(a => (
+        a.document_id === doc.id && a.user_id === user.id && a.version === doc.version
+      )));
+      return {
+        user: publicUser(user),
+        checklists: {
+          done: userChecklistDoneKeys.size,
+          not_done: Math.max(0, userChecklistTemplates.length - userChecklistDoneKeys.size)
+        },
+        requests: {
+          new: productRequests.filter(request => request.created_by === user.id && request.status === 'sent').length
+        },
+        tasks: {
+          new: userTaskAssignments.filter(assignment => String(taskById.get(assignment.task_id)?.created_at || '').slice(0, 10) === today).length,
+          done: userTaskAssignments.filter(assignment => assignment.done).length,
+          not_done: userTaskAssignments.filter(assignment => !assignment.done).length
+        },
+        documents: {
+          pending: Math.max(0, userRequiredDocuments.length - acknowledgedDocuments.length)
+        },
+        inventories: {
+          ready: userReadyInventoryTemplateIds.size,
+          not_ready: Math.max(0, userInventoryTemplates.length - userReadyInventoryTemplateIds.size)
+        }
+      };
+    })
+    .sort((a, b) => (a.user.name || '').localeCompare(b.user.name || '', 'ru'));
   res.json({
     restaurant,
     users: activeStaffUsers.length,
     users_total: staffUsers.length,
     employee_limit: employeeLimitForRestaurant(restaurant),
-    checklists_today: sameRestaurant(db.checklist_runs, rid).filter(r => r.created_at?.slice(0, 10) === today).length,
-    requests_open: sameRestaurant(db.product_requests, rid).filter(r => !['received', 'cancelled'].includes(r.status)).length,
-    inventories: sameRestaurant(db.inventory_runs, rid).length,
-    tasks_open: sameRestaurant(db.task_assignments, rid).filter(a => !a.done).length,
-    docs: sameRestaurant(db.knowledge_documents, rid).filter(d => d.is_active).length
+    checklists_today: checklistSummary.done,
+    requests_open: requestSummary.open,
+    inventories: inventoryRuns.length,
+    tasks_open: taskSummary.open,
+    docs: documentSummary.total,
+    summary: {
+      users: {
+        active: activeStaffUsers.length,
+        inactive: staffUsers.filter(u => u.active === false).length,
+        total: staffUsers.length,
+        limit: employeeLimitForRestaurant(restaurant)
+      },
+      checklists: checklistSummary,
+      requests: requestSummary,
+      tasks: taskSummary,
+      documents: documentSummary,
+      inventories: inventorySummary
+    },
+    employee_metrics: employeeMetrics
   });
 });
 
@@ -1125,7 +1354,7 @@ app.get('/api/admin/users', auth, ensureRestaurantActive, operationalEditorOnly,
     .filter(u => !u.is_super_admin)
     .filter(u => includeInactive || u.active !== false)
     .filter(u => !manageableDepartmentName || u.department === manageableDepartmentName || canManageRole(req.user, u.role))
-    .map(publicUser);
+    .map(user => serializeAdminUser(user, req.user));
   res.json(rows);
 });
 
@@ -1141,6 +1370,7 @@ app.post('/api/admin/users', auth, ensureRestaurantActive, adminOnly, runAsync(a
     name: String(name || '').trim(),
     login: String(login || '').trim(),
     password_hash: hashPassword(password),
+    access_password: String(password || ''),
     role: normalizedRole,
     department: department || roleToDepartment(normalizedRole),
     active: true,
@@ -1149,7 +1379,7 @@ app.post('/api/admin/users', auth, ensureRestaurantActive, adminOnly, runAsync(a
   };
   db.users.push(user);
   await persist();
-  res.status(201).json(publicUser(user));
+  res.status(201).json(serializeAdminUser(user, req.user));
 }));
 
 app.patch('/api/admin/users/:id', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
@@ -1180,9 +1410,12 @@ app.patch('/api/admin/users/:id', auth, ensureRestaurantActive, adminOnly, runAs
     if (user.id === req.user.id && !req.body.active) return res.status(400).json({ error: 'Нельзя отключить собственный аккаунт' });
     user.active = Boolean(req.body.active);
   }
-  if (req.body.password) user.password_hash = hashPassword(req.body.password);
+  if (req.body.password) {
+    user.password_hash = hashPassword(req.body.password);
+    user.access_password = String(req.body.password || '');
+  }
   await persist();
-  res.json(publicUser(user));
+  res.json(serializeAdminUser(user, req.user));
 }));
 
 app.delete('/api/admin/users/:id', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
@@ -1349,7 +1582,10 @@ app.get('/api/admin/checklists/runs', auth, ensureRestaurantActive, operationalE
 // PRODUCTS
 app.get('/api/products', auth, ensureRestaurantActive, (req, res) => {
   const rid = req.user.restaurant_id;
-  const department = req.query.department || (['owner', 'manager'].includes(req.user.role) ? null : req.user.department);
+  const ownDepartment = req.user.department || roleDepartment(req.user.role);
+  const department = req.user.is_super_admin || MANAGER_ROLES.includes(req.user.role)
+    ? (req.query.department || null)
+    : ownDepartment;
   const rows = sameRestaurant(db.products, rid).filter(p => p.active && (!department || p.department === department));
   res.json(rows);
 });
@@ -1412,40 +1648,42 @@ app.delete('/api/admin/products/:id', auth, ensureRestaurantActive, adminOnly, r
 // REQUESTS
 app.get('/api/requests', auth, ensureRestaurantActive, (req, res) => {
   const rid = req.user.restaurant_id;
-  const department = req.query.department || (['owner', 'manager'].includes(req.user.role) ? null : req.user.department);
+  const ownDepartment = req.user.department || roleDepartment(req.user.role);
+  const department = req.user.is_super_admin || MANAGER_ROLES.includes(req.user.role)
+    ? (req.query.department || null)
+    : ownDepartment;
   const rows = sameRestaurant(db.product_requests, rid)
     .filter(r => !department || r.department === department)
-    .map(r => ({
-      ...r,
-      created_by_user: publicUser(db.users.find(u => u.id === r.created_by)),
-      items: db.request_items.filter(i => i.request_id === r.id).map(i => ({ ...i, product: db.products.find(p => p.id === i.product_id) }))
-    }))
+    .filter(r => canSeeProductRequest(req.user, r))
+    .map(serializeProductRequest)
     .sort((a, b) => b.created_at.localeCompare(a.created_at));
   res.json(rows);
 });
 
 app.post('/api/requests', auth, ensureRestaurantActive, runAsync(async (req, res) => {
   const rid = req.user.restaurant_id;
-  const department = req.body.department || req.user.department;
-  if (!['owner', 'manager'].includes(req.user.role) && department !== req.user.department) return res.status(403).json({ error: 'Нельзя создавать заявки другого отдела' });
+  const departmentResult = requestDepartmentForUser(req.user, req.body.department);
+  if (departmentResult.error) return res.status(403).json({ error: departmentResult.error });
+  const department = departmentResult.department;
   const normalized = normalizeRequestItems(rid, department, req.body.items);
   if (normalized.error) return res.status(400).json({ error: normalized.error });
-  const request = { id: uid('req'), restaurant_id: rid, department, created_by: req.user.id, status: 'sent', comment: req.body.comment || '', created_at: nowIso(), updated_at: nowIso() };
+  const target = resolveProductRequestTarget(rid, department);
+  const request = { id: uid('req'), restaurant_id: rid, department, created_by: req.user.id, target_role: target.target_role, target_user_id: target.target_user_id, status: 'sent', comment: req.body.comment || '', created_at: nowIso(), updated_at: nowIso() };
   db.product_requests.push(request);
   normalized.items.forEach(i => {
     db.request_items.push({ id: uid('reqi'), restaurant_id: rid, request_id: request.id, product_id: i.product_id, qty_ordered: i.qty_ordered, qty_received: 0, status: 'ordered', comment: i.comment });
   });
-  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'request_created', title: `${req.user.name} создал заявку ${departments[department] || department}`, entity_type: 'product_request', entity_id: request.id, metadata: { department, items_count: normalized.items.length } });
-  notifyManagers(rid, { title: 'Новая заявка', body: `${req.user.name} · ${departments[department] || department}`, entity_type: 'product_request', entity_id: request.id });
+  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'request_created', title: `${req.user.name} создал заявку ${departments[department] || department}`, entity_type: 'product_request', entity_id: request.id, metadata: { department, target_role: target.target_role, target_user_id: target.target_user_id, fallback_to_manager: target.fallback_to_manager, items_count: normalized.items.length } });
+  notifyUsers(rid, productRequestRecipientUsers(rid, request), { title: 'Новая заявка', body: `${req.user.name} · ${departments[department] || department}`, entity_type: 'product_request', entity_id: request.id });
   await persist();
-  res.status(201).json(request);
+  res.status(201).json(serializeProductRequest(request));
 }));
 
 app.patch('/api/requests/:id/receive', auth, ensureRestaurantActive, runAsync(async (req, res) => {
   const rid = req.user.restaurant_id;
   const request = db.product_requests.find(r => r.id === req.params.id && r.restaurant_id === rid);
   if (!request) return res.status(404).json({ error: 'Заявка не найдена' });
-  if (!['owner', 'manager'].includes(req.user.role) && request.department !== req.user.department) return res.status(403).json({ error: 'Нет доступа к этой заявке' });
+  if (!canHandleProductRequest(req.user, request)) return res.status(403).json({ error: 'Нет доступа к этой заявке' });
   const received = req.body.received || {};
   const items = db.request_items.filter(i => i.request_id === request.id);
   items.forEach(i => {
@@ -1459,7 +1697,7 @@ app.patch('/api/requests/:id/receive', auth, ensureRestaurantActive, runAsync(as
   request.status = allReceived ? 'received' : someReceived ? 'partial' : 'sent';
   request.updated_at = nowIso();
   await persist();
-  res.json({ ...request, items });
+  res.json({ ...serializeProductRequest(request), items });
 }));
 
 // INVENTORY

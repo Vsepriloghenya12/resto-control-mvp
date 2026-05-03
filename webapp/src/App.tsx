@@ -760,7 +760,7 @@ function RestaurantAdmin({ user, restaurant, onLogout }: any) {
   ]);
   const section = useMemo(() => {
     if (tab === 'overview') return <AdminOverview mode={user.role === 'manager' ? 'manager' : 'owner'} onNavigate={setTab} />;
-    if (tab === 'users') return <UsersAdmin />;
+    if (tab === 'users') return <UsersAdmin user={user} />;
     if (tab === 'checklists') return <Checklists user={user} admin />;
     if (tab === 'requests') return <Requests user={user} admin />;
     if (tab === 'bookings') return <Bookings user={user} admin />;
@@ -809,54 +809,162 @@ function AdminOverview({ mode = 'owner', onNavigate }: { mode?: 'owner' | 'manag
   const managerMode = mode === 'manager';
   const employeeLimit = data.employee_limit === null ? '∞' : data.employee_limit;
   const employeesValue = employeeLimit ? `${data.users} из ${employeeLimit}` : data.users;
+  const summary = data.summary || {};
+  const checklistSummary = summary.checklists || {};
+  const requestSummary = summary.requests || {};
+  const taskSummary = summary.tasks || {};
+  const documentSummary = summary.documents || {};
+  const inventorySummary = summary.inventories || {};
+  const statNumber = (value: any, tone: 'done' | 'todo' | 'neutral' = 'neutral') => {
+    const count = Number(value || 0);
+    return <span className={cx('statNumberPart', count === 0 ? 'zero' : tone)}>{count}</span>;
+  };
+  const statNumbers = (...items: Array<{ value: any; tone?: 'done' | 'todo' | 'neutral' }>) => (
+    <span className="statNumberSet">
+      {items.map((item, index) => <span className="statNumberGroup" key={index}>
+        {index > 0 && <span className="statNumberSep">/</span>}
+        {statNumber(item.value, item.tone)}
+      </span>)}
+    </span>
+  );
   return <>
     <div className={cx('statsGrid', managerMode && 'managerStatsGrid')}>
-      <StatCard icon="users" title="Сотрудники" value={employeesValue} caption="Активных по тарифу" onClick={() => onNavigate?.('users')} />
-      <StatCard icon="checklists" title="Чек-листы сегодня" value={data.checklists_today} caption="Выполнено" onClick={() => onNavigate?.('checklists')} />
-      <StatCard icon="requests" title="Открытые заявки" value={data.requests_open} caption="Новых" onClick={() => onNavigate?.('requests')} />
-      <StatCard icon="tasks" title="Задачи открыты" value={data.tasks_open} caption="В работе" onClick={() => onNavigate?.('tasks')} />
-      <StatCard icon="document" title="Документы" value={data.docs} caption="Всего" onClick={() => onNavigate?.('knowledge')} />
-      <StatCard icon="inventory" title="Инвентаризации" value={data.inventories} caption="Активных" onClick={() => onNavigate?.('inventory')} />
+      <StatCard
+        icon="users"
+        title="Сотрудники"
+        value={employeesValue}
+        onClick={() => onNavigate?.('users')}
+      />
+      <StatCard
+        icon="checklists"
+        title="Чек-листы сегодня"
+        value={statNumbers(
+          { value: checklistSummary.done ?? data.checklists_today, tone: 'done' },
+          { value: checklistSummary.not_done, tone: 'todo' }
+        )}
+        onClick={() => onNavigate?.('checklists')}
+      />
+      <StatCard
+        icon="requests"
+        title="Заявки"
+        value={statNumber(requestSummary.new, 'todo')}
+        onClick={() => onNavigate?.('requests')}
+      />
+      <StatCard
+        icon="tasks"
+        title="Задачи"
+        value={statNumbers(
+          { value: taskSummary.new, tone: 'todo' },
+          { value: taskSummary.done, tone: 'done' },
+          { value: taskSummary.not_done ?? data.tasks_open, tone: 'todo' }
+        )}
+        onClick={() => onNavigate?.('tasks')}
+      />
+      <StatCard
+        icon="document"
+        title="Документы"
+        value={statNumber(documentSummary.total ?? data.docs, 'neutral')}
+        onClick={() => onNavigate?.('knowledge')}
+      />
+      <StatCard
+        icon="inventory"
+        title="Инвентаризации"
+        value={statNumbers(
+          { value: inventorySummary.ready, tone: 'done' },
+          { value: inventorySummary.not_ready, tone: 'todo' }
+        )}
+        onClick={() => onNavigate?.('inventory')}
+      />
     </div>
 
-    <Card title={managerMode ? 'Пульт смены' : 'Аккаунт владельца'} right={<span className="badge active">{managerMode ? 'Управление рестораном' : 'Владелец'}</span>}>
+    <OverviewEmployeeMetrics rows={data.employee_metrics || []} />
+
+    {managerMode && <Card title="Пульт смены" right={<span className="badge active">Управление рестораном</span>}>
       <div className="overviewHero">
         <div className="overviewHeroCopy">
-          <strong>{managerMode ? 'Смена и настройки под контролем' : (data.restaurant?.name || 'Ресторан подключён')}</strong>
-          <p>{managerMode ? 'Менеджер ведёт сотрудников, чек-листы, номенклатуру, залы, базу знаний и ежедневную операционку.' : 'Владелец снова имеет полный доступ к управлению рестораном: сотрудники, чек-листы, номенклатура, залы, заявки, задачи и база знаний.'}</p>
+          <strong>Смена и настройки под контролем</strong>
+          <p>Менеджер ведёт сотрудников, чек-листы, номенклатуру, залы, базу знаний и ежедневную операционку.</p>
         </div>
         <div className="overviewHighlights">
-          <div><span className="muted">{managerMode ? 'Открытые заявки' : 'Ресторан'}</span><b>{managerMode ? `${data.requests_open || 0}` : (data.restaurant?.name || '—')}</b></div>
-          <div><span className="muted">{managerMode ? 'Сотрудники' : 'Сотрудники'}</span><b>{employeesValue}</b></div>
-          <div><span className="muted">{managerMode ? 'Задачи в работе' : 'Доступ'}</span><b>{managerMode ? data.tasks_open : 'полный'}</b></div>
+          <div><span className="muted">Открытые заявки</span><b>{data.requests_open || 0}</b></div>
+          <div><span className="muted">Сотрудники</span><b>{employeesValue}</b></div>
+          <div><span className="muted">Задачи в работе</span><b>{data.tasks_open}</b></div>
         </div>
       </div>
-    </Card>
-    {managerMode ? <AdminProblemDashboard onNavigate={onNavigate} /> : <OwnerAccountNotice />}
+    </Card>}
+    {managerMode && <AdminProblemDashboard onNavigate={onNavigate} />}
   </>;
 }
 
-function OwnerAccountNotice() {
-  return <Card title="Доступ владельца" right={<span className="badge active">Полное управление</span>}>
-    <div className="ownerRoleNotice">
-      <div>
-        <strong>Владелец управляет рестораном</strong>
-        <p>Доступны сотрудники, чек-листы, номенклатура, залы, заявки, задачи, база знаний, ТТК и сервис-буки.</p>
-      </div>
-      <div>
-        <strong>Менеджер сохраняет рабочие права</strong>
-        <p>Менеджер тоже может вести операционные настройки ресторана, но владелец не ограничен только подпиской.</p>
-      </div>
+function OverviewEmployeeMetrics({ rows }: { rows: any[] }) {
+  const [expandedEmployeeId, setExpandedEmployeeId] = useState('');
+  const metricNumber = (value: any, tone: 'done' | 'todo' | 'neutral' = 'neutral') => {
+    const count = Number(value || 0);
+    return <span className={cx('statNumberPart', count === 0 ? 'zero' : tone)}>{count}</span>;
+  };
+  const metricPair = (done: any, todo: any) => (
+    <span className="employeeMetricNumbers">
+      {metricNumber(done, 'done')}
+      <span className="statNumberSep">/</span>
+      {metricNumber(todo, 'todo')}
+    </span>
+  );
+  const taskNumbers = (metric: any = {}) => (
+    <span className="employeeMetricNumbers triple">
+      {metricNumber(metric.new, 'todo')}
+      <span className="statNumberSep">/</span>
+      {metricNumber(metric.done, 'done')}
+      <span className="statNumberSep">/</span>
+      {metricNumber(metric.not_done, 'todo')}
+    </span>
+  );
+
+  return <section className="employeeMetricsPlain">
+    <h3>Сотрудники и показатели</h3>
+    {rows.length === 0 && <Empty text="Активных сотрудников пока нет" />}
+    <div className="employeeMetricsList">
+      {rows.map((row) => {
+        const employeeId = String(row.user?.id || row.user?.name || 'employee');
+        const expanded = expandedEmployeeId === employeeId;
+        return <div className={cx('employeeMetricsEntry', expanded && 'open')} key={employeeId}>
+          <button
+            type="button"
+            className="employeeMetricsRow"
+            aria-expanded={expanded}
+            onClick={() => setExpandedEmployeeId(expanded ? '' : employeeId)}
+          >
+            <div className="employeeMetricsPerson">
+              <strong>{row.user?.name || 'Сотрудник'}</strong>
+              <span>{roles[row.user?.role] || row.user?.role || 'Роль не указана'}</span>
+            </div>
+            <span className="employeeMetricValue" data-label="ЧЛ">{metricPair(row.checklists?.done, row.checklists?.not_done)}</span>
+            <span className="employeeMetricValue" data-label="Заявки">{metricNumber(row.requests?.new, 'todo')}</span>
+            <span className="employeeMetricValue wide" data-label="Задачи">{taskNumbers(row.tasks)}</span>
+            <span className="employeeMetricValue" data-label="Док">{metricNumber(row.documents?.pending, 'todo')}</span>
+            <span className="employeeMetricValue" data-label="Инв">{metricPair(row.inventories?.ready, row.inventories?.not_ready)}</span>
+          </button>
+          {expanded && <div className="employeeMetricsDetails">
+            <div className="employeeDetailsGrid">
+              <div><span>Чек-листы</span><strong>{metricPair(row.checklists?.done, row.checklists?.not_done)}</strong><em>выполнено / не выполнено</em></div>
+              <div><span>Заявки</span><strong>{metricNumber(row.requests?.new, 'todo')}</strong><em>новые заявки</em></div>
+              <div><span>Задачи</span><strong>{taskNumbers(row.tasks)}</strong><em>новые / выполнено / не выполнено</em></div>
+              <div><span>Документы</span><strong>{metricNumber(row.documents?.pending, 'todo')}</strong><em>ждут ознакомления</em></div>
+              <div><span>Инвентаризации</span><strong>{metricPair(row.inventories?.ready, row.inventories?.not_ready)}</strong><em>готово / не готово</em></div>
+            </div>
+          </div>}
+        </div>;
+      })}
     </div>
-  </Card>;
+  </section>;
 }
 
-function UsersAdmin() {
+function UsersAdmin({ user }: any) {
   const [users, setUsers] = useState<any[]>([]);
   const [form, setForm] = useState<any>({ name: '', login: '', password: '', role: 'waiter' });
   const [editingUserId, setEditingUserId] = useState('');
   const [editForm, setEditForm] = useState<any>({ name: '', login: '', password: '', role: 'waiter', active: true });
   const [msg, setMsg] = useState('');
+  const canSeeEmployeePasswords = user?.is_super_admin || user?.role === 'owner' || user?.role === 'manager';
   async function load() { setUsers(await api('/api/admin/users')); }
   useEffect(() => { load(); }, []);
   async function submit(e: FormEvent) {
@@ -920,7 +1028,11 @@ function UsersAdmin() {
             <label className="checkboxRow compactCheckbox"><input type="checkbox" checked={!!editForm.active} onChange={(e) => setEditForm({ ...editForm, active: e.target.checked })} /><span>{editForm.active ? 'Активен' : 'Отключён'}</span></label>
             <div className="adminInlineActions"><Button kind="soft" type="button" onClick={cancelEdit}>Отмена</Button><Button>Сохранить</Button><Button kind="danger" type="button" onClick={() => removeUser(u)}>Удалить</Button></div>
           </form> : <button type="button" className="adminRowButton" onClick={() => startEdit(u)} disabled={u.role === 'owner'}>
-            <div className="adminRowMain"><b>{u.name}</b><span>{u.login} · {roles[u.role]} · {departments[u.department]}</span></div>
+            <div className="adminRowMain">
+              <b>{u.name}</b>
+              <span>{u.login} · {roles[u.role]} · {departments[u.department]}</span>
+              {canSeeEmployeePasswords && u.role !== 'owner' && <span className="adminPasswordLine">Пароль: <code>{u.access_password || 'задайте новый пароль'}</code></span>}
+            </div>
             <div className="adminRowMeta"><span className={`badge ${u.active ? 'active' : 'cancelled'}`}>{u.active ? 'активен' : 'выкл'}</span><em>{u.role === 'owner' ? 'Владелец' : 'Изменить'}</em></div>
           </button>}
         </div>;
@@ -1426,7 +1538,7 @@ function Checklists({ user, admin = false }: any) {
     {admin && <Card title="Редактор чек-листов" right={<Button kind="soft" type="button" onClick={() => setTemplateEditorOpen((open) => !open)}>{isTemplateEditorOpen ? 'Свернуть' : 'Развернуть'}</Button>}>
       {!isTemplateEditorOpen && <div className="adminChecklistEditorIntro">
         <b>{editingTemplateId ? 'Редактирование подготовлено' : 'Редактор свернут'}</b>
-        <span>{editingTemplateId ? 'Разверните форму, чтобы продолжить изменение шаблона.' : 'Разверните форму, чтобы создать новый чек-лист, или выберите шаблон ниже для редактирования.'}</span>
+        <span>{editingTemplateId ? 'Разверните форму, чтобы продолжить изменение шаблона.' : 'Разверните форму, чтобы создать новый чек-лист.'}</span>
       </div>}
       {isTemplateEditorOpen && <>
         <form className="form" onSubmit={saveTemplate}>
@@ -1462,37 +1574,6 @@ function Checklists({ user, admin = false }: any) {
       </>}
     </Card>}
 
-    {admin ? <Card title="Шаблоны чек-листов" right={<span className="badge active">Только редактирование</span>}>
-      {templates.length === 0 && <Empty text="Нет чек-листов" />}
-      <div className="templateCompactList">{templates.map(t => <button type="button" className={cx('templateCompactRow', editingTemplateId === t.id && 'editing')} key={t.id} onClick={() => startTemplateEdit(t)}>
-        <div>
-          <b>{t.title}</b>
-          <span>{roles[t.role]} · {checklistTypes[t.type] || t.type}</span>
-        </div>
-        <em>{t.items.length} пунктов · {t.items.filter((item: any) => item.required !== false).length} обяз.</em>
-      </button>)}</div>
-    </Card> : <Card title="Мои чек-листы">
-      {templates.length === 0 && <Empty text="Нет чек-листов" />}
-      <div className="grid">{templates.map(t => <div className="miniCard" key={t.id}>
-        <div className="rowBetween"><b>{t.title}</b><span className="badge">{roles[t.role]} · {checklistTypes[t.type] || t.type}</span></div>
-        <div className="checkItems">{t.items.map((i: any) => <div className="checkRow" key={i.id}>
-          <input type="checkbox" checked={!!answers[i.id]?.done} onChange={(e) => updateAnswer(i.id, { done: e.target.checked })} />
-          <div className="checkContent">
-            <span>{i.text}</span>
-            {answers[i.id]?.done && <div className="checkExtras">
-              <Button kind="soft" onClick={() => setCameraTarget({ itemId: i.id, title: i.text })}>
-                {answers[i.id]?.photo_url ? 'Переснять фото' : 'Сделать фото'}
-              </Button>
-              {answers[i.id]?.photo_url && <img className="photoPreview" src={answers[i.id].photo_url} alt={'Фото: ' + i.text} />}
-            </div>}
-          </div>
-        </div>)}</div>
-        <div className="actions">
-          <Button onClick={() => submit(t)}>Сохранить выполнение</Button>
-        </div>
-      </div>)}</div>
-      {runMsg && <div className="notice">{runMsg}</div>}
-    </Card>}
     {cameraTarget && <CameraCapture
       title={cameraTarget.title}
       onClose={() => setCameraTarget(null)}
