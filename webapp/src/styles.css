@@ -6452,3 +6452,35 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* Plain text documents: keep the reader clean on mobile, without nested card surfaces. */
+.plainTextDocumentView {
+  white-space: pre-wrap;
+  line-height: 1.7;
+  color: var(--text-soft);
+  font-size: 0.98rem;
+}
+
+.plainTextDocModal .plainTextDocumentView,
+.mobilePlainTextDocModal .plainTextDocumentView {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (max-width: 980px) {
+  .modalCard.mobilePlainTextDocModal {
+    padding: 18px 18px calc(22px + env(safe-area-inset-bottom));
+  }
+
+  .modalCard.mobilePlainTextDocModal .rowBetween {
+    margin-bottom: 12px;
+  }
+
+  .modalCard.mobilePlainTextDocModal .plainTextDocumentView {
+    font-size: 1rem;
+    line-height: 1.75;
+  }
+}

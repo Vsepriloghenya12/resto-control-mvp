@@ -2185,6 +2185,13 @@ function KnowledgeDocumentBody({ doc }: { doc: any }) {
     </div>;
   }
 
+  if (doc?.type === 'text') {
+    return <>
+      {doc?.photo_url && <img className="knowledgeDocPhoto" src={doc.photo_url} alt={doc.title || 'Фото'} />}
+      {doc?.content && <div className="plainTextDocumentView">{doc.content}</div>}
+    </>;
+  }
+
   return <>
     {doc?.photo_url && <img className="knowledgeDocPhoto" src={doc.photo_url} alt={doc.title || 'Фото'} />}
     {doc?.content && <pre>{doc.content}</pre>}
@@ -2416,7 +2423,7 @@ function Knowledge({ user, admin = false }: any) {
       </div>
 
       {openDoc && <div className="modal" onClick={() => setOpenDoc(null)}>
-        <div className="modalCard mobileDocModal" onClick={(e) => e.stopPropagation()}>
+        <div className={cx("modalCard mobileDocModal", openDoc?.type === "text" && "mobilePlainTextDocModal")} onClick={(e) => e.stopPropagation()}>
           <div className="rowBetween">
             <h2>{openDoc.title}</h2>
             <button className="iconBtn" onClick={() => setOpenDoc(null)}>×</button>
@@ -2530,7 +2537,7 @@ function Knowledge({ user, admin = false }: any) {
       </div>)}</div>
     </Card>
 
-    {openDoc && <div className="modal" onClick={() => setOpenDoc(null)}><div className="modalCard" onClick={(e) => e.stopPropagation()}><div className="rowBetween"><h2>{openDoc.title}</h2><button className="iconBtn" onClick={() => setOpenDoc(null)}>×</button></div><KnowledgeDocumentBody doc={openDoc} />{openDoc.requires_acknowledgement && !openDoc.acknowledged && <Button onClick={() => ack(openDoc)}>Ознакомился</Button>}</div></div>}
+    {openDoc && <div className="modal" onClick={() => setOpenDoc(null)}><div className={cx("modalCard", openDoc?.type === "text" && "plainTextDocModal")} onClick={(e) => e.stopPropagation()}><div className="rowBetween"><h2>{openDoc.title}</h2><button className="iconBtn" onClick={() => setOpenDoc(null)}>×</button></div><KnowledgeDocumentBody doc={openDoc} />{openDoc.requires_acknowledgement && !openDoc.acknowledged && <Button onClick={() => ack(openDoc)}>Ознакомился</Button>}</div></div>}
     <Card title="Статистика ознакомления"><div className="list">{stats.map(s => <div className="listRow" key={s.id}><div><b>{s.title}</b><span>Просмотры: {s.views}</span></div><span className="badge active">Ознакомились: {s.acknowledgements}</span></div>)}</div></Card>
   </>;
 }

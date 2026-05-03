@@ -773,29 +773,40 @@ function normalizeTtkIngredientName(value) {
   return cleanTtkText(value)
     .replace(/\s+Т$/i, '')
     .replace(/^ТРЕБОВАНИЯ.*$/i, '')
+    .replace(/^РЕАЛИЗАЦИИ.*$/i, '')
     .replace(/^ИТОГО.*$/i, '')
     .trim();
 }
 
 function lineLooksLikeTtkName(line) {
   const text = normalizeTtkIngredientName(line);
-  if (!text || /^\d/.test(text)) return false;
-  if (/^(название|область|хранение|срок|органолептические|требования|итого|вес готового)/i.test(text)) return false;
+  if (!text || /^\d+[,.]?\d*\s*(?:кг|г|л|мл|шт|порц)?$/i.test(text)) return false;
+  if (/^(название|область|хранение|срок|органолептические|требования|реализации|итого|вес готового)/i.test(text)) return false;
   if (/^(№|наименование|ед\.?.*изм|брутто|вес|технология)/i.test(text)) return false;
   return /[а-яёa-z]/i.test(text);
+}
+
+function titleContinuationLooksLikeMeasure(line) {
+  return /^\d+\s*(?:мл|л|г|кг|шт|порц)(?:$|\s)/i.test(cleanTtkText(line));
 }
 
 function parseTtkTitle(source, lines) {
   const dateIndex = lines.findIndex(line => /\d{2}\.\d{2}\.\d{4}/.test(line));
   if (dateIndex >= 0) {
     const titleLines = [];
-    for (let i = dateIndex + 1; i < Math.min(lines.length, dateIndex + 6); i += 1) {
-      if (/^(Название на чеке|Область применения|Хранение|Срок Хранения|Органолептические)/i.test(lines[i])) break;
-      if (lineLooksLikeTtkName(lines[i])) titleLines.push(lines[i]);
+    const dateLine = lines[dateIndex];
+    const sameLineTitle = cleanTtkText(dateLine.replace(/^.*?\d{2}\.\d{2}\.\d{4}/, ''));
+    if (lineLooksLikeTtkName(sameLineTitle)) titleLines.push(sameLineTitle);
+    for (let i = dateIndex + 1; i < Math.min(lines.length, dateIndex + 7); i += 1) {
+      if (/^(Название на чеке|Область применения|Хранение|Срок Хранения|Органолептические|№\s*Наименование)/i.test(lines[i])) break;
+      if (lineLooksLikeTtkName(lines[i]) || (titleLines.length && titleContinuationLooksLikeMeasure(lines[i]))) titleLines.push(lines[i]);
     }
     const title = cleanTtkText(titleLines.join(' '));
     if (title) return title;
   }
+  const beforeHeader = source.split(/Технологическая карта\s*(?:№|No|Nº|N)/i)[0] || '';
+  const beforeTitle = beforeHeader.split('\n').map(line => cleanTtkText(line)).filter(lineLooksLikeTtkName).slice(-2).join(' ');
+  if (beforeTitle) return beforeTitle;
   const afterOrganoleptic = source.match(/Органолептические показатели:\s*([\s\S]*?)(?:NoНаименование|№\s*Наименование|Наименование продукта|Брутто в ед)/i)?.[1] || '';
   const fallback = afterOrganoleptic.split('\n').map(line => cleanTtkText(line)).filter(lineLooksLikeTtkName).slice(0, 2).join(' ');
   return cleanTtkText(fallback);
@@ -844,15 +855,108 @@ function addTtkIngredient(ingredients, name, unit, amounts) {
   }
 }
 
+function stripTtkTechnologyText(line) {
+  return cleanTtkText(String(line || '')
+    .replace(/ТРЕБОВАНИЯ\s+К\s+ОФОРМЛЕНИЮ[\s\S]*$/i, '')
+    .replace(/РЕАЛИЗАЦИИ[\s\S]*$/i, ''));
+}
+
+function lineIsTtkNoise(line) {
+  const text = cleanTtkText(line);
+  if (!text) return true;
+  if (/^(Название на чеке|Область применения|Хранение|Срок Хранения|Органолептические|Технологическая карта)/i.test(text)) return true;
+  if (/^(№|Наименование продукта|Ед\.?\s*изм|Брутто|Вес брутто|Вес нетто|Вес готового|Технология приготовления)/i.test(text)) return true;
+  if (/^(ТРЕБОВАНИЯ|РЕАЛИЗАЦИИ|ИТОГО|вес готового блюда)/i.test(text)) return true;
+  return false;
+}
+
+function lineIsIngredientContinuation(line) {
+  const text = stripTtkTechnologyText(line);
+  if (!text || lineIsTtkNoise(text)) return false;
+  if (/^\d+\s+/.test(text) || /^\d+[,.]\d+/.test(text)) return false;
+  return /[а-яёa-z\"«»()-]/i.test(text);
+}
+
+function collectTtkNameAroundLine(rawLines, index, inlineName) {
+  const before = [];
+  for (let i = index - 1; i >= Math.max(0, index - 4); i -= 1) {
+    const candidate = stripTtkTechnologyText(rawLines[i]);
+    if (!lineIsIngredientContinuation(candidate)) break;
+    before.unshift(candidate);
+  }
+
+  const after = [];
+  for (let i = index + 1; i < Math.min(rawLines.length, index + 4); i += 1) {
+    const candidate = stripTtkTechnologyText(rawLines[i]);
+    if (!lineIsIngredientContinuation(candidate)) break;
+    after.push(candidate);
+  }
+
+  return normalizeTtkIngredientName([...before, inlineName, ...after].filter(Boolean).join(' '));
+}
+
+function parseTtkRowsFromLayout(source) {
+  const rawLines = String(source || '').replace(/\r/g, '').split('\n');
+  const ingredients = [];
+  const amountSequence = '((?:\\d+[,.]\\d+\\s+){1,4}\\d+[,.]\\d+)';
+  const rowPattern = new RegExp('^\\s*(\\d+)\\s+(.*?)\\s+(кг|г|л|мл|шт\\.?|порц\\.?)\\s+' + amountSequence + '\\b', 'i');
+  const compactRowPattern = new RegExp('^\\s*(\\d+)\\s+(кг|г|л|мл|шт\\.?|порц\\.?)\\s+' + amountSequence + '\\b', 'i');
+
+  for (let i = 0; i < rawLines.length; i += 1) {
+    const raw = rawLines[i];
+    const cleaned = stripTtkTechnologyText(raw);
+    if (!cleaned || /^ИТОГО/i.test(cleaned)) continue;
+    const match = cleaned.match(rowPattern);
+    const compactMatch = match ? null : cleaned.match(compactRowPattern);
+    if (!match && !compactMatch) continue;
+
+    const inlineName = normalizeTtkIngredientName(match ? match[2] : '');
+    const unit = match ? match[3] : compactMatch[2];
+    const amountText = match ? match[4] : compactMatch[3];
+    const name = collectTtkNameAroundLine(rawLines, i, inlineName);
+    const amounts = amountText.match(/\d+[,.]\d+/g) || [];
+    addTtkIngredient(ingredients, name, unit, amounts);
+  }
+
+  return ingredients;
+}
+
+async function renderPdfPageAsLayoutRows(pageData) {
+  const textContent = await pageData.getTextContent({ normalizeWhitespace: false, disableCombineTextItems: false });
+  const rows = [];
+  const tolerance = 2.6;
+  const items = (textContent.items || [])
+    .map((item) => ({
+      text: cleanTtkText(item.str || ''),
+      x: Number(item.transform?.[4] || 0),
+      y: Number(item.transform?.[5] || 0)
+    }))
+    .filter((item) => item.text);
+
+  items.forEach((item) => {
+    let row = rows.find((candidate) => Math.abs(candidate.y - item.y) <= tolerance);
+    if (!row) {
+      row = { y: item.y, items: [] };
+      rows.push(row);
+    }
+    row.items.push(item);
+  });
+
+  return rows
+    .sort((a, b) => b.y - a.y)
+    .map((row) => row.items.sort((a, b) => a.x - b.x).map((item) => item.text).join(' '))
+    .join('\n');
+}
+
 function parseTtkBlock(block) {
   const source = String(block || '').replace(/\r/g, '');
   const number = cleanTtkText(source.match(/Технологическая карта\s*(?:№|No|Nº|N)\s*(\d+)/i)?.[1] || source.match(/^\s*(\d+)/)?.[1] || '');
   const date = cleanTtkText(source.match(/(\d{2}\.\d{2}\.\d{4})/)?.[1] || '');
   const lines = source.split('\n').map(line => cleanTtkText(line)).filter(Boolean);
   const title = parseTtkTitle(source, lines) || (number ? `ТТК № ${number}` : 'ТТК');
-  const ingredients = [];
+  const ingredients = parseTtkRowsFromLayout(source);
 
-  for (let i = 0; i < lines.length; i += 1) {
+  if (!ingredients.length) for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i];
 
     const fullRow = line.match(/^(\d+)\s+(.+?)\s+(кг|г|л|мл|шт\.?|порц\.?)\s+(.+)$/i);
@@ -878,10 +982,17 @@ function parseTtkBlock(block) {
 async function parseTtkPdfBuffer(buffer) {
   const mod = await import('pdf-parse');
   const pdfParse = mod.default || mod;
-  const parsed = await pdfParse(buffer);
+  let parsed;
+  try {
+    parsed = await pdfParse(buffer, { pagerender: renderPdfPageAsLayoutRows });
+  } catch (error) {
+    parsed = await pdfParse(buffer);
+  }
   const text = parsed.text || '';
   const parts = text.split(/(?=Технологическая карта\s*(?:№|No|Nº|N)\s*\d+)/i).map(part => part.trim()).filter(Boolean);
-  const cards = (parts.length ? parts : [text]).map(parseTtkBlock).filter(card => card.title || card.ingredients.length);
+  const cards = (parts.length ? parts : [text])
+    .map(parseTtkBlock)
+    .filter(card => card.number || card.ingredients.length);
   return { text, cards };
 }
 
@@ -2344,7 +2455,7 @@ app.post('/api/admin/knowledge/documents', auth, ensureRestaurantActive, adminOn
 
   const uploadedName = String(storedPdf?.filename || file?.file_name || file?.name || '').trim();
   const fallbackTitle = uploadedName ? path.basename(uploadedName, path.extname(uploadedName)) : '';
-  const cleanTitle = String(title || fallbackTitle).trim();
+  const cleanTitle = String(title || (docType === 'ttk' ? '' : fallbackTitle)).trim();
   const common = {
     restaurant_id: req.user.restaurant_id,
     category_id,
@@ -2422,7 +2533,7 @@ app.patch('/api/admin/knowledge/documents/:id', auth, ensureRestaurantActive, ad
 
   const uploadedName = String(storedPdf?.filename || file?.file_name || file?.name || '').trim();
   const fallbackTitle = uploadedName ? path.basename(uploadedName, path.extname(uploadedName)) : '';
-  const cleanTitle = String(title || fallbackTitle).trim();
+  const cleanTitle = String(title || (nextType === 'ttk' ? '' : fallbackTitle)).trim();
 
   doc.category_id = nextCategoryId;
   doc.type = nextType;
