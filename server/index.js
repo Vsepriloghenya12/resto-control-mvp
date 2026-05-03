@@ -808,6 +808,31 @@ function normalizeTtkTitle(value) {
     .trim();
 }
 
+
+function lineLooksLikeTtkTitleMeasure(value) {
+  return /^\d+\s*(?:мл|л|г|кг|шт|порц)\b/i.test(cleanTtkText(value));
+}
+
+function normalizeTtkContentTitleLines(content) {
+  const lines = String(content || '').split('\n');
+  const out = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    const cleaned = cleanTtkText(line);
+    if (/^Блюдо\/напиток:/i.test(cleaned)) {
+      const pieces = [cleaned.replace(/^Блюдо\/напиток:\s*/i, '')];
+      while (i + 1 < lines.length && lineLooksLikeTtkTitleMeasure(lines[i + 1])) {
+        i += 1;
+        pieces.push(cleanTtkText(lines[i]));
+      }
+      out.push(`Блюдо/напиток: ${normalizeTtkTitle(pieces.join(' '))}`);
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join('\n');
+}
+
 function collectTtkTitleFromLines(lines) {
   const titleLines = [];
   for (const line of lines) {
@@ -1129,14 +1154,14 @@ function sanitizeTtkDocumentForResponse(doc) {
   const cleanIngredients = Array.isArray(doc.ingredients)
     ? doc.ingredients.filter(item => item?.name && !isTtkIngredientNameNoise(item.name))
     : [];
-  const cleanContent = String(doc.content || '')
+  const cleanContent = normalizeTtkContentTitleLines(String(doc.content || ''))
     .split('\n')
     .filter(line => {
       const text = cleanTtkText(line.replace(/^[-–—]\s*/, '').split(':')[0]);
       return !isTtkIngredientNameNoise(text);
     })
     .join('\n');
-  return { ...doc, ingredients: cleanIngredients, content: cleanContent };
+  return { ...doc, title: normalizeTtkTitle(doc.title || ''), ingredients: cleanIngredients, content: cleanContent };
 }
 function makeAssignmentsForTask(task) {
   const creator = db.users.find(user => user.id === task.created_by && user.restaurant_id === task.restaurant_id);

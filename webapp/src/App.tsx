@@ -2161,6 +2161,78 @@ function Inventory({ user, admin = false }: any) {
   </>;
 }
 
+function cleanKnowledgeDocumentLine(value: any) {
+  return String(value || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function normalizeKnowledgeTtkTitle(value: any) {
+  return cleanKnowledgeDocumentLine(value)
+    .replace(/^Блюдо\/напиток:\s*/i, '')
+    .replace(/^Название на чеке:\s*/i, '')
+    .replace(/(\d+)\s+(мл|л|г|кг|шт|порц)\b/gi, '$1$2')
+    .replace(/\s+(\d+(?:мл|л|г|кг|шт|порц)\b)/gi, '\u00a0$1')
+    .trim();
+}
+
+function isTtkTitleContinuation(line: string) {
+  return /^\d+\s*(?:мл|л|г|кг|шт|порц)\b/i.test(cleanKnowledgeDocumentLine(line));
+}
+
+function getTtkTitleFromDocument(doc: any) {
+  const lines = String(doc?.content || '').split('\n').map(cleanKnowledgeDocumentLine).filter(Boolean);
+  const titleIndex = lines.findIndex(line => /^Блюдо\/напиток:/i.test(line));
+  if (titleIndex >= 0) {
+    const pieces = [lines[titleIndex].replace(/^Блюдо\/напиток:\s*/i, '')];
+    for (let i = titleIndex + 1; i < Math.min(lines.length, titleIndex + 4); i += 1) {
+      if (isTtkTitleContinuation(lines[i])) pieces.push(lines[i]);
+      else break;
+    }
+    const title = normalizeKnowledgeTtkTitle(pieces.join(' '));
+    if (title) return title;
+  }
+  return normalizeKnowledgeTtkTitle(doc?.title || 'ТТК');
+}
+
+function buildPlainKnowledgeText(doc: any) {
+  const rawContent = String(doc?.content || '').trim();
+
+  if (doc?.type === 'ttk') {
+    const contentLines = rawContent.split('\n').map(cleanKnowledgeDocumentLine).filter(Boolean);
+    const title = getTtkTitleFromDocument(doc);
+    const headerLine = contentLines.find(line => /^Технологическая карта/i.test(line));
+    const dateLine = contentLines.find(line => /^Дата:/i.test(line));
+    const ingredients = Array.isArray(doc?.ingredients) ? doc.ingredients : [];
+    const textLines: string[] = [];
+
+    if (headerLine) textLines.push(headerLine);
+    if (dateLine) textLines.push(dateLine);
+    if (title) textLines.push(title);
+    if (textLines.length) textLines.push('');
+    textLines.push('Состав');
+
+    if (ingredients.length > 0) {
+      ingredients.forEach((item: any, index: number) => {
+        const name = cleanKnowledgeDocumentLine(item?.name);
+        const unit = cleanKnowledgeDocumentLine(item?.unit);
+        const qty = cleanKnowledgeDocumentLine(item?.display_qty || item?.qty);
+        if (name && qty) textLines.push(`${index + 1}. ${name} — ${qty}${unit ? ` ${unit}` : ''}`);
+      });
+    } else {
+      const rawIngredientLines = contentLines
+        .filter(line => /^[-–—]\s+/.test(line))
+        .map(line => line.replace(/^[-–—]\s+/, '').trim());
+      if (rawIngredientLines.length) rawIngredientLines.forEach((line, index) => textLines.push(`${index + 1}. ${line}`));
+      else textLines.push('Состав не удалось извлечь автоматически. Проверьте исходный PDF или обновите ТТК.');
+    }
+
+    return textLines.join('\n');
+  }
+
+  if (rawContent) return rawContent;
+  if (doc?.file_url) return `Открыть документ: ${doc.file_url}`;
+  return 'Текст документа не заполнен';
+}
+
 function KnowledgeDocumentBody({ doc }: { doc: any }) {
   const ingredients = Array.isArray(doc?.ingredients) ? doc.ingredients : [];
   const contentLines = String(doc?.content || '').split('\n').map(line => line.trim()).filter(Boolean);
@@ -2199,14 +2271,14 @@ function KnowledgeDocumentBody({ doc }: { doc: any }) {
 }
 
 
-function KnowledgeDocumentModal({ doc, onClose, onAck }: { doc: any; onClose: () => void; onAck: (doc: any) => void }) {
+function KnowledgeDocumentModal({ doc, onClose, onAck, plainMobile = false }: { doc: any; onClose: () => void; onAck: (doc: any) => void; plainMobile?: boolean }) {
   const rawContent = String(doc?.content || '').trim();
-  const isPlainText = doc?.type === 'text' || (!!rawContent && !doc?.file_url && doc?.type !== 'ttk');
+  const isPlainText = doc?.type === 'text' || doc?.type === 'ttk' || (plainMobile && !!rawContent) || (!!rawContent && !doc?.file_url);
 
   if (isPlainText) {
     return <div className="plainTextDocOverlay" onClick={onClose}>
       <button className="plainTextDocClose" onClick={onClose} aria-label="Закрыть документ">×</button>
-      <pre className="plainTextDocumentOnly" onClick={(e) => e.stopPropagation()}>{rawContent || 'Текст документа не заполнен'}</pre>
+      <pre className="plainTextDocumentOnly" onClick={(e) => e.stopPropagation()}>{buildPlainKnowledgeText(doc)}</pre>
       {doc.requires_acknowledgement && !doc.acknowledged && <button className="plainTextAckButton" type="button" onClick={(e) => { e.stopPropagation(); onAck(doc); }}>Ознакомился</button>}
     </div>;
   }
@@ -2446,7 +2518,7 @@ function Knowledge({ user, admin = false }: any) {
         </div>}
       </div>
 
-      {openDoc && <KnowledgeDocumentModal doc={openDoc} onClose={() => setOpenDoc(null)} onAck={ack} />}
+      {openDoc && <KnowledgeDocumentModal doc={openDoc} onClose={() => setOpenDoc(null)} onAck={ack} plainMobile />}
     </>;
   }
 
