@@ -1191,9 +1191,15 @@ input[type='checkbox'] {
   margin: 0 0 20px;
 }
 
-.openShiftPanel h3 {
-  margin: 0 0 8px;
-  font-size: 1rem;
+.openShiftPanel h3,
+.employeeMetricsPlain h3 {
+  margin: 0 0 14px;
+  color: var(--text-primary);
+  font-size: 1.32rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-align: center;
 }
 
 .openShiftList {
@@ -1282,11 +1288,6 @@ input[type='checkbox'] {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   padding: 12px 0 18px;
-}
-
-.employeeMetricsPlain h3 {
-  margin: 0 0 8px;
-  font-size: 1rem;
 }
 
 .employeeMetricsList {
@@ -2202,6 +2203,26 @@ input[type='checkbox'] {
   margin-top: 20px;
 }
 
+.compactInventoryOwnerGrid {
+  grid-template-columns: 1fr;
+  gap: 18px;
+}
+
+.inventorySectionBlock {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.inventorySectionBlock .rowBetween {
+  min-height: 32px;
+  padding: 0;
+}
+
+.inventorySectionBlock .rowBetween b {
+  font-size: 0.95rem;
+}
+
 .inventorySectionCard {
   gap: 14px;
 }
@@ -2209,18 +2230,29 @@ input[type='checkbox'] {
 .inventorySectionList,
 .inventoryPreviewList {
   display: grid;
-  gap: 10px;
+  gap: 0;
+}
+
+.inventorySectionList {
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
 }
 
 .inventorySectionItem {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 74px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.025);
+  min-height: 42px;
+  padding: 8px 0;
+  border: 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 0;
+  background: transparent;
+}
+
+.inventorySectionItem:last-child {
+  border-bottom: 0;
 }
 
 .inventorySectionButton {
@@ -2230,32 +2262,49 @@ input[type='checkbox'] {
 }
 
 .inventorySectionButton:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(34, 197, 94, 0.18);
-  transform: translateY(-1px);
+  background: transparent;
+  transform: none;
 }
 
 .inventorySectionItem div {
-  display: grid;
-  gap: 4px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
   min-width: 0;
 }
 
+.inventorySectionButton:hover strong {
+  color: #bbf7d0;
+}
+
 .inventorySectionItem strong {
-  font-size: 0.95rem;
+  min-width: 0;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .inventorySectionItem span,
 .inventoryPreviewList span {
   color: var(--text-secondary);
-  font-size: 0.84rem;
-  line-height: 1.5;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.inventorySectionItem span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .inventorySectionItem em {
   color: var(--text-soft);
+  text-align: right;
   font-style: normal;
   white-space: nowrap;
+  font-size: 0.82rem;
 }
 
 .inventoryRunRow {

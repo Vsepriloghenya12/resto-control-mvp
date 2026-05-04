@@ -884,20 +884,6 @@ function AdminOverview({ mode = 'owner', onNavigate }: { mode?: 'owner' | 'manag
     {managerMode && <OpenShiftEmployees shifts={data.open_shifts || []} rows={data.employee_metrics || []} />}
     <OverviewEmployeeMetrics rows={data.employee_metrics || []} />
 
-    {managerMode && <Card title="Пульт смены" right={<span className="badge active">Управление рестораном</span>}>
-      <div className="overviewHero">
-        <div className="overviewHeroCopy">
-          <strong>Смена и настройки под контролем</strong>
-          <p>Менеджер ведёт сотрудников, чек-листы, номенклатуру, залы, базу знаний и ежедневную операционку.</p>
-        </div>
-        <div className="overviewHighlights">
-          <div><span className="muted">Открытые заявки</span><b>{data.requests_open || 0}</b></div>
-          <div><span className="muted">Сотрудники</span><b>{employeesValue}</b></div>
-          <div><span className="muted">Задачи в работе</span><b>{data.tasks_open}</b></div>
-        </div>
-      </div>
-    </Card>}
-    {managerMode && <AdminProblemDashboard onNavigate={onNavigate} />}
   </>;
 }
 
@@ -2182,8 +2168,8 @@ function Inventory({ user, admin = false }: any) {
           </form>
           {productMsg && <div className={productMsg.includes('добавлен') || productMsg.includes('обновл') || productMsg.includes('удал') ? 'notice' : 'error'}>{productMsg}</div>}
 
-          <div className="inventoryOwnerGrid">
-            {groupedProducts.map(section => <div className="miniCard inventorySectionCard" key={section.id}>
+          <div className="inventoryOwnerGrid compactInventoryOwnerGrid">
+            {groupedProducts.map(section => <section className="inventorySectionBlock" key={section.id}>
               <div className="rowBetween">
                 <b>{section.title}</b>
                 <span className="badge">{section.products.length} поз.</span>
@@ -2198,7 +2184,7 @@ function Inventory({ user, admin = false }: any) {
                   <em>{product.unit}</em>
                 </button>)}
               </div>
-            </div>)}
+            </section>)}
           </div>
         </Card>
 
