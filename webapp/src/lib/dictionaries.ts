@@ -99,7 +99,7 @@ export const techRequestStatuses: Record<string, string> = {
 
 export const entityTypeLabels: Record<string, string> = {
   task: 'Задача',
-  tech_request: 'Техзаявка',
+  tech_request: 'Проблема',
   product_request: 'Заявка на продукты',
   checklist_run: 'Выполнение чек-листа',
   booking: 'Бронь',
@@ -111,7 +111,7 @@ export const entityTypeLabels: Record<string, string> = {
 
 export const problemTypeLabels: Record<string, string> = {
   task: 'Задача',
-  tech_request: 'Техзаявка',
+  tech_request: 'Проблема',
   product_request: 'Заявка',
   checklist_run: 'Чек-лист',
   booking: 'Бронь',

@@ -24,7 +24,6 @@ import {
 import { Field, Select, Textarea, Empty } from './components/form-controls';
 import { MobileSheetModal } from './components/mobile-sheet-modal';
 import { Bookings } from './modules/bookings/Bookings';
-import { Requests } from './modules/requests/Requests';
 import { Tasks } from './modules/tasks/Tasks';
 import { cx } from './lib/cx';
 import {
@@ -34,7 +33,6 @@ import {
   executableRoles,
   inventorySections,
   problemTypeLabels,
-  requestStatuses,
   roles,
   seniorRoles,
   manageableRolesFor,
@@ -357,15 +355,14 @@ function AdminProblemDashboard({ onNavigate }: { onNavigate?: (tab: string) => v
   if (!data) return <Card title="Проблемы"><Empty text="Загружаем проблемный дашборд" /></Card>;
   const metrics = data.metrics || {};
   function openProblem(problem: any) {
-    if (problem.type === 'product_request') onNavigate?.('requests');
-    else if (problem.type === 'tech_request' || problem.type === 'task') onNavigate?.('tasks');
+    if (problem.type === 'tech_request' || problem.type === 'task') onNavigate?.('tasks');
     else if (problem.type === 'checklist_run') onNavigate?.('checklists');
   }
   return <><Card title="Пульт контроля" right={<Button kind="soft" onClick={() => download('/api/admin/reports/operations.csv', 'operations-report.csv')}>Экспорт CSV</Button>}>
     <div className="problemMetrics">
       <button type="button" onClick={() => onNavigate?.('checklists')}><strong>{metrics.open_shifts || 0}</strong><span>смен сейчас</span></button>
       <button type="button" onClick={() => onNavigate?.('tasks')}><strong>{metrics.overdue_tasks || 0}</strong><span>просрочено</span></button>
-      <button type="button" onClick={() => onNavigate?.('tasks')}><strong>{metrics.open_tech_requests || 0}</strong><span>техзаявок</span></button>
+      <button type="button" onClick={() => onNavigate?.('tasks')}><strong>{metrics.open_tech_requests || 0}</strong><span>проблем</span></button>
       <button type="button" onClick={() => onNavigate?.('knowledge')}><strong>{metrics.pending_acknowledgements || 0}</strong><span>ознакомлений ждут</span></button>
     </div>
     <div className="problemList">
@@ -408,7 +405,7 @@ function AuthScreen({ onLogin, error, setError }: any) {
       <div className="authBrandLockup">
         <img className="authLogoImage" src={brandLogoSrc} alt="Resto Control" />
       </div>
-      <p className="authLead">Чек-листы, заявки, инвентаризация, задачи и сервис-бук для ресторанов.</p>
+      <p className="authLead">Чек-листы, инвентаризация, задачи, проблемы и сервис-бук для ресторанов.</p>
       <div className="switcher">
         <button className={view === 'login' ? 'active' : ''} onClick={() => switchView('login')}>Войти</button>
         <button className={view === 'register' ? 'active' : ''} onClick={() => switchView('register')}>14 дней бесплатно</button>
@@ -560,10 +557,9 @@ function RestaurantWorkspace({
   const modal: { title: string; text?: string; details?: ReactNode; actions: { label: string; kind?: string; onClick: () => void }[] } | null = modalKind === 'notifications'
     ? {
         title: 'Центр действий',
-        text: 'Быстро переходите к ключевым разделам кабинета: задачам, заявкам и чек-листам.',
+        text: 'Быстро переходите к ключевым разделам кабинета: задачам, проблемам и чек-листам.',
         actions: [
           { label: 'Открыть задачи', kind: 'primary', onClick: () => setActive('tasks') },
-          { label: 'Открыть заявки', onClick: () => setActive('requests') },
           { label: 'Открыть чек-листы', onClick: () => setActive('checklists') }
         ]
       }
@@ -592,8 +588,7 @@ function RestaurantWorkspace({
   const mobileNavItems: MobileNavItem[] = [
     { id: 'overview', title: 'Обзор', icon: 'overview', active: active === 'overview', onClick: () => setActive('overview') },
     { id: 'bookings', title: 'Брони', icon: 'bookings', active: active === 'bookings', onClick: () => setActive('bookings') },
-    { id: 'requests', title: 'Заявки', icon: 'requests', active: active === 'requests', onClick: () => setActive('requests') },
-    { id: 'tasks', title: 'Задачи', icon: 'tasks', active: active === 'tasks', onClick: () => setActive('tasks') },
+    { id: 'tasks', title: 'Проблемы', icon: 'tasks', active: active === 'tasks', onClick: () => setActive('tasks') },
     { id: 'knowledge', title: 'База', icon: 'knowledge', active: active === 'knowledge', onClick: () => setActive('knowledge') }
   ];
 
@@ -609,13 +604,11 @@ function RestaurantWorkspace({
   const mobileCreateItems: MobileActionItem[] = managerMode
     ? [
       { id: 'bookings', title: 'Открыть брони', subtitle: 'Схема зала и посадка гостей', icon: 'bookings', onClick: () => setActive('bookings') },
-      { id: 'requests', title: 'Открыть заявки', subtitle: 'Приёмка и комментарии по заказам', icon: 'requests', onClick: () => setActive('requests') },
-      { id: 'tasks', title: 'Создать задачу', subtitle: 'Поставить задачу или обработать техзаявку', icon: 'tasks', onClick: () => setActive('tasks') },
+      { id: 'tasks', title: 'Создать задачу', subtitle: 'Поставить задачу или обработать проблему', icon: 'tasks', onClick: () => setActive('tasks') },
       { id: 'users', title: 'Сотрудники', subtitle: 'Доступы и роли команды', icon: 'users', onClick: () => setActive('users') }
     ]
     : [
       { id: 'users', title: 'Сотрудники', subtitle: 'Добавить и управлять доступами', icon: 'users', onClick: () => setActive('users') },
-      { id: 'requests', title: 'Открыть заявки', subtitle: 'Закупки, приёмка и комментарии', icon: 'requests', onClick: () => setActive('requests') },
       { id: 'inventory', title: 'Номенклатура', subtitle: 'Товары, бланки и Excel-отчёты', icon: 'inventory', onClick: () => setActive('inventory') }
     ];
 
@@ -728,7 +721,7 @@ function SuperAdmin({ user, onLogout }: any) {
           <div className="rowBetween"><b>{r.name}</b><span className={`badge ${r.computed_status}`}>{subscriptionLabel(r.computed_status)}</span></div>
           <p>{r.city || 'Город не указан'} · сотрудников: {r.users_count}</p>
           <p>Trial до: {fmtDate(r.trial_ends_at)} · осталось {daysLeft(r.trial_ends_at)} дн.</p>
-          <p>Заявки: {r.requests_count} · чек-листы: {r.checklist_runs_count}</p>
+          <p>Чек-листы: {r.checklist_runs_count}</p>
           <div className="actions"><Button kind="soft" onClick={() => extend(r.id, 30)}>+30 дней</Button><Button kind="danger" onClick={() => block(r.id)}>Блок</Button></div>
         </div>)}
       </div>
@@ -758,15 +751,13 @@ function RestaurantAdmin({ user, restaurant, onLogout }: any) {
     { id: 'checklists', title: 'Чек-листы' },
     { id: 'inventory', title: 'Номенклатура' },
     { id: 'bookings', title: 'Брони / залы' },
-    { id: 'requests', title: 'Заявки' },
-    { id: 'tasks', title: 'Задачи' },
+    { id: 'tasks', title: 'Проблемы / задачи' },
     { id: 'knowledge', title: 'База знаний' }
   ]);
   const section = useMemo(() => {
     if (tab === 'overview') return <AdminOverview mode={user.role === 'manager' ? 'manager' : 'owner'} onNavigate={setTab} />;
     if (tab === 'users') return <UsersAdmin user={user} />;
     if (tab === 'checklists') return <Checklists user={user} admin />;
-    if (tab === 'requests') return <Requests user={user} admin />;
     if (tab === 'bookings') return <Bookings user={user} admin />;
     if (tab === 'inventory') return <Inventory user={user} admin />;
     if (tab === 'tasks') return <Tasks user={user} admin />;
@@ -815,7 +806,6 @@ function AdminOverview({ mode = 'owner', onNavigate }: { mode?: 'owner' | 'manag
   const employeesValue = employeeLimit ? `${data.users} из ${employeeLimit}` : data.users;
   const summary = data.summary || {};
   const checklistSummary = summary.checklists || {};
-  const requestSummary = summary.requests || {};
   const taskSummary = summary.tasks || {};
   const documentSummary = summary.documents || {};
   const inventorySummary = summary.inventories || {};
@@ -847,12 +837,6 @@ function AdminOverview({ mode = 'owner', onNavigate }: { mode?: 'owner' | 'manag
           { value: checklistSummary.not_done, tone: 'todo' }
         )}
         onClick={() => onNavigate?.('checklists')}
-      />
-      <StatCard
-        icon="requests"
-        title="Заявки"
-        value={statNumber(requestSummary.new, 'todo')}
-        onClick={() => onNavigate?.('requests')}
       />
       <StatCard
         icon="tasks"
@@ -946,8 +930,6 @@ function EmployeeMetricsExpanded({ row }: { row: any }) {
   const inventoryDetails = row.inventories?.details || [];
   const readyInventories = inventoryDetails.filter((item: any) => item.status === 'ready');
   const notReadyInventories = inventoryDetails.filter((item: any) => item.status !== 'ready');
-  const requestDetails = row.requests?.details || [];
-  const openRequests = requestDetails.filter((request: any) => !['received', 'done', 'cancelled'].includes(request.status));
 
   return <div className="employeeMetricsDetails detailed">
     <div className="employeeDetailsSummaryGrid">
@@ -1012,13 +994,6 @@ function EmployeeMetricsExpanded({ row }: { row: any }) {
         </article>)}
       </EmployeeDetailList>
 
-      <EmployeeDetailList title="Заявки сотрудника" count={requestDetails.length} empty="Сотрудник ещё не создавал заявки">
-        {requestDetails.slice(0, 8).map((request: any) => <article className="employeeDetailCard compact" key={request.id}>
-          <div className="employeeDetailCardHead"><strong>{departments[request.department] || request.department || 'Заявка'}</strong><span className={cx('badge', request.status)}>{requestStatuses[request.status] || request.status}</span></div>
-          <p>{request.items_count || 0} позиций · {fmtDate(request.created_at)}</p>
-        </article>)}
-        {openRequests.length > 0 && <p className="employeeDetailHint">Открытых заявок: {openRequests.length}</p>}
-      </EmployeeDetailList>
     </div>
   </div>;
 }
@@ -1121,7 +1096,6 @@ function OverviewEmployeeMetrics({ rows }: { rows: any[] }) {
               <span>{roles[row.user?.role] || row.user?.role || 'Роль не указана'}</span>
             </div>
             <span className="employeeMetricValue" data-label="ЧЛ">{metricPair(row.checklists?.done, row.checklists?.not_done)}</span>
-            <span className="employeeMetricValue" data-label="Заявки">{metricNumber(row.requests?.new, 'todo')}</span>
             <span className="employeeMetricValue wide" data-label="Задачи">{taskNumbers(row.tasks)}</span>
             <span className="employeeMetricValue" data-label="Док">{metricNumber(row.documents?.pending, 'todo')}</span>
             <span className="employeeMetricValue" data-label="Инв">{metricPair(row.inventories?.ready, row.inventories?.not_ready)}</span>
@@ -1220,12 +1194,11 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
   const [tab, setTab] = useState<Tab>('today');
   const [notificationCount, setNotificationCount] = useState(0);
   const [openTechComposer, setOpenTechComposer] = useState(false);
-  const [openRequestComposer, setOpenRequestComposer] = useState(false);
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
   const isSenior = seniorRoles.includes(user.role);
   const tabs = withIcons([
-    { id: 'today', title: 'Сегодня' }, { id: 'checklists', title: 'Чек-лист' }, { id: 'bookings', title: 'Брони' }, { id: 'requests', title: 'Заявки' },
-    { id: 'inventory', title: 'Инвент.' }, { id: 'tasks', title: 'Задачи' }, { id: 'knowledge', title: 'База' },
+    { id: 'today', title: 'Сегодня' }, { id: 'checklists', title: 'Чек-лист' }, { id: 'bookings', title: 'Брони' },
+    { id: 'inventory', title: 'Инвент.' }, { id: 'tasks', title: 'Проблемы / задачи' }, { id: 'knowledge', title: 'База' },
     ...(isSenior ? [{ id: 'admin-checklists', title: 'Редактор ЧЛ' }, { id: 'admin-tasks', title: 'Задачи отдела' }] : [])
   ]);
 
@@ -1244,7 +1217,7 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     { id: 'today', title: 'Обзор', icon: 'overview', active: tab === 'today', onClick: () => setTab('today') },
     { id: 'checklists', title: 'Чек-листы', icon: 'checklists', active: tab === 'checklists', onClick: () => setTab('checklists') },
     { id: 'bookings', title: 'Брони', icon: 'bookings', active: tab === 'bookings', onClick: () => setTab('bookings') },
-    { id: 'tasks', title: 'Задачи', icon: 'tasks', active: tab === 'tasks', onClick: () => setTab('tasks') },
+    { id: 'tasks', title: 'Проблемы', icon: 'tasks', active: tab === 'tasks', onClick: () => setTab('tasks') },
     ...(isSenior ? [{ id: 'admin-tasks', title: 'Отдел', icon: 'users' as IconName, active: tab === 'admin-tasks' || tab === 'admin-checklists', onClick: () => setTab('admin-tasks') }] : [])
   ];
 
@@ -1252,9 +1225,8 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     { id: 'today', title: 'Обзор', subtitle: 'Главная сводка по смене', icon: 'overview', onClick: () => setTab('today') },
     { id: 'checklists', title: 'Чек-листы', subtitle: 'Открытие, закрытие и фотоотчёты', icon: 'checklists', onClick: () => setTab('checklists') },
     { id: 'bookings', title: 'Брони', subtitle: 'Занятость столов и бронь гостей', icon: 'bookings', onClick: () => setTab('bookings') },
-    { id: 'requests', title: 'Заявки', subtitle: 'Запросы по товарам и сервису', icon: 'requests', onClick: () => setTab('requests') },
     { id: 'inventory', title: 'Инвентаризация', subtitle: 'Остатки и позиции отдела', icon: 'inventory', onClick: () => setTab('inventory') },
-    { id: 'tasks', title: 'Задачи', subtitle: 'Личные задачи', icon: 'tasks', onClick: () => setTab('tasks') },
+    { id: 'tasks', title: 'Проблемы и задачи', subtitle: 'Личные задачи и обращения менеджеру', icon: 'tasks', onClick: () => setTab('tasks') },
     { id: 'knowledge', title: 'База знаний', subtitle: 'Инструкции и сервис-бук', icon: 'knowledge', onClick: () => setTab('knowledge') },
     ...(isSenior ? [
       { id: 'admin-checklists', title: 'Редактор чек-листов', subtitle: 'Шаблоны своего подразделения', icon: 'checklists' as IconName, onClick: () => setTab('admin-checklists') },
@@ -1263,11 +1235,7 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
   ];
 
   const mobileCreateItems: MobileActionItem[] = [
-    { id: 'request', title: 'Создать заявку', subtitle: 'Заявка по товарам отдела', icon: 'requests', onClick: () => {
-      setTab('requests');
-      setOpenRequestComposer(true);
-    } },
-    { id: 'tech', title: 'Создать техзаявку', subtitle: 'Проблема для менеджера', icon: 'support', onClick: () => {
+    { id: 'tech', title: 'Сообщить о проблеме', subtitle: 'Поломка или сервисная ситуация', icon: 'support', onClick: () => {
       setTab('tasks');
       setOpenTechComposer(true);
     } }
@@ -1304,7 +1272,6 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     {tab === 'today' && <Today user={user} onOpenTasks={() => setTab('tasks')} onOpenChecklists={() => setTab('checklists')} onOpenBookings={() => setTab('bookings')} onOpenInventory={() => setTab('inventory')} />}
     {tab === 'checklists' && <Checklists user={user} />}
     {tab === 'bookings' && <Bookings user={user} />}
-    {tab === 'requests' && <Requests user={user} openComposer={openRequestComposer} onCloseComposer={() => setOpenRequestComposer(false)} />}
     {tab === 'inventory' && <Inventory user={user} />}
     {tab === 'tasks' && <Tasks user={user} showTechComposer={openTechComposer} onCloseComposer={() => setOpenTechComposer(false)} />}
     {tab === 'admin-checklists' && <Checklists user={user} admin />}
@@ -1336,14 +1303,16 @@ function Today({
       api('/api/checklists/templates').catch(() => []),
       api('/api/bookings').catch(() => []),
       api('/api/tasks').catch(() => []),
-      api('/api/inventory/templates').catch(() => [])
-    ]).then(([checklists, bookings, tasks, templates]) => {
+      api('/api/inventory/templates').catch(() => []),
+      api('/api/tech-requests').catch(() => [])
+    ]).then(([checklists, bookings, tasks, templates, techRequests]) => {
       if (!active) return;
       setOverview({
         checklists,
         bookings,
         tasks,
-        templates
+        templates,
+        techRequests
       });
     });
 
@@ -1366,7 +1335,12 @@ function Today({
   const openTasks = overview.tasks.filter((task: any) => !task.assignment?.done);
   const completedTasks = overview.tasks.filter((task: any) => task.assignment?.done);
   const activeBookings = overview.bookings.filter((booking: any) => ['booked', 'seated'].includes(booking.status));
-  const inventoryItems = overview.templates.reduce((total: number, template: any) => total + (template.items?.length || 0), 0);
+  const openTechRequests = (overview.techRequests || []).filter((request: any) => !['done', 'cancelled'].includes(request.status));
+  const readyInventoryTemplates = overview.templates.filter((template: any) => template.items?.length);
+  const priorityItems = [
+    ...openTasks.map((task: any) => ({ id: `task-${task.id}`, title: task.title, subtitle: `${task.description || 'Открыть задачу'}${task.due_at ? ` · срок: ${fmtDate(task.due_at)}` : ''}`, onClick: onOpenTasks, icon: 'tasks' as IconName })),
+    ...openTechRequests.map((request: any) => ({ id: `tech-${request.id}`, title: request.title, subtitle: request.manager_comment || 'Проблема ожидает реакции менеджера', onClick: onOpenTasks, icon: 'support' as IconName }))
+  ];
 
   return <div className="mobileSectionStack">
     <SectionTitle title="Сегодня" action={<button type="button" className="sectionLink" onClick={onOpenTasks}>Все задачи</button>} />
@@ -1401,23 +1375,23 @@ function Today({
         <div className="mobileOverviewIcon purple"><AppIcon name="inventory" className="navIcon" /></div>
         <div className="mobileOverviewCopy">
           <strong>Инвентаризация</strong>
-          <span>{inventoryItems} позиций</span>
+          <span>{readyInventoryTemplates.length} бланков доступно</span>
         </div>
-        <b>{inventoryItems}</b>
+        <b>{readyInventoryTemplates.length}</b>
       </button>
     </div>
 
     <Card title="Приоритет" className="mobileCard compactMobileCard">
       <div className="mobileTaskList">
-        {openTasks.slice(0, 3).map((task: any) => <button key={task.id} type="button" className="mobileTaskRow compact" onClick={onOpenTasks}>
+        {priorityItems.slice(0, 4).map((item: any) => <button key={item.id} type="button" className="mobileTaskRow compact" onClick={item.onClick}>
           <span className="mobileTaskStatus" />
           <div className="mobileTaskCopy">
-            <strong>{task.title}</strong>
-            <span>{task.description || 'Открыть задачу'}</span>
+            <strong>{item.title}</strong>
+            <span>{item.subtitle}</span>
           </div>
           <AppIcon name="chevron" className="navIcon" />
         </button>)}
-        {openTasks.length === 0 && <Empty text="Нет открытых задач на эту смену" />}
+        {priorityItems.length === 0 && <Empty text="Нет открытых задач и проблем на эту смену" />}
       </div>
       {completedTasks.length > 0 && <div className="mobileInlineHint">Выполнено за смену: {completedTasks.length}</div>}
     </Card>

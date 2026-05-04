@@ -20,7 +20,7 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
   const [users, setUsers] = useState<any[]>([]);
   const [techRequests, setTechRequests] = useState<any[]>([]);
   const [techDrafts, setTechDrafts] = useState<any>({});
-  const [form, setForm] = useState<any>({ title: '', description: '', target_type: 'all', target_role: 'waiter', target_user_id: '' });
+  const [form, setForm] = useState<any>({ title: '', description: '', target_type: 'all', target_role: 'waiter', target_user_id: '', due_at: '' });
   const [taskMsg, setTaskMsg] = useState('');
   const [techMsg, setTechMsg] = useState('');
   const [showTaskForm, setShowTaskForm] = useState(false);
@@ -63,7 +63,7 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
     e.preventDefault();
     setTaskMsg('');
     const result = await api('/api/tasks', { method: 'POST', body: JSON.stringify(form) });
-    setForm({ ...form, title: '', description: '' });
+    setForm({ ...form, title: '', description: '', due_at: '' });
     setTaskMsg(result?.offline ? 'Задача сохранена офлайн' : 'Задача создана');
     setShowTaskForm(false);
     load().catch(() => undefined);
@@ -80,7 +80,7 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
     setTechMsg('');
     const result = await api('/api/tech-requests', { method: 'POST', body: JSON.stringify(techForm) });
     setTechForm({ title: '', description: '', category: 'equipment' });
-    setTechMsg(result?.offline ? 'Техзаявка сохранена офлайн' : 'Техзаявка отправлена менеджеру');
+    setTechMsg(result?.offline ? 'Проблема сохранена офлайн' : 'Проблема отправлена менеджеру');
     setShowTechForm(false);
     onCloseComposer?.();
     load().catch(() => undefined);
@@ -96,10 +96,10 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
     };
     try {
       await api(`/api/tech-requests/${request.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
-      setTechMsg('Техзаявка обновлена');
+      setTechMsg('Проблема обновлена');
       load();
     } catch (error: any) {
-      setTechMsg(error.message || 'Не удалось обновить техзаявку');
+      setTechMsg(error.message || 'Не удалось обновить проблему');
     }
   }
 
@@ -115,6 +115,7 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
   const taskForm = <form className="form" id="department-task-form" onSubmit={create}>
     <Field label="Задача" value={form.title} onChange={(e: any) => setForm({ ...form, title: e.target.value })} placeholder="Например: проверить заготовки перед сменой" />
     <Textarea label="Описание" value={form.description} onChange={(e: any) => setForm({ ...form, description: e.target.value })} placeholder="Что нужно сделать и где" />
+    <Field label="Срок выполнения" type="datetime-local" value={form.due_at} onChange={(e: any) => setForm({ ...form, due_at: e.target.value })} />
     <Select label="Кому" value={form.target_type} onChange={(e: any) => setForm({ ...form, target_type: e.target.value })}>{Object.entries(targetTypeLabels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</Select>
     {form.target_type === 'role' && <Select label="Роль" value={form.target_role} onChange={(e: any) => setForm({ ...form, target_role: e.target.value })}>{roleOptions.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>}
     {form.target_type === 'user' && <Select label="Сотрудник" value={form.target_user_id} onChange={(e: any) => setForm({ ...form, target_user_id: e.target.value })}><option value="">Выбрать</option>{filteredTaskUsers.map((candidate: any) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</Select>}
@@ -142,7 +143,7 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
             {activeTasks.length === 0 && <Empty text="Нет активных задач на текущую смену" />}
             {activeTasks.map((task) => <div key={task.id} className="mobileTaskRow static">
               <span className="mobileTaskStatus" />
-              <div className="mobileTaskCopy"><strong>{task.title}</strong><span>{task.description || 'Без описания'}</span></div>
+              <div className="mobileTaskCopy"><strong>{task.title}</strong><span>{task.description || 'Без описания'}{task.due_at ? ` · срок: ${fmtDate(task.due_at)}` : ''}</span></div>
               <Button type="button" kind="soft" onClick={() => done(task.id)}>Выполнено</Button>
               <CommentsPanel entityType="task" entityId={task.id} />
             </div>)}
@@ -150,7 +151,7 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
         </section>
 
         {openTechRequests.length > 0 && <section className="mobileSection mobileFlatPanel">
-          <div className="mobileListSectionHead"><h3>Мои техзаявки</h3><span className="mobileSectionCount">{openTechRequests.length}</span></div>
+          <div className="mobileListSectionHead"><h3>Мои проблемы</h3><span className="mobileSectionCount">{openTechRequests.length}</span></div>
           <div className="mobileTaskList">
             {openTechRequests.map((request) => <div key={request.id} className="mobileTaskRow static techRequestEmployeeView">
               <span className={cx('badge', request.status === 'new' ? 'warning' : 'trial')}>{techRequestStatuses[request.status] || request.status}</span>
@@ -182,14 +183,14 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
       </MobileSheetModal>}
 
       {showTechForm && <MobileSheetModal
-        title="Техзаявка"
+        title="Проблема"
         subtitle="Опишите проблему, менеджер увидит её в пульте контроля"
         onClose={() => { setShowTechForm(false); onCloseComposer?.(); }}
         className="mobileFormSheet techRequestSheet"
-        footer={<Button type="submit" form="tech-request-form" className="mobilePrimaryButton">Отправить техзаявку</Button>}
+        footer={<Button type="submit" form="tech-request-form" className="mobilePrimaryButton">Отправить проблему</Button>}
       >
         <form className="form" id="tech-request-form" onSubmit={createTechRequest}>
-          <Field label="Тема заявки" value={techForm.title} onChange={(e: any) => setTechForm({ ...techForm, title: e.target.value })} placeholder="Например: вызвать мастера по холодильнику" />
+          <Field label="Тема проблемы" value={techForm.title} onChange={(e: any) => setTechForm({ ...techForm, title: e.target.value })} placeholder="Например: вызвать мастера по холодильнику" />
           <Select label="Тип проблемы" value={techForm.category} onChange={(e: any) => setTechForm({ ...techForm, category: e.target.value })}>{Object.entries(techRequestCategories).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</Select>
           <Textarea label="Что случилось" value={techForm.description} onChange={(e: any) => setTechForm({ ...techForm, description: e.target.value })} placeholder="Опишите проблему" />
         </form>
@@ -198,8 +199,8 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
   }
 
   return <>
-    {canManageTechRequests && <Card title="Техзаявки сотрудников" right={<span className="badge warning">{techRequests.filter((request) => !['done', 'cancelled'].includes(request.status)).length} открыто</span>}>
-      {techRequests.length === 0 && <Empty text="Техзаявок пока нет" />}
+    {canManageTechRequests && <Card title="Проблемы сотрудников" right={<span className="badge warning">{techRequests.filter((request) => !['done', 'cancelled'].includes(request.status)).length} открыто</span>}>
+      {techRequests.length === 0 && <Empty text="Проблем пока нет" />}
       <div className="grid cardsGrid">
         {techRequests.map((request) => {
           const draft = techDrafts[request.id] || { status: request.status, manager_comment: request.manager_comment || '' };
@@ -235,6 +236,7 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
       <div className="grid">{tasks.map(t => <div className="miniCard" key={t.id}>
         <div className="rowBetween"><b>{t.title}</b></div>
         <p>{t.description}</p>
+        {t.due_at && <p>Срок: {fmtDate(t.due_at)}</p>}
         <p>Назначено: {t.assignments?.length || 0}, выполнено: {t.assignments?.filter((a: any) => a.done).length || 0}</p>
         <CommentsPanel entityType="task" entityId={t.id} />
       </div>)}</div>
