@@ -2344,6 +2344,35 @@ app.patch('/api/bookings/:id', auth, ensureRestaurantActive, runAsync(async (req
   const statusOnlyUpdate = requestKeys.length === 1 && requestKeys[0] === 'status' && ['seated', 'completed'].includes(String(req.body.status || ''));
   if (!MANAGER_ROLES.includes(req.user.role) && reservation.created_by !== req.user.id && !statusOnlyUpdate) return res.status(403).json({ error: 'Можно редактировать только свои брони' });
 
+  if (statusOnlyUpdate) {
+    const nextStatus = String(req.body.status || '').trim();
+    const nextValues = { status: nextStatus, updated_at: nowIso() };
+
+    if (nextStatus === 'seated') {
+      const tableIds = Array.isArray(reservation.table_ids) ? reservation.table_ids : [];
+      const seatedAt = nowIso();
+      const durationMinutes = Math.max(30, Math.min(600, Number(reservation.duration_minutes || 120) || 120));
+      const nextInterval = {
+        start: new Date(seatedAt).getTime(),
+        end: new Date(seatedAt).getTime() + durationMinutes * 60000
+      };
+      const conflictingReservation = sameRestaurant(collection('table_reservations'), req.user.restaurant_id)
+        .filter(item => item.id !== reservation.id)
+        .filter(item => ['booked', 'seated'].includes(item.status))
+        .find(item => {
+          const itemTableIds = Array.isArray(item.table_ids) ? item.table_ids : [];
+          return itemTableIds.some(tableId => tableIds.includes(tableId)) && intervalsOverlap(nextInterval, reservationInterval(item));
+        });
+      if (conflictingReservation) return res.status(400).json({ error: 'На это время стол уже занят другой бронью' });
+      nextValues.reserved_for = seatedAt;
+    }
+
+    Object.assign(reservation, nextValues);
+    logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'booking_updated', title: `${req.user.name} обновил бронь`, entity_type: 'booking', entity_id: reservation.id, metadata: { status: reservation.status, guests_count: reservation.guests_count } });
+    await persist();
+    return res.json(serializeReservation(reservation));
+  }
+
   const mergedPayload = {
     table_ids: req.body.table_ids !== undefined ? req.body.table_ids : reservation.table_ids,
     reserved_for: req.body.reserved_for !== undefined ? req.body.reserved_for : reservation.reserved_for,

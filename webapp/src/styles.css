@@ -3941,6 +3941,20 @@ html {
   grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
 }
 
+.adminFloorPlan {
+  display: grid;
+  gap: 18px;
+}
+
+.adminFloorPlan .bookingHallSection {
+  display: grid;
+  gap: 10px;
+}
+
+.adminFloorPlan .bookingTablesGrid {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
 .inventoryPlainCard .cardBody {
   display: grid;
   gap: 14px;
