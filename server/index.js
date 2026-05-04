@@ -1560,20 +1560,26 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
           .filter(item => item.template_id === template.id)
           .sort((a, b) => a.sort_order - b.sort_order);
         const answers = run ? db.checklist_answers.filter(answer => answer.run_id === run.id) : [];
+        const checklistItems = items.map(item => {
+          const answer = answers.find(candidate => candidate.item_id === item.id);
+          return {
+            id: item.id,
+            text: item.text,
+            required: item.required !== false,
+            done: Boolean(answer?.done),
+            comment: answer?.comment || '',
+            photo_url: answer?.photo_url || ''
+          };
+        });
         return {
           id: template.id,
           title: template.title,
           type: template.type,
           status: run ? 'done' : 'not_done',
           completed_at: run?.completed_at || run?.created_at || null,
-          done_items: run ? answers.filter(answer => answer.done).map(answer => {
-            const item = items.find(candidate => candidate.id === answer.item_id);
-            return { id: answer.item_id, text: item?.text || 'Пункт чек-листа', comment: answer.comment || '', photo_url: answer.photo_url || '' };
-          }) : [],
-          not_done_items: run ? answers.filter(answer => !answer.done).map(answer => {
-            const item = items.find(candidate => candidate.id === answer.item_id);
-            return { id: answer.item_id, text: item?.text || 'Пункт чек-листа', comment: answer.comment || '' };
-          }) : items.map(item => ({ id: item.id, text: item.text, required: item.required !== false }))
+          items: checklistItems,
+          done_items: checklistItems.filter(item => item.done),
+          not_done_items: checklistItems.filter(item => !item.done)
         };
       });
       const userTaskAssignments = taskAssignments.filter(assignment => assignment.user_id === user.id && activeTaskIds.has(assignment.task_id));

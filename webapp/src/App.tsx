@@ -920,6 +920,33 @@ function EmployeeDetailBullets({ items, done = false }: { items: any[]; done?: b
   </ul>;
 }
 
+function EmployeeChecklistAuditCard({ checklist }: { checklist: any }) {
+  const items = checklist.items || [...(checklist.done_items || []), ...(checklist.not_done_items || [])];
+  const doneCount = items.filter((item: any) => item.done).length;
+  const totalCount = items.length || (checklist.done_items?.length || 0) + (checklist.not_done_items?.length || 0);
+  const completed = checklist.status === 'done';
+
+  return <article className="employeeChecklistAuditCard">
+    <div className="employeeDetailCardHead">
+      <strong>{checklist.title}</strong>
+      <span className={cx('badge', completed ? 'active' : 'warning')}>{completed ? 'выполнено' : 'не выполнено'}</span>
+    </div>
+    <p>{checklistTypes[checklist.type] || checklist.type || 'Чек-лист'} · {doneCount}/{totalCount}{checklist.completed_at ? ` · ${fmtDate(checklist.completed_at)}` : ''}</p>
+    <div className="employeeChecklistAuditItems">
+      {items.length === 0 && <p className="employeeDetailEmpty">Пунктов в чек-листе нет</p>}
+      {items.map((item: any, index: number) => <div className={cx('employeeChecklistAuditItem', item.done && 'done')} key={item.id || `${checklist.id}-${index}`}>
+        <div className="employeeChecklistAuditItemHead">
+          <span>{index + 1}</span>
+          <strong>{item.text || item.title || 'Пункт чек-листа'}</strong>
+          <em>{item.done ? 'готово' : 'не выполнено'}</em>
+        </div>
+        {item.comment && <p className="employeeChecklistAuditComment">{item.comment}</p>}
+        {item.photo_url && <img className="employeeChecklistAuditPhoto" src={item.photo_url} alt={`Фото к пункту: ${item.text || item.title || 'чек-лист'}`} />}
+      </div>)}
+    </div>
+  </article>;
+}
+
 function EmployeeMetricsExpanded({ row }: { row: any }) {
   const checklistDetails = row.checklists?.details || [];
   const doneChecklists = checklistDetails.filter((item: any) => item.status === 'done');
@@ -1042,19 +1069,10 @@ function OpenShiftEmployees({ shifts, rows }: { shifts: any[]; rows: any[] }) {
 
           {expanded && <div className="openShiftDetails">
             <EmployeeDetailList title="Чек-листы: не выполнено" count={notDoneChecklists.length} empty="Нет невыполненных чек-листов">
-              {notDoneChecklists.map((checklist: any) => <article className="employeeDetailCard compact" key={checklist.id}>
-                <div className="employeeDetailCardHead"><strong>{checklist.title}</strong><span className="badge warning">не выполнено</span></div>
-                <p>{checklistTypes[checklist.type] || checklist.type || 'Чек-лист'} · {checklist.not_done_items?.length || 0} пунктов</p>
-                <EmployeeDetailBullets items={checklist.not_done_items || []} />
-              </article>)}
+              {notDoneChecklists.map((checklist: any) => <EmployeeChecklistAuditCard checklist={checklist} key={checklist.id} />)}
             </EmployeeDetailList>
             <EmployeeDetailList title="Чек-листы: выполнено" count={doneChecklists.length} empty="Выполненных чек-листов сегодня нет">
-              {doneChecklists.map((checklist: any) => <article className="employeeDetailCard compact" key={checklist.id}>
-                <div className="employeeDetailCardHead"><strong>{checklist.title}</strong><span className="badge active">выполнено</span></div>
-                <p>{checklist.completed_at ? `Завершён: ${fmtDate(checklist.completed_at)}` : checklistTypes[checklist.type] || 'Чек-лист'}</p>
-                {!!checklist.done_items?.length && <EmployeeDetailBullets items={checklist.done_items} done />}
-                {!!checklist.not_done_items?.length && <><p>Неотмеченные пункты:</p><EmployeeDetailBullets items={checklist.not_done_items} /></>}
-              </article>)}
+              {doneChecklists.map((checklist: any) => <EmployeeChecklistAuditCard checklist={checklist} key={checklist.id} />)}
             </EmployeeDetailList>
             <EmployeeDetailList title="Невыполненные задачи" count={openTasks.length} empty="Невыполненных задач нет">
               {openTasks.map((task: any) => <article className="employeeDetailCard compact" key={task.id}>
