@@ -1660,10 +1660,7 @@ function Checklists({ user, admin = false }: any) {
   }
 
   if (!admin) {
-    return <div className="mobileSectionStack">
-      <SectionTitle title="Чек-листы" subtitle="Отмечайте пункты по смене. Фото и комментарии появятся там, где они нужны." />
-      <ShiftControl user={user} onChanged={loadShift} />
-
+    return <div className="mobileSectionStack mobileChecklistScreen">
       {!availableTemplates.length && <Card className="mobileCard compactMobileCard">
         <Empty text="Для вашей роли пока нет активных чек-листов" />
       </Card>}

@@ -7000,3 +7000,46 @@ body {
     box-shadow: none !important;
   }
 }
+
+/* Mobile cleanup: tighter page header and checklist screen. */
+.employeeMobileOnly .basicWorkspace {
+  gap: 0;
+}
+
+.employeeMobileOnly .mobileWorkspaceChrome {
+  padding: 0;
+}
+
+.employeeMobileOnly .mobileHeader {
+  gap: 0;
+}
+
+.employeeMobileOnly .pageContainer {
+  padding-top: 10px;
+}
+
+.employeeMobileOnly .bookingMobileScreen {
+  margin-top: -2px;
+}
+
+.mobileChecklistScreen {
+  gap: 12px;
+}
+
+.mobileChecklistScreen .mobileChecklistPicker {
+  margin-top: 0;
+}
+
+@media (max-width: 980px) {
+  .employeeMobileOnly .mobileHeader {
+    padding: calc(8px + env(safe-area-inset-top)) 14px 8px;
+  }
+
+  .employeeMobileOnly .pageContainer {
+    padding-top: 8px;
+  }
+
+  .employeeMobileOnly .bookingMobileScreen {
+    margin-top: -4px;
+  }
+}
