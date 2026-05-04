@@ -1901,6 +1901,8 @@ app.post('/api/checklists/runs', auth, ensureRestaurantActive, runAsync(async (r
   if (!template) return res.status(404).json({ error: 'Чек-лист не найден' });
   if (req.user.role === 'owner') return res.status(403).json({ error: 'Владелец редактирует чек-листы, но не выполняет их' });
   if (!['manager', template.role].includes(req.user.role)) return res.status(403).json({ error: 'Этот чек-лист не для вашей роли' });
+  const currentShift = currentOpenShiftFor(req.user);
+  if (!currentShift) return res.status(400).json({ error: 'Сначала начните смену' });
   const templateItems = db.checklist_items.filter(i => i.template_id === template.id);
   const missingRequiredItem = templateItems.find(item => item.required && !answers?.[item.id]?.done);
   if (missingRequiredItem) return res.status(400).json({ error: `Обязательный пункт "${missingRequiredItem.text}" не выполнен` });
@@ -1930,8 +1932,17 @@ app.post('/api/checklists/runs', auth, ensureRestaurantActive, runAsync(async (r
   }
   logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'checklist_completed', title: `${req.user.name} завершил чек-лист "${template.title}"`, entity_type: 'checklist_run', entity_id: run.id, metadata: { total: templateItems.length } });
   notifyManagers(rid, { title: 'Чек-лист выполнен', body: `${req.user.name}: ${template.title}`, entity_type: 'checklist_run', entity_id: run.id });
+  let closedShift = null;
+  if (template.type === 'close') {
+    currentShift.status = 'closed';
+    currentShift.closed_at = currentShift.closed_at || run.completed_at;
+    currentShift.comment = String(comment || `Автоматически закрыта чек-листом "${template.title}"`).trim();
+    closedShift = currentShift;
+    logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'shift_closed', title: `${req.user.name} закрыл смену`, entity_type: 'shift', entity_id: currentShift.id, metadata: { checklist_run_id: run.id, checklist_template_id: template.id } });
+    notifyManagers(rid, { title: 'Смена закрыта', body: `${req.user.name} завершил смену чек-листом`, entity_type: 'shift', entity_id: currentShift.id });
+  }
   await persist();
-  res.status(201).json(run);
+  res.status(201).json({ ...run, shift_closed: closedShift });
 }));
 
 app.get('/api/admin/checklists/runs', auth, ensureRestaurantActive, operationalEditorOnly, (req, res) => {

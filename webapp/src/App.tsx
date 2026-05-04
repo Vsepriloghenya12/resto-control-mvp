@@ -316,29 +316,32 @@ function NotificationCenter({ open, onClose, onChanged }: { open: boolean; onClo
   </MobileSheetModal>;
 }
 
-function ShiftControl({ user }: { user: any }) {
+function ShiftControl({ user, onChanged }: { user: any; onChanged?: () => void }) {
   const [shiftState, setShiftState] = useState<any>({ current: null, last_closed: null });
   const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
   async function load() { try { setShiftState(await api('/api/shifts/current')); } catch { setShiftState({ current: null, last_closed: null }); } }
   useEffect(() => { load(); }, []);
   async function startShift() {
     setMsg('');
-    const result = await api('/api/shifts/start', { method: 'POST', body: JSON.stringify({ location: departments[user.department] || '' }) });
-    setMsg(result?.offline ? 'Смена сохранена офлайн' : 'Смена начата');
-    load().catch(() => undefined);
-  }
-  async function closeShift() {
-    if (!shiftState.current) return;
-    const result = await api(`/api/shifts/${shiftState.current.id}/close`, { method: 'POST', body: JSON.stringify({ comment: '' }) });
-    setMsg(result?.offline ? 'Закрытие смены сохранено офлайн' : 'Смена закрыта');
-    load().catch(() => undefined);
+    setBusy(true);
+    try {
+      const result = await api('/api/shifts/start', { method: 'POST', body: JSON.stringify({ location: departments[user.department] || '' }) });
+      setMsg(result?.offline ? 'Смена сохранена офлайн' : 'Смена начата');
+      await load();
+      onChanged?.();
+    } catch (error: any) {
+      setMsg(error.message);
+    } finally {
+      setBusy(false);
+    }
   }
   const current = shiftState.current;
   return <section className={cx('mobileShiftCard', current && 'active')}>
     <div className="mobileShiftCardHead"><div><span>{roles[user.role]} · {departments[user.department]}</span><strong>{current ? 'Смена идёт' : 'Смена не начата'}</strong></div><span className={cx('badge', current ? 'active' : 'trial')}>{current ? 'активна' : 'начать'}</span></div>
-    <p>{current ? `Начата ${fmtDate(current.opened_at)}` : shiftState.last_closed ? `Последняя смена: ${fmtDate(shiftState.last_closed.closed_at)}` : 'Начните смену перед чек-листами и задачами.'}</p>
-    <div className="mobileShiftActions">{current ? <Button type="button" onClick={closeShift}>Закрыть смену</Button> : <Button type="button" onClick={startShift}>Начать смену</Button>}</div>
-    {msg && <div className="notice mobileInlineNotice">{msg}</div>}
+    <p>{current ? `Начата ${fmtDate(current.opened_at)}. Закрытие произойдёт после чек-листа закрытия смены.` : shiftState.last_closed ? `Последняя смена: ${fmtDate(shiftState.last_closed.closed_at)}` : 'Начните смену перед чек-листами и задачами.'}</p>
+    <div className="mobileShiftActions">{current ? <span className="mobileShiftNote">Закрывается чек-листом</span> : <Button type="button" disabled={busy} onClick={startShift}>{busy ? 'Начинаем...' : 'Начать смену'}</Button>}</div>
+    {msg && <div className={msg.includes('начата') || msg.includes('офлайн') ? 'notice mobileInlineNotice' : 'error mobileInlineNotice'}>{msg}</div>}
   </section>;
 }
 
@@ -1297,6 +1300,7 @@ function Today({
 
   return <div className="mobileSectionStack">
     <SectionTitle title="Сегодня" action={<button type="button" className="sectionLink" onClick={onOpenTasks}>Все задачи</button>} />
+    <ShiftControl user={user} />
 
     <div className="mobileOverviewList">
       <button type="button" className="mobileOverviewRow" onClick={onOpenChecklists}>
@@ -1360,6 +1364,7 @@ function Checklists({ user, admin = false }: any) {
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [isTemplateEditorOpen, setTemplateEditorOpen] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
+  const [shiftState, setShiftState] = useState<any>({ current: null, last_closed: null });
   const [templateForm, setTemplateForm] = useState<any>({
     title: '',
     role: 'manager',
@@ -1391,6 +1396,15 @@ function Checklists({ user, admin = false }: any) {
     if (admin) setRuns(await api('/api/admin/checklists/runs'));
   }
   useEffect(() => { load(); }, []);
+  async function loadShift() {
+    if (admin) return;
+    try {
+      setShiftState(await api('/api/shifts/current'));
+    } catch {
+      setShiftState({ current: null, last_closed: null });
+    }
+  }
+  useEffect(() => { loadShift(); }, [admin]);
   function updateAnswer(itemId: string, patch: any) {
     setAnswers((current: any) => ({ ...current, [itemId]: { ...(current[itemId] || {}), ...patch } }));
   }
@@ -1504,6 +1518,7 @@ function Checklists({ user, admin = false }: any) {
 
   async function submit(template: any) {
     setRunMsg('');
+    if (!shiftState.current) { setRunMsg('Сначала начните смену'); return; }
     const templateAnswers: any = {};
     template.items.forEach((i: any) => { templateAnswers[i.id] = answers[i.id] || { done: false, comment: '' }; });
     const missingRequired = template.items.find((i: any) => i.required !== false && !templateAnswers[i.id]?.done);
@@ -1513,7 +1528,10 @@ function Checklists({ user, admin = false }: any) {
     const missingComment = template.items.find((i: any) => i.needs_comment && templateAnswers[i.id]?.done && !String(templateAnswers[i.id]?.comment || '').trim());
     if (missingComment) { setRunMsg(`Для пункта "${missingComment.text}" нужен комментарий`); return; }
     const result = await api('/api/checklists/runs', { method: 'POST', body: JSON.stringify({ template_id: template.id, answers: templateAnswers }) });
-    setRunMsg(result?.offline ? 'Чек-лист сохранён офлайн' : 'Чек-лист сохранён'); setAnswers({}); load().catch(() => undefined);
+    setRunMsg(result?.offline ? 'Чек-лист сохранён офлайн' : result?.shift_closed ? 'Чек-лист сохранён, смена закрыта' : 'Чек-лист сохранён');
+    setAnswers({});
+    load().catch(() => undefined);
+    loadShift().catch(() => undefined);
   }
 
   const availableTemplates = admin
@@ -1600,6 +1618,7 @@ function Checklists({ user, admin = false }: any) {
   if (!admin) {
     return <div className="mobileSectionStack">
       <SectionTitle title="Чек-листы" subtitle="Отмечайте пункты по смене. Фото и комментарии появятся там, где они нужны." />
+      <ShiftControl user={user} onChanged={loadShift} />
 
       {!availableTemplates.length && <Card className="mobileCard compactMobileCard">
         <Empty text="Для вашей роли пока нет активных чек-листов" />
@@ -1677,11 +1696,12 @@ function Checklists({ user, admin = false }: any) {
         <Button
           type="button"
           className="mobilePrimaryButton"
-          disabled={!selectedTemplate || !!checklistRequiresPhoto}
+          disabled={!selectedTemplate || !!checklistRequiresPhoto || !shiftState.current}
           onClick={() => submit(selectedTemplate)}
         >
-          Завершить чек-лист
+          {selectedTemplate.type === 'close' ? 'Завершить и закрыть смену' : 'Завершить чек-лист'}
         </Button>
+        {!shiftState.current && <div className="mobileInlineHint">Перед чек-листом нужно начать смену.</div>}
       </div>}
 
       {runMsg && <div className={runMsg.includes('сохранён') ? 'notice mobileInlineNotice' : 'error mobileInlineNotice'}>{runMsg}</div>}
