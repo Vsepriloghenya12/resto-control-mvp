@@ -1187,6 +1187,103 @@ input[type='checkbox'] {
   margin: 0 0 20px;
 }
 
+.openShiftPanel {
+  margin: 0 0 20px;
+}
+
+.openShiftPanel h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.openShiftList {
+  display: grid;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.openShiftEntry {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.openShiftRow {
+  width: 100%;
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(170px, max-content) minmax(86px, max-content);
+  align-items: center;
+  gap: 18px;
+  padding: 10px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.openShiftRow:hover .openShiftPerson strong,
+.openShiftEntry.open .openShiftPerson strong {
+  color: #bbf7d0;
+}
+
+.openShiftPerson strong,
+.openShiftPerson span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.openShiftPerson strong {
+  font-weight: 820;
+}
+
+.openShiftPerson span,
+.openShiftStarted {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.openShiftTaskNumbers {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 1.02rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.openShiftTaskNumbers::before {
+  content: 'Задачи';
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.openShiftTaskNumbers b {
+  font-weight: 900;
+}
+
+.openShiftTaskNumbers b.done {
+  color: #22c55e;
+}
+
+.openShiftTaskNumbers b.todo {
+  color: #ef4444;
+}
+
+.openShiftTaskNumbers b.zero,
+.openShiftTaskNumbers em {
+  color: var(--text);
+  font-style: normal;
+}
+
+.openShiftDetails {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 12px 0 18px;
+}
+
 .employeeMetricsPlain h3 {
   margin: 0 0 8px;
   font-size: 1rem;
@@ -1318,6 +1415,16 @@ input[type='checkbox'] {
     grid-template-columns: 1fr;
     gap: 10px;
     align-items: stretch;
+  }
+
+  .openShiftRow {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    align-items: stretch;
+  }
+
+  .openShiftDetails {
+    grid-template-columns: 1fr;
   }
 
   .employeeMetricValue {

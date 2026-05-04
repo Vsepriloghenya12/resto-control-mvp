@@ -881,6 +881,7 @@ function AdminOverview({ mode = 'owner', onNavigate }: { mode?: 'owner' | 'manag
       />
     </div>
 
+    {managerMode && <OpenShiftEmployees shifts={data.open_shifts || []} rows={data.employee_metrics || []} />}
     <OverviewEmployeeMetrics rows={data.employee_metrics || []} />
 
     {managerMode && <Card title="Пульт смены" right={<span className="badge active">Управление рестораном</span>}>
@@ -1007,6 +1008,53 @@ function EmployeeMetricsExpanded({ row }: { row: any }) {
       </EmployeeDetailList>
     </div>
   </div>;
+}
+
+function OpenShiftEmployees({ shifts, rows }: { shifts: any[]; rows: any[] }) {
+  const [expandedShiftId, setExpandedShiftId] = useState('');
+  const metricsByUserId = useMemo(() => new Map(rows.map((row: any) => [String(row.user?.id || ''), row])), [rows]);
+
+  return <section className="openShiftPanel">
+    <h3>Открытая смена</h3>
+    {shifts.length === 0 && <Empty text="Сейчас нет сотрудников на смене" />}
+    {shifts.length > 0 && <div className="openShiftList">
+      {shifts.map((shift) => {
+        const employeeId = String(shift.user_id || shift.user?.id || '');
+        const metrics = metricsByUserId.get(employeeId) || {};
+        const taskDetails = metrics.tasks?.details || [];
+        const openTasks = taskDetails.filter((task: any) => !task.done);
+        const doneTasks = taskDetails.filter((task: any) => task.done);
+        const shiftId = String(shift.id || employeeId);
+        const expanded = expandedShiftId === shiftId;
+
+        return <div className={cx('openShiftEntry', expanded && 'open')} key={shiftId}>
+          <button type="button" className="openShiftRow" aria-expanded={expanded} onClick={() => setExpandedShiftId(expanded ? '' : shiftId)}>
+            <div className="openShiftPerson">
+              <strong>{shift.user?.name || metrics.user?.name || 'Сотрудник'}</strong>
+              <span>{roles[shift.user?.role || metrics.user?.role] || shift.user?.role || metrics.user?.role || 'Роль не указана'}</span>
+            </div>
+            <span className="openShiftStarted">С {fmtDate(shift.opened_at)}</span>
+            <span className="openShiftTaskNumbers"><b className={openTasks.length ? 'todo' : 'zero'}>{openTasks.length}</b><em>/</em><b className={doneTasks.length ? 'done' : 'zero'}>{doneTasks.length}</b></span>
+          </button>
+
+          {expanded && <div className="openShiftDetails">
+            <EmployeeDetailList title="Невыполненные задачи" count={openTasks.length} empty="Невыполненных задач нет">
+              {openTasks.map((task: any) => <article className="employeeDetailCard compact" key={task.id}>
+                <div className="employeeDetailCardHead"><strong>{task.title}</strong><span className={cx('badge', task.overdue ? 'cancelled' : 'warning')}>{task.overdue ? 'просрочено' : 'в работе'}</span></div>
+                <p>{task.description || 'Без описания'}{task.due_at ? ` · срок: ${fmtDate(task.due_at)}` : ''}</p>
+              </article>)}
+            </EmployeeDetailList>
+            <EmployeeDetailList title="Выполненные задачи" count={doneTasks.length} empty="Выполненных задач пока нет">
+              {doneTasks.map((task: any) => <article className="employeeDetailCard compact" key={task.id}>
+                <div className="employeeDetailCardHead"><strong>{task.title}</strong><span className="badge active">выполнено</span></div>
+                <p>{task.completed_at ? fmtDate(task.completed_at) : task.comment || 'Задача закрыта'}</p>
+              </article>)}
+            </EmployeeDetailList>
+          </div>}
+        </div>;
+      })}
+    </div>}
+  </section>;
 }
 
 function OverviewEmployeeMetrics({ rows }: { rows: any[] }) {

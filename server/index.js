@@ -1672,6 +1672,14 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
       };
     })
     .sort((a, b) => (a.user.name || '').localeCompare(b.user.name || '', 'ru'));
+  const activeStaffUserIds = new Set(activeStaffUsers.map(user => user.id));
+  const openShifts = sameRestaurant(collection('shifts'), rid)
+    .filter(shift => shift.status === 'open' && activeStaffUserIds.has(shift.user_id))
+    .map(shift => ({
+      ...shift,
+      user: publicUser(activeStaffUsers.find(user => user.id === shift.user_id))
+    }))
+    .sort((a, b) => String(a.opened_at || '').localeCompare(String(b.opened_at || '')));
   res.json({
     restaurant,
     users: activeStaffUsers.length,
@@ -1695,7 +1703,8 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
       documents: documentSummary,
       inventories: inventorySummary
     },
-    employee_metrics: employeeMetrics
+    employee_metrics: employeeMetrics,
+    open_shifts: openShifts
   });
 });
 
