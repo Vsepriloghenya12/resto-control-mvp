@@ -2143,13 +2143,19 @@ function Inventory({ user, admin = false }: any) {
           {productMsg && <div className={productMsg.includes('добавлен') || productMsg.includes('обновл') || productMsg.includes('удал') ? 'notice' : 'error'}>{productMsg}</div>}
 
           <div className="inventoryOwnerGrid compactInventoryOwnerGrid">
-            {groupedProducts.map(section => <section className="inventorySectionBlock" key={section.id}>
-              <div className="rowBetween">
-                <b>{section.title}</b>
-                <span className="badge">{section.products.length} поз.</span>
-              </div>
+            {groupedProducts.map(section => <details className="inventorySectionBlock inventoryAccordion" key={section.id}>
+              <summary className="inventoryAccordionSummary">
+                <span>
+                  <b>{section.title}</b>
+                  <em>{section.products.length ? 'Нажмите, чтобы раскрыть список' : 'Список пока пуст'}</em>
+                </span>
+                <span className="inventoryAccordionMeta">
+                  <span className="badge">{section.products.length} поз.</span>
+                  <AppIcon name="chevron" className="navIcon inventoryAccordionChevron" />
+                </span>
+              </summary>
               <div className="inventorySectionList">
-                {section.products.length === 0 && <span className="muted">Список пока пуст</span>}
+                {section.products.length === 0 && <span className="muted inventorySectionEmpty">Список пока пуст</span>}
                 {section.products.map((product: any) => <button type="button" className="inventorySectionItem inventorySectionButton" key={product.id} onClick={() => startProductEdit(product, section.id)}>
                   <div>
                     <strong>{product.name}</strong>
@@ -2158,7 +2164,7 @@ function Inventory({ user, admin = false }: any) {
                   <em>{product.unit}</em>
                 </button>)}
               </div>
-            </section>)}
+            </details>)}
           </div>
         </Card>
 
