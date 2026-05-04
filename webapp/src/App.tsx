@@ -1021,6 +1021,9 @@ function OpenShiftEmployees({ shifts, rows }: { shifts: any[]; rows: any[] }) {
       {shifts.map((shift) => {
         const employeeId = String(shift.user_id || shift.user?.id || '');
         const metrics = metricsByUserId.get(employeeId) || {};
+        const checklistDetails = metrics.checklists?.details || [];
+        const doneChecklists = checklistDetails.filter((item: any) => item.status === 'done');
+        const notDoneChecklists = checklistDetails.filter((item: any) => item.status !== 'done');
         const taskDetails = metrics.tasks?.details || [];
         const openTasks = taskDetails.filter((task: any) => !task.done);
         const doneTasks = taskDetails.filter((task: any) => task.done);
@@ -1038,6 +1041,21 @@ function OpenShiftEmployees({ shifts, rows }: { shifts: any[]; rows: any[] }) {
           </button>
 
           {expanded && <div className="openShiftDetails">
+            <EmployeeDetailList title="Чек-листы: не выполнено" count={notDoneChecklists.length} empty="Нет невыполненных чек-листов">
+              {notDoneChecklists.map((checklist: any) => <article className="employeeDetailCard compact" key={checklist.id}>
+                <div className="employeeDetailCardHead"><strong>{checklist.title}</strong><span className="badge warning">не выполнено</span></div>
+                <p>{checklistTypes[checklist.type] || checklist.type || 'Чек-лист'} · {checklist.not_done_items?.length || 0} пунктов</p>
+                <EmployeeDetailBullets items={checklist.not_done_items || []} />
+              </article>)}
+            </EmployeeDetailList>
+            <EmployeeDetailList title="Чек-листы: выполнено" count={doneChecklists.length} empty="Выполненных чек-листов сегодня нет">
+              {doneChecklists.map((checklist: any) => <article className="employeeDetailCard compact" key={checklist.id}>
+                <div className="employeeDetailCardHead"><strong>{checklist.title}</strong><span className="badge active">выполнено</span></div>
+                <p>{checklist.completed_at ? `Завершён: ${fmtDate(checklist.completed_at)}` : checklistTypes[checklist.type] || 'Чек-лист'}</p>
+                {!!checklist.done_items?.length && <EmployeeDetailBullets items={checklist.done_items} done />}
+                {!!checklist.not_done_items?.length && <><p>Неотмеченные пункты:</p><EmployeeDetailBullets items={checklist.not_done_items} /></>}
+              </article>)}
+            </EmployeeDetailList>
             <EmployeeDetailList title="Невыполненные задачи" count={openTasks.length} empty="Невыполненных задач нет">
               {openTasks.map((task: any) => <article className="employeeDetailCard compact" key={task.id}>
                 <div className="employeeDetailCardHead"><strong>{task.title}</strong><span className={cx('badge', task.overdue ? 'cancelled' : 'warning')}>{task.overdue ? 'просрочено' : 'в работе'}</span></div>
