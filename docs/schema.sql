@@ -362,3 +362,75 @@ create table if not exists integration_events (
 create unique index if not exists idx_integrations_restaurant_provider on integrations(restaurant_id, provider);
 create unique index if not exists idx_external_mappings_provider_external on external_mappings(restaurant_id, provider, entity_type, external_id);
 create index if not exists idx_integration_events_restaurant on integration_events(restaurant_id, provider, event_type, received_at);
+
+create table if not exists billing_profiles (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  customer_type text not null default 'ip',
+  legal_name text,
+  inn text,
+  kpp text,
+  ogrn text,
+  legal_address text,
+  bank_name text,
+  bik text,
+  checking_account text,
+  correspondent_account text,
+  edo_operator text,
+  edo_id text,
+  email text,
+  phone text,
+  updated_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists billing_invoices (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  number text not null,
+  status text not null default 'issued',
+  plan text not null,
+  plan_title text not null,
+  months int not null default 1,
+  period_start timestamptz not null,
+  period_end timestamptz not null,
+  amount numeric not null default 0,
+  currency text not null default 'RUB',
+  customer_requisites jsonb not null default '{}',
+  seller_requisites jsonb not null default '{}',
+  issued_at timestamptz not null default now(),
+  due_at timestamptz,
+  paid_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists payments (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  invoice_id text not null references billing_invoices(id) on delete cascade,
+  amount numeric not null default 0,
+  currency text not null default 'RUB',
+  method text not null default 'bank_transfer',
+  reference text,
+  comment text,
+  paid_at timestamptz not null default now(),
+  created_by text references users(id),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists closing_documents (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  invoice_id text not null references billing_invoices(id) on delete cascade,
+  type text not null default 'act',
+  number text not null,
+  status text not null default 'issued',
+  period_start timestamptz not null,
+  period_end timestamptz not null,
+  amount numeric not null default 0,
+  currency text not null default 'RUB',
+  issued_at timestamptz not null default now(),
+  signed_at timestamptz,
+  created_at timestamptz not null default now()
+);

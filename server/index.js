@@ -57,10 +57,34 @@ const tariffEmployeeLimits = {
   команда: 25,
   business: 50,
   бизнес: 50,
+  standard: 30,
+  стандарт: 30,
+  pro: 30,
   network: 100,
   сеть: 100,
   enterprise: null
 };
+const billingPlans = [
+  { id: 'start', title: 'Старт', employees: 10, monthly_amount: 2990 },
+  { id: 'standard', title: 'Стандарт', employees: 30, monthly_amount: 5990 },
+  { id: 'network', title: 'Сеть', employees: 100, monthly_amount: 9990 },
+  { id: 'enterprise', title: 'Enterprise', employees: null, monthly_amount: 0 }
+];
+
+const defaultSellerRequisites = {
+  legal_name: process.env.BILLING_SELLER_NAME || 'ИП ФИО',
+  inn: process.env.BILLING_SELLER_INN || '',
+  ogrn: process.env.BILLING_SELLER_OGRNIP || '',
+  legal_address: process.env.BILLING_SELLER_ADDRESS || '',
+  bank_name: process.env.BILLING_SELLER_BANK_NAME || '',
+  bik: process.env.BILLING_SELLER_BIK || '',
+  checking_account: process.env.BILLING_SELLER_CHECKING_ACCOUNT || '',
+  correspondent_account: process.env.BILLING_SELLER_CORRESPONDENT_ACCOUNT || '',
+  email: process.env.BILLING_SELLER_EMAIL || '',
+  phone: process.env.BILLING_SELLER_PHONE || '',
+  tax_note: process.env.BILLING_TAX_NOTE || 'Без НДС'
+};
+
 const inventoryImportSections = {
   bar: { department: 'bar', title: 'Бар', defaultCategory: 'Бар' },
   kitchen: { department: 'kitchen', title: 'Кухня', defaultCategory: 'Кухня' },
@@ -2923,6 +2947,206 @@ app.get('/api/admin/knowledge/stats', auth, ensureRestaurantActive, adminOnly, (
     };
   }));
 });
+
+
+app.get('/api/billing', auth, billingAccess, (req, res) => {
+  const rid = req.user.restaurant_id;
+  const restaurant = db.restaurants.find(r => r.id === rid);
+  res.json({
+    restaurant,
+    plans: billingPlans,
+    seller_requisites_ready: Boolean(defaultSellerRequisites.legal_name && defaultSellerRequisites.inn && defaultSellerRequisites.checking_account),
+    profile: publicBillingProfile(getBillingProfile(rid)),
+    invoices: sameRestaurant(collection('billing_invoices'), rid).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))),
+    payments: sameRestaurant(collection('payments'), rid).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))),
+    documents: sameRestaurant(collection('closing_documents'), rid).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))
+  });
+});
+
+app.patch('/api/billing/requisites', auth, billingAccess, runAsync(async (req, res) => {
+  const rid = req.user.restaurant_id;
+  const body = req.body || {};
+  let profile = getBillingProfile(rid);
+  const payload = {
+    customer_type: ['ip', 'ooo'].includes(String(body.customer_type)) ? String(body.customer_type) : 'ip',
+    legal_name: String(body.legal_name || '').trim(),
+    inn: String(body.inn || '').trim(),
+    kpp: String(body.kpp || '').trim(),
+    ogrn: String(body.ogrn || '').trim(),
+    legal_address: String(body.legal_address || '').trim(),
+    bank_name: String(body.bank_name || '').trim(),
+    bik: String(body.bik || '').trim(),
+    checking_account: String(body.checking_account || '').trim(),
+    correspondent_account: String(body.correspondent_account || '').trim(),
+    edo_operator: String(body.edo_operator || '').trim(),
+    edo_id: String(body.edo_id || '').trim(),
+    email: String(body.email || '').trim(),
+    phone: String(body.phone || '').trim(),
+    updated_at: nowIso()
+  };
+  if (!profile) {
+    profile = { id: uid('billprof'), restaurant_id: rid, ...payload, created_at: nowIso() };
+    collection('billing_profiles').push(profile);
+  } else {
+    Object.assign(profile, payload);
+  }
+  await persist();
+  res.json(profile);
+}));
+
+app.post('/api/billing/invoices', auth, billingAccess, runAsync(async (req, res) => {
+  const rid = req.user.restaurant_id;
+  const restaurant = db.restaurants.find(r => r.id === rid);
+  const profile = getBillingProfile(rid);
+  const profileError = validateBillingProfile(publicBillingProfile(profile));
+  if (profileError) return res.status(400).json({ error: profileError });
+  if (!defaultSellerRequisites.legal_name || !defaultSellerRequisites.inn || !defaultSellerRequisites.checking_account) {
+    return res.status(400).json({ error: 'Заполните реквизиты ИП в переменных BILLING_SELLER_*' });
+  }
+  const plan = billingPlan(String(req.body?.plan || 'standard'));
+  if (plan.id === 'enterprise') return res.status(400).json({ error: 'Для Enterprise сформируйте индивидуальный счёт' });
+  const months = Math.max(1, Math.min(12, Number(req.body?.months || 1) || 1));
+  const periodStart = req.body?.period_start ? new Date(req.body.period_start) : new Date();
+  if (Number.isNaN(periodStart.getTime())) return res.status(400).json({ error: 'Некорректное начало периода' });
+  const amount = Number(plan.monthly_amount || 0) * months;
+  const invoice = {
+    id: uid('inv'),
+    restaurant_id: rid,
+    number: invoiceNumber(),
+    status: 'issued',
+    plan: plan.id,
+    plan_title: plan.title,
+    months,
+    period_start: periodStart.toISOString(),
+    period_end: addMonthsIso(periodStart, months),
+    amount,
+    currency: 'RUB',
+    customer_requisites: publicBillingProfile(profile),
+    seller_requisites: currentSellerRequisites(),
+    issued_at: nowIso(),
+    due_at: addDays(7),
+    paid_at: null,
+    created_at: nowIso(),
+    updated_at: nowIso()
+  };
+  collection('billing_invoices').push(invoice);
+  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'invoice_created', title: `Сформирован счёт № ${invoice.number}`, entity_type: 'billing_invoice', entity_id: invoice.id, metadata: { amount } });
+  await persist();
+  res.status(201).json(invoice);
+}));
+
+app.get('/api/billing/invoices/:id/html', auth, billingAccess, (req, res) => {
+  const invoice = collection('billing_invoices').find(item => item.id === req.params.id && (req.user.is_super_admin || item.restaurant_id === req.user.restaurant_id));
+  if (!invoice) return res.status(404).json({ error: 'Счёт не найден' });
+  const restaurant = db.restaurants.find(r => r.id === invoice.restaurant_id);
+  const rows = [{
+    name: `Доступ к сервису Resto Control, тариф «${invoice.plan_title}», период ${dateOnly(invoice.period_start)} — ${dateOnly(invoice.period_end)}`,
+    qty: `${invoice.months} мес.`,
+    price: Number(invoice.amount || 0) / Math.max(1, Number(invoice.months || 1)),
+    amount: invoice.amount
+  }];
+  const html = billingDocumentHtml({
+    title: 'Счёт на оплату',
+    number: invoice.number,
+    restaurant,
+    customer: invoice.customer_requisites || {},
+    seller: invoice.seller_requisites || {},
+    rows,
+    total: invoice.amount,
+    footerTitle: 'Назначение платежа',
+    footerText: `Оплата по счёту № ${invoice.number} за доступ к сервису Resto Control. ${invoice.seller_requisites?.tax_note || 'Без НДС'}.`
+  });
+  sendHtml(res, `invoice-${invoice.number}.html`, html);
+});
+
+app.get('/api/billing/documents/:id/html', auth, billingAccess, (req, res) => {
+  const doc = collection('closing_documents').find(item => item.id === req.params.id && (req.user.is_super_admin || item.restaurant_id === req.user.restaurant_id));
+  if (!doc) return res.status(404).json({ error: 'Документ не найден' });
+  const invoice = collection('billing_invoices').find(item => item.id === doc.invoice_id && (req.user.is_super_admin || item.restaurant_id === req.user.restaurant_id));
+  if (!invoice) return res.status(404).json({ error: 'Счёт не найден' });
+  const restaurant = db.restaurants.find(r => r.id === invoice.restaurant_id);
+  const rows = [{
+    name: `Услуги доступа к сервису Resto Control, тариф «${invoice.plan_title}», период ${dateOnly(doc.period_start)} — ${dateOnly(doc.period_end)}`,
+    qty: `${invoice.months} мес.`,
+    price: Number(doc.amount || 0) / Math.max(1, Number(invoice.months || 1)),
+    amount: doc.amount
+  }];
+  const html = billingDocumentHtml({
+    title: doc.type === 'upd' ? 'УПД' : 'Акт оказанных услуг',
+    number: doc.number,
+    restaurant,
+    customer: invoice.customer_requisites || {},
+    seller: invoice.seller_requisites || {},
+    rows,
+    total: doc.amount,
+    footerTitle: 'Основание',
+    footerText: `Услуги оказаны за период ${dateOnly(doc.period_start)} — ${dateOnly(doc.period_end)}. Претензий по объёму и качеству услуг нет.`
+  });
+  sendHtml(res, `${doc.type}-${doc.number}.html`, html);
+});
+
+app.get('/api/super/billing/invoices', auth, superOnly, (req, res) => {
+  const rows = collection('billing_invoices')
+    .map(invoice => ({
+      ...invoice,
+      restaurant: db.restaurants.find(r => r.id === invoice.restaurant_id) || null,
+      payments: collection('payments').filter(payment => payment.invoice_id === invoice.id),
+      documents: collection('closing_documents').filter(doc => doc.invoice_id === invoice.id)
+    }))
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  res.json(rows);
+});
+
+app.post('/api/super/billing/invoices/:id/mark-paid', auth, superOnly, runAsync(async (req, res) => {
+  const invoice = collection('billing_invoices').find(item => item.id === req.params.id);
+  if (!invoice) return res.status(404).json({ error: 'Счёт не найден' });
+  invoice.status = 'paid';
+  invoice.paid_at = String(req.body?.paid_at || nowIso());
+  invoice.updated_at = nowIso();
+  const payment = {
+    id: uid('pay'),
+    restaurant_id: invoice.restaurant_id,
+    invoice_id: invoice.id,
+    amount: invoice.amount,
+    currency: invoice.currency || 'RUB',
+    method: 'bank_transfer',
+    reference: String(req.body?.reference || '').trim(),
+    comment: String(req.body?.comment || '').trim(),
+    paid_at: invoice.paid_at,
+    created_by: req.user.id,
+    created_at: nowIso()
+  };
+  collection('payments').push(payment);
+  let closingDocument = collection('closing_documents').find(doc => doc.invoice_id === invoice.id);
+  if (!closingDocument) {
+    closingDocument = {
+      id: uid('close'),
+      restaurant_id: invoice.restaurant_id,
+      invoice_id: invoice.id,
+      type: 'act',
+      number: closingDocumentNumber('act'),
+      status: 'issued',
+      period_start: invoice.period_start,
+      period_end: invoice.period_end,
+      amount: invoice.amount,
+      currency: invoice.currency || 'RUB',
+      issued_at: invoice.period_end,
+      signed_at: null,
+      created_at: nowIso()
+    };
+    collection('closing_documents').push(closingDocument);
+  }
+  const restaurant = db.restaurants.find(r => r.id === invoice.restaurant_id);
+  if (restaurant) {
+    restaurant.plan = invoice.plan;
+    restaurant.subscription_status = 'active';
+    restaurant.subscription_started_at = invoice.period_start;
+    restaurant.subscription_ends_at = invoice.period_end;
+  }
+  await persist();
+  res.json({ invoice, payment, document: closingDocument, restaurant });
+}));
+
 
 app.use((error, req, res, next) => {
   console.error(error);

@@ -71,11 +71,10 @@ type MobileWorkspaceConfig = {
 const brandLogoSrc = '/resto-control-logo.png';
 
 const subscriptionTariffs = [
-  { title: 'Старт', employees: 'до 10 сотрудников', price: '1 490 ₽', period: '/ мес', note: 'Для небольших команд', featured: false },
-  { title: 'Команда', employees: 'до 25 сотрудников', price: '2 590 ₽', period: '/ мес', note: 'Для растущего заведения', featured: true },
-  { title: 'Бизнес', employees: 'до 50 сотрудников', price: '4 990 ₽', period: '/ мес', note: 'Для нескольких смен', featured: false },
-  { title: 'Сеть', employees: 'до 100 сотрудников', price: '7 990 ₽', period: '/ мес', note: 'Для крупных ресторанов', featured: false },
-  { title: 'Enterprise', employees: '100+ сотрудников', price: 'Индивидуально', period: '', note: 'Персональные условия', featured: false }
+  { id: 'start', title: 'Старт', employees: 'до 10 сотрудников', price: '2 990 ₽', period: '/ мес', note: 'Счёт на оплату, закрывающие документы', featured: false },
+  { id: 'standard', title: 'Стандарт', employees: 'до 30 сотрудников', price: '5 990 ₽', period: '/ мес', note: 'Оптимально для одного ресторана', featured: true },
+  { id: 'network', title: 'Сеть', employees: 'до 100 сотрудников', price: '9 990 ₽', period: '/ мес', note: 'Для нескольких смен и большой команды', featured: false },
+  { id: 'enterprise', title: 'Enterprise', employees: '100+ сотрудников', price: 'Индивидуально', period: '', note: 'Индивидуальный договор и условия', featured: false }
 ];
 
 function TariffPlans() {
@@ -573,10 +572,11 @@ function RestaurantWorkspace({
         }
       : modalKind === 'billing'
         ? {
-            title: 'Тарифы и оплата',
+            title: 'Оплата и документы',
             details: <TariffPlans />,
             actions: [
-              { label: 'Открыть обзор', kind: 'primary', onClick: () => setActive('overview') }
+              { label: 'Открыть оплату', kind: 'primary', onClick: () => setActive('billing') },
+              { label: 'Открыть обзор', onClick: () => setActive('overview') }
             ]
           }
         : null;
@@ -616,7 +616,7 @@ function RestaurantWorkspace({
     ]
     : [
       { id: 'support', title: 'База знаний', subtitle: 'Инструкции и документы', icon: 'knowledge', onClick: () => setActive('knowledge') },
-      { id: 'billing', title: 'Тарифы и оплата', subtitle: 'Статус подписки и продление', icon: 'trial', onClick: openBilling },
+      { id: 'billing', title: 'Оплата и документы', subtitle: 'Счета, реквизиты, акты', icon: 'trial', onClick: () => setActive('billing') },
       { id: 'logout', title: 'Выйти', subtitle: 'Завершить рабочую сессию', icon: 'logout', onClick: onLogout }
     ];
 
@@ -676,13 +676,17 @@ function RestaurantWorkspace({
 function SuperAdmin({ user, onLogout }: any) {
   const [tab, setTab] = useState<Tab>('restaurants');
   const [restaurants, setRestaurants] = useState<any[]>([]);
+  const [billingInvoices, setBillingInvoices] = useState<any[]>([]);
   const [form, setForm] = useState<any>({ name: '', owner_name: '', city: '', phone: '', email: '', login: '', password: '' });
   const [msg, setMsg] = useState('');
 
   async function load() {
     setRestaurants(await api('/api/super/restaurants'));
   }
-  useEffect(() => { load(); }, []);
+  async function loadBilling() {
+    setBillingInvoices(await api('/api/super/billing/invoices'));
+  }
+  useEffect(() => { load(); loadBilling(); }, []);
 
   async function createRestaurant(e: FormEvent) {
     e.preventDefault(); setMsg('');
@@ -704,10 +708,20 @@ function SuperAdmin({ user, onLogout }: any) {
     load();
   }
 
+  async function markPaid(id: string) {
+    await api(`/api/super/billing/invoices/${id}/mark-paid`, { method: 'POST', body: JSON.stringify({}) });
+    load();
+    loadBilling();
+  }
+
+  function money(value: any) {
+    return `${Number(value || 0).toLocaleString('ru-RU')} ₽`;
+  }
+
   return <BasicWorkspace
     user={user}
     subtitle="Супер-админ создателя"
-    tabs={withIcons([{ id: 'restaurants', title: 'Рестораны' }, { id: 'create', title: 'Создать' }])}
+    tabs={withIcons([{ id: 'restaurants', title: 'Рестораны' }, { id: 'payments', title: 'Оплаты' }, { id: 'create', title: 'Создать' }])}
     active={tab}
     setActive={setTab}
     onLogout={onLogout}
@@ -721,6 +735,17 @@ function SuperAdmin({ user, onLogout }: any) {
           <p>Чек-листы: {r.checklist_runs_count}</p>
           <div className="actions"><Button kind="soft" onClick={() => extend(r.id, 30)}>+30 дней</Button><Button kind="danger" onClick={() => block(r.id)}>Блок</Button></div>
         </div>)}
+      </div>
+    </Card>}
+    {tab === 'payments' && <Card title="Счета ресторанов">
+      <div className="compactAccordionList">
+        {billingInvoices.length ? billingInvoices.map((invoice: any) => <details className="compactAccordion" key={invoice.id}>
+          <summary className="compactAccordionSummary"><span><b>№ {invoice.number} · {invoice.restaurant?.name || 'Ресторан'}</b><small>{invoice.plan_title} · {money(invoice.amount)}</small></span><em>{invoice.status}</em></summary>
+          <div className="compactAccordionBody">
+            <div className="adminRowButton readonly"><span><b>Период</b><small>{fmtDate(invoice.period_start)} — {fmtDate(invoice.period_end)}</small></span><em>{invoice.status}</em></div>
+            <div className="actions"><Button type="button" kind="soft" onClick={() => download(`/api/billing/invoices/${invoice.id}/html`, `invoice-${invoice.number}.html`)}>Скачать счёт</Button>{invoice.status !== 'paid' && <Button type="button" onClick={() => markPaid(invoice.id)}>Отметить оплату</Button>}</div>
+          </div>
+        </details>) : <Empty text="Счетов пока нет" />}
       </div>
     </Card>}
     {tab === 'create' && <Card title="Создать кабинет ресторана">
@@ -750,7 +775,7 @@ function RestaurantAdmin({ user, restaurant, onLogout }: any) {
     { id: 'bookings', title: 'Брони / залы' },
     { id: 'tasks', title: 'Проблемы' },
     { id: 'knowledge', title: 'База знаний' },
-    ...(!isManager ? [{ id: 'integrations', title: 'Интеграции' }] : [])
+    ...(!isManager ? [{ id: 'integrations', title: 'Интеграции' }, { id: 'billing', title: 'Оплата' }] : [])
   ]);
   const section = useMemo(() => {
     if (tab === 'overview') return <AdminOverview mode={user.role === 'manager' ? 'manager' : 'owner'} onNavigate={setTab} />;
@@ -760,6 +785,7 @@ function RestaurantAdmin({ user, restaurant, onLogout }: any) {
     if (tab === 'inventory') return <Inventory user={user} admin />;
     if (tab === 'tasks') return <Tasks user={user} admin />;
     if (tab === 'integrations') return <IntegrationsAdmin />;
+    if (tab === 'billing') return <BillingAdmin restaurant={restaurant} />;
     return <Knowledge user={user} admin />;
   }, [tab, user]);
 
@@ -910,6 +936,153 @@ function IntegrationsAdmin() {
     </details>
   </div>;
 }
+
+
+function BillingAdmin({ restaurant }: { restaurant: any }) {
+  const [data, setData] = useState<any>(null);
+  const [form, setForm] = useState<any>({ customer_type: 'ip', legal_name: '', inn: '', kpp: '', ogrn: '', legal_address: '', bank_name: '', bik: '', checking_account: '', correspondent_account: '', edo_operator: '', edo_id: '', email: '', phone: '' });
+  const [invoiceForm, setInvoiceForm] = useState<any>({ plan: 'standard', months: 1, period_start: new Date().toISOString().slice(0, 10) });
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    const next = await api('/api/billing');
+    setData(next);
+    setForm({ ...form, ...(next.profile || {}) });
+  }
+
+  useEffect(() => { load(); }, []);
+
+  function money(value: any) {
+    return `${Number(value || 0).toLocaleString('ru-RU')} ₽`;
+  }
+
+  async function saveRequisites(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setMessage('');
+    try {
+      const profile = await api('/api/billing/requisites', { method: 'PATCH', body: JSON.stringify(form) });
+      setData((current: any) => ({ ...(current || {}), profile }));
+      setMessage('Реквизиты сохранены');
+    } catch (error: any) {
+      setMessage(error.message || 'Не удалось сохранить реквизиты');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createInvoice(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setMessage('');
+    try {
+      const invoice = await api('/api/billing/invoices', { method: 'POST', body: JSON.stringify(invoiceForm) });
+      setMessage(`Счёт № ${invoice.number} сформирован`);
+      await load();
+    } catch (error: any) {
+      setMessage(error.message || 'Не удалось сформировать счёт');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!data) return <Card><Empty text="Загружаем оплату" /></Card>;
+  const plans = data.plans || [];
+  const invoices = data.invoices || [];
+  const documents = data.documents || [];
+  const currentPlan = plans.find((plan: any) => plan.id === restaurant?.plan) || plans.find((plan: any) => plan.id === 'standard') || {};
+  const latestInvoice = invoices[0];
+
+  return <div className="contentStack billingAdmin">
+    <div className="adminCompactGrid">
+      <div className="miniCard">
+        <div className="rowBetween"><b>Доступ</b><span className={cx('badge', restaurant?.subscription_status)}>{subscriptionLabel(restaurant?.subscription_status)}</span></div>
+        <p>Тариф: {currentPlan.title || restaurant?.plan || '—'}</p>
+        <p>{restaurant?.subscription_ends_at ? `Оплачен до ${fmtDate(restaurant.subscription_ends_at)}` : `Пробный период до ${fmtDate(restaurant?.trial_ends_at)}`}</p>
+      </div>
+      <div className="miniCard">
+        <div className="rowBetween"><b>B2B-оплата</b><span className="badge active">по счёту</span></div>
+        <p>Ресторан оплачивает с расчётного счёта.</p>
+        <p>После поступления оплаты доступ продлевается, закрывающий документ появляется в разделе ниже.</p>
+      </div>
+      <div className="miniCard">
+        <div className="rowBetween"><b>Последний счёт</b><span className={cx('badge', latestInvoice?.status || 'new')}>{latestInvoice?.status || 'нет'}</span></div>
+        <p>{latestInvoice ? `№ ${latestInvoice.number} · ${money(latestInvoice.amount)}` : 'Счета ещё не формировались'}</p>
+        {latestInvoice && <Button type="button" kind="soft" onClick={() => download(`/api/billing/invoices/${latestInvoice.id}/html`, `invoice-${latestInvoice.number}.html`)}>Скачать</Button>}
+      </div>
+    </div>
+
+    <details className="compactAccordion">
+      <summary className="compactAccordionSummary"><span>Реквизиты ресторана</span><em>{form.legal_name || 'не заполнены'}</em></summary>
+      <div className="compactAccordionBody">
+        <form className="form two compactAdminForm billingRequisitesForm" onSubmit={saveRequisites}>
+          <Select label="Тип" value={form.customer_type} onChange={(e: any) => setForm({ ...form, customer_type: e.target.value })}>
+            <option value="ip">ИП</option>
+            <option value="ooo">ООО</option>
+          </Select>
+          <Field label="Наименование" value={form.legal_name} onChange={(e: any) => setForm({ ...form, legal_name: e.target.value })} placeholder="ИП Иванов Иван Иванович" />
+          <Field label="ИНН" value={form.inn} onChange={(e: any) => setForm({ ...form, inn: e.target.value })} />
+          <Field label="КПП" value={form.kpp} onChange={(e: any) => setForm({ ...form, kpp: e.target.value })} disabled={form.customer_type === 'ip'} />
+          <Field label="ОГРН/ОГРНИП" value={form.ogrn} onChange={(e: any) => setForm({ ...form, ogrn: e.target.value })} />
+          <Field label="Юр. адрес" value={form.legal_address} onChange={(e: any) => setForm({ ...form, legal_address: e.target.value })} />
+          <Field label="Банк" value={form.bank_name} onChange={(e: any) => setForm({ ...form, bank_name: e.target.value })} />
+          <Field label="БИК" value={form.bik} onChange={(e: any) => setForm({ ...form, bik: e.target.value })} />
+          <Field label="Расчётный счёт" value={form.checking_account} onChange={(e: any) => setForm({ ...form, checking_account: e.target.value })} />
+          <Field label="Корр. счёт" value={form.correspondent_account} onChange={(e: any) => setForm({ ...form, correspondent_account: e.target.value })} />
+          <Field label="ЭДО" value={form.edo_operator} onChange={(e: any) => setForm({ ...form, edo_operator: e.target.value })} placeholder="Диадок / СБИС / Контур" />
+          <Field label="ID в ЭДО" value={form.edo_id} onChange={(e: any) => setForm({ ...form, edo_id: e.target.value })} />
+          <Field label="Email для документов" value={form.email} onChange={(e: any) => setForm({ ...form, email: e.target.value })} />
+          <Field label="Телефон бухгалтерии" value={form.phone} onChange={(e: any) => setForm({ ...form, phone: e.target.value })} />
+          <div className="actions adminFormActions"><Button disabled={busy}>Сохранить реквизиты</Button></div>
+        </form>
+      </div>
+    </details>
+
+    <details className="compactAccordion">
+      <summary className="compactAccordionSummary"><span>Сформировать счёт</span><em>оплата с расчётного счёта</em></summary>
+      <div className="compactAccordionBody">
+        <form className="form two compactAdminForm billingInvoiceForm" onSubmit={createInvoice}>
+          <Select label="Тариф" value={invoiceForm.plan} onChange={(e: any) => setInvoiceForm({ ...invoiceForm, plan: e.target.value })}>
+            {plans.filter((plan: any) => plan.id !== 'enterprise').map((plan: any) => <option value={plan.id} key={plan.id}>{plan.title} · {money(plan.monthly_amount)} / мес</option>)}
+          </Select>
+          <Select label="Период" value={invoiceForm.months} onChange={(e: any) => setInvoiceForm({ ...invoiceForm, months: Number(e.target.value) })}>
+            <option value={1}>1 месяц</option>
+            <option value={3}>3 месяца</option>
+            <option value={6}>6 месяцев</option>
+            <option value={12}>12 месяцев</option>
+          </Select>
+          <Field label="Начало доступа" type="date" value={invoiceForm.period_start} onChange={(e: any) => setInvoiceForm({ ...invoiceForm, period_start: e.target.value })} />
+          <div className="actions adminFormActions"><Button disabled={busy}>Сформировать счёт</Button></div>
+        </form>
+      </div>
+    </details>
+
+    <details className="compactAccordion">
+      <summary className="compactAccordionSummary"><span>Счета</span><em>{invoices.length}</em></summary>
+      <div className="compactAccordionBody">
+        {invoices.length ? invoices.map((invoice: any) => <div className="adminRowButton readonly" key={invoice.id}>
+          <span><b>Счёт № {invoice.number}</b><small>{invoice.plan_title} · {money(invoice.amount)} · {fmtDate(invoice.issued_at)}</small></span>
+          <span className="rowActions"><em className={cx('badge', invoice.status)}>{invoice.status}</em><Button type="button" kind="soft" onClick={() => download(`/api/billing/invoices/${invoice.id}/html`, `invoice-${invoice.number}.html`)}>Скачать</Button></span>
+        </div>) : <Empty text="Счетов пока нет" />}
+      </div>
+    </details>
+
+    <details className="compactAccordion">
+      <summary className="compactAccordionSummary"><span>Закрывающие документы</span><em>{documents.length}</em></summary>
+      <div className="compactAccordionBody">
+        {documents.length ? documents.map((doc: any) => <div className="adminRowButton readonly" key={doc.id}>
+          <span><b>{doc.type === 'upd' ? 'УПД' : 'Акт'} № {doc.number}</b><small>{money(doc.amount)} · период до {fmtDate(doc.period_end)}</small></span>
+          <span className="rowActions"><em className={cx('badge', doc.status)}>{doc.status}</em><Button type="button" kind="soft" onClick={() => download(`/api/billing/documents/${doc.id}/html`, `${doc.type}-${doc.number}.html`)}>Скачать</Button></span>
+        </div>) : <Empty text="Документы появятся после отметки оплаты" />}
+      </div>
+    </details>
+
+    {!data.seller_requisites_ready && <div className="notice">Для рабочих счетов заполните переменные BILLING_SELLER_* в окружении сервера.</div>}
+    {message && <div className={message.includes('Не удалось') || message.includes('Заполните') ? 'error' : 'notice'}>{message}</div>}
+  </div>;
+}
+
 
 function SubscriptionBanner({ restaurant, openBilling }: any) {
   const status = restaurant?.subscription_status;

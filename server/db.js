@@ -46,7 +46,11 @@ const SNAPSHOT_TABLES = [
   { name: 'comments', columns: ['id', 'restaurant_id', 'entity_type', 'entity_id', 'user_id', 'body', 'created_at'] },
   { name: 'integrations', columns: ['id', 'restaurant_id', 'provider', 'status', 'api_login_encrypted', 'organization_id', 'terminal_group_id', 'sync_interval_seconds', 'sync_bookings', 'sync_shifts', 'last_sync_at', 'last_error', 'created_at', 'updated_at'] },
   { name: 'external_mappings', columns: ['id', 'restaurant_id', 'provider', 'entity_type', 'local_id', 'external_id', 'label', 'created_at'] },
-  { name: 'integration_events', columns: ['id', 'restaurant_id', 'provider', 'event_type', 'external_id', 'payload', 'status', 'received_at', 'processed_at', 'error'], jsonColumns: ['payload'] }
+  { name: 'integration_events', columns: ['id', 'restaurant_id', 'provider', 'event_type', 'external_id', 'payload', 'status', 'received_at', 'processed_at', 'error'], jsonColumns: ['payload'] },
+  { name: 'billing_profiles', columns: ['id', 'restaurant_id', 'customer_type', 'legal_name', 'inn', 'kpp', 'ogrn', 'legal_address', 'bank_name', 'bik', 'checking_account', 'correspondent_account', 'edo_operator', 'edo_id', 'email', 'phone', 'updated_at', 'created_at'] },
+  { name: 'billing_invoices', columns: ['id', 'restaurant_id', 'number', 'status', 'plan', 'plan_title', 'months', 'period_start', 'period_end', 'amount', 'currency', 'customer_requisites', 'seller_requisites', 'issued_at', 'due_at', 'paid_at', 'created_at', 'updated_at'], jsonColumns: ['customer_requisites', 'seller_requisites'] },
+  { name: 'payments', columns: ['id', 'restaurant_id', 'invoice_id', 'amount', 'currency', 'method', 'reference', 'comment', 'paid_at', 'created_by', 'created_at'] },
+  { name: 'closing_documents', columns: ['id', 'restaurant_id', 'invoice_id', 'type', 'number', 'status', 'period_start', 'period_end', 'amount', 'currency', 'issued_at', 'signed_at', 'created_at'] }
 ];
 
 let pool;
@@ -91,7 +95,7 @@ function writeJsonDb(db) {
 }
 
 function encodeColumnValue(column, value) {
-  if (column === 'allowed_roles' || column === 'metadata' || column === 'table_ids' || column === 'ingredients' || column === 'payload') {
+  if (column === 'allowed_roles' || column === 'metadata' || column === 'table_ids' || column === 'ingredients' || column === 'payload' || column === 'customer_requisites' || column === 'seller_requisites') {
     if (column === 'metadata' || column === 'payload') return JSON.stringify(value || {});
     return JSON.stringify(value || []);
   }
@@ -118,6 +122,7 @@ async function ensurePostgresSchema() {
   await getPool().query(`alter table if exists integrations add column if not exists sync_bookings boolean not null default true`);
   await getPool().query(`alter table if exists integrations add column if not exists sync_shifts boolean not null default true`);
 }
+
 
 
 async function loadPostgresSnapshot() {
@@ -213,7 +218,11 @@ function emptyDb() {
     comments: [],
     integrations: [],
     external_mappings: [],
-    integration_events: []
+    integration_events: [],
+    billing_profiles: [],
+    billing_invoices: [],
+    payments: [],
+    closing_documents: []
   };
 }
 

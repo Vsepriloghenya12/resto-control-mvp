@@ -7588,3 +7588,35 @@ body {
   font-size: 13px;
   line-height: 1.4;
 }
+
+.billingAdmin .adminCompactGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.billingRequisitesForm {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.billingInvoiceForm {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.rowActions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 860px) {
+  .billingAdmin .adminCompactGrid,
+  .billingRequisitesForm,
+  .billingInvoiceForm {
+    grid-template-columns: 1fr;
+  }
+
+  .rowActions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
