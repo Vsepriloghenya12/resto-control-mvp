@@ -80,6 +80,17 @@ export const techRequestCategories: Record<string, string> = {
   other: 'Другое'
 };
 
+
+export const requestStatuses: Record<string, string> = {
+  draft: 'черновик',
+  sent: 'отправлена',
+  approved: 'принята',
+  received: 'получена',
+  not_received: 'не получена',
+  done: 'выполнена',
+  cancelled: 'отменена'
+};
+
 export const techRequestStatuses: Record<string, string> = {
   new: 'новая',
   in_progress: 'в работе',
