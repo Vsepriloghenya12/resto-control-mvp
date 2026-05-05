@@ -749,7 +749,8 @@ function RestaurantAdmin({ user, restaurant, onLogout }: any) {
     { id: 'inventory', title: 'Номенклатура' },
     { id: 'bookings', title: 'Брони / залы' },
     { id: 'tasks', title: 'Проблемы' },
-    { id: 'knowledge', title: 'База знаний' }
+    { id: 'knowledge', title: 'База знаний' },
+    ...(!isManager ? [{ id: 'integrations', title: 'Интеграции' }] : [])
   ]);
   const section = useMemo(() => {
     if (tab === 'overview') return <AdminOverview mode={user.role === 'manager' ? 'manager' : 'owner'} onNavigate={setTab} />;
@@ -758,6 +759,7 @@ function RestaurantAdmin({ user, restaurant, onLogout }: any) {
     if (tab === 'bookings') return <Bookings user={user} admin />;
     if (tab === 'inventory') return <Inventory user={user} admin />;
     if (tab === 'tasks') return <Tasks user={user} admin />;
+    if (tab === 'integrations') return <IntegrationsAdmin />;
     return <Knowledge user={user} admin />;
   }, [tab, user]);
 
@@ -772,6 +774,141 @@ function RestaurantAdmin({ user, restaurant, onLogout }: any) {
   >
     <div className="contentStack">{section}</div>
   </RestaurantWorkspace>;
+}
+
+
+function IntegrationsAdmin() {
+  const [data, setData] = useState<any>(null);
+  const [form, setForm] = useState<any>({ autonomous: true, api_login: '', organization_id: '', terminal_group_id: '', sync_interval_seconds: 60, sync_bookings: true, sync_shifts: true });
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+  const [organizations, setOrganizations] = useState<any[]>([]);
+
+  async function load() {
+    const next = await api('/api/admin/integrations/iiko');
+    setData(next);
+    const integration = next.integration || {};
+    const autonomous = !integration.has_api_login || integration.status === 'autonomous';
+    setForm({
+      autonomous,
+      api_login: '',
+      organization_id: integration.organization_id || '',
+      terminal_group_id: integration.terminal_group_id || '',
+      sync_interval_seconds: integration.sync_interval_seconds || 60,
+      sync_bookings: integration.sync_bookings !== false,
+      sync_shifts: integration.sync_shifts !== false
+    });
+  }
+
+  useEffect(() => { load(); }, []);
+
+  async function save(e?: FormEvent) {
+    e?.preventDefault();
+    setBusy(true);
+    setMessage('');
+    try {
+      const payload = { ...form, api_login: form.autonomous ? '' : form.api_login, autonomous: Boolean(form.autonomous) };
+      const result = await api('/api/admin/integrations/iiko', { method: 'POST', body: JSON.stringify(payload) });
+      setData((current: any) => ({ ...(current || {}), integration: result.integration }));
+      setForm((current: any) => ({ ...current, api_login: '', autonomous: result.integration?.status === 'autonomous' || !result.integration?.has_api_login }));
+      setMessage(result.integration?.status === 'autonomous' ? 'Автономный режим включён' : 'Настройки iiko сохранены');
+    } catch (error: any) {
+      setMessage(error.message || 'Не удалось сохранить настройки');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function testConnection() {
+    setBusy(true);
+    setMessage('');
+    try {
+      await save();
+      const result = await api('/api/admin/integrations/iiko/test', { method: 'POST', body: JSON.stringify({}) });
+      setOrganizations(result.organizations || []);
+      setMessage(result.message || `Подключение работает. Организаций: ${(result.organizations || []).length}`);
+      load();
+    } catch (error: any) {
+      setMessage(error.message || 'iiko не ответила');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function syncNow() {
+    setBusy(true);
+    setMessage('');
+    try {
+      const result = await api('/api/admin/integrations/iiko/sync', { method: 'POST', body: JSON.stringify({}) });
+      setOrganizations(result.organizations || []);
+      setMessage(result.message || 'Синхронизация выполнена');
+      load();
+    } catch (error: any) {
+      setMessage(error.message || 'Не удалось синхронизировать iiko');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!data) return <Card><Empty text="Загружаем интеграции" /></Card>;
+  const integration = data.integration || {};
+  const mappings = data.mappings || {};
+  const events = data.events || [];
+  const autonomous = form.autonomous || integration.status === 'autonomous' || !integration.has_api_login;
+
+  return <div className="contentStack integrationsAdmin">
+    <Card title="Интеграции">
+      <form className="form two compactAdminForm" onSubmit={save}>
+        <label className="compactCheck integrationModeCheck"><input type="checkbox" checked={autonomous} onChange={(e) => setForm({ ...form, autonomous: e.target.checked })} /> Работать автономно без POS/API</label>
+        <div className="integrationModeNote">{autonomous ? 'Брони, смены, чек-листы и задачи ведутся внутри приложения. Внешние API не вызываются.' : 'iiko Cloud будет использоваться только после сохранения API-ключа.'}</div>
+        <Field label="API-логин iiko" type="password" value={form.api_login} onChange={(e: any) => setForm({ ...form, api_login: e.target.value, autonomous: false })} placeholder={integration.has_api_login ? 'Сохранён. Введите новый для замены' : 'Вставьте API-логин'} disabled={autonomous} />
+        <Field label="Организация iiko" value={form.organization_id} onChange={(e: any) => setForm({ ...form, organization_id: e.target.value })} placeholder="organizationId" disabled={autonomous} />
+        <Field label="Терминальная группа" value={form.terminal_group_id} onChange={(e: any) => setForm({ ...form, terminal_group_id: e.target.value })} placeholder="terminalGroupId" disabled={autonomous} />
+        <Field label="Интервал сверки, сек" type="number" min="30" max="900" value={form.sync_interval_seconds} onChange={(e: any) => setForm({ ...form, sync_interval_seconds: Number(e.target.value) })} disabled={autonomous} />
+        <label className="compactCheck"><input type="checkbox" checked={!autonomous && form.sync_bookings} disabled={autonomous} onChange={(e) => setForm({ ...form, sync_bookings: e.target.checked })} /> Брони</label>
+        <label className="compactCheck"><input type="checkbox" checked={!autonomous && form.sync_shifts} disabled={autonomous} onChange={(e) => setForm({ ...form, sync_shifts: e.target.checked })} /> Смены</label>
+        <div className="actions adminFormActions">
+          <Button disabled={busy}>Сохранить</Button>
+          <Button type="button" kind="soft" disabled={busy} onClick={testConnection}>Проверить режим</Button>
+          <Button type="button" kind="soft" disabled={busy} onClick={syncNow}>Сверить</Button>
+        </div>
+      </form>
+      {message && <div className={message.includes('Не удалось') || message.includes('не ответила') ? 'error' : 'notice'}>{message}</div>}
+    </Card>
+
+    <div className="adminCompactGrid">
+      <div className="miniCard">
+        <div className="rowBetween"><b>Режим</b><span className={cx('badge', autonomous || integration.status === 'connected' ? 'active' : integration.status === 'error' ? 'cancelled' : '')}>{autonomous ? 'автономно' : integration.status || 'не подключено'}</span></div>
+        <p>{autonomous ? 'Сторонняя POS-система не требуется.' : `Последняя сверка: ${integration.last_sync_at ? fmtDate(integration.last_sync_at) : 'ещё не было'}`}</p>
+        {integration.last_error && !autonomous && <p>{integration.last_error}</p>}
+      </div>
+      <div className="miniCard">
+        <div className="rowBetween"><b>Связи</b><span className="badge">{autonomous ? 'локально' : 'iiko'}</span></div>
+        <p>Сотрудники: {mappings.employees || 0} · Столы: {mappings.tables || 0}</p>
+        <p>Залы: {mappings.halls || 0} · Брони: {mappings.bookings || 0}</p>
+      </div>
+    </div>
+
+    {!!organizations.length && !autonomous && <details className="compactAccordion" open>
+      <summary className="compactAccordionSummary"><span>Организации iiko</span><em>{organizations.length}</em></summary>
+      <div className="compactAccordionBody">
+        {organizations.map((org: any) => <button type="button" className="adminRowButton" key={org.id} onClick={() => setForm({ ...form, organization_id: org.id })}>
+          <span><b>{org.name || org.fullName || org.id}</b><small>{org.id}</small></span>
+          <em>Выбрать</em>
+        </button>)}
+      </div>
+    </details>}
+
+    <details className="compactAccordion">
+      <summary className="compactAccordionSummary"><span>Журнал интеграции</span><em>{events.length}</em></summary>
+      <div className="compactAccordionBody">
+        {events.length ? events.map((event: any) => <div className="adminRowButton readonly" key={event.id}>
+          <span><b>{event.event_type}</b><small>{fmtDate(event.received_at)} · {event.status}</small></span>
+          {event.error && <em>{event.error}</em>}
+        </div>) : <Empty text="Событий пока нет" />}
+      </div>
+    </details>
+  </div>;
 }
 
 function SubscriptionBanner({ restaurant, openBilling }: any) {

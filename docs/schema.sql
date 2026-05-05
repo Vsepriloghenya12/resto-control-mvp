@@ -316,3 +316,49 @@ create table if not exists comments (
   body text not null,
   created_at timestamptz not null default now()
 );
+
+
+create table if not exists integrations (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  provider text not null,
+  status text not null default 'draft',
+  api_login_encrypted text,
+  organization_id text,
+  terminal_group_id text,
+  sync_interval_seconds int not null default 60,
+  sync_bookings boolean not null default true,
+  sync_shifts boolean not null default true,
+  last_sync_at timestamptz,
+  last_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists external_mappings (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  provider text not null,
+  entity_type text not null,
+  local_id text not null,
+  external_id text not null,
+  label text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists integration_events (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  provider text not null,
+  event_type text not null,
+  external_id text,
+  payload jsonb not null default '{}'::jsonb,
+  status text not null default 'received',
+  received_at timestamptz not null default now(),
+  processed_at timestamptz,
+  error text
+);
+
+create unique index if not exists idx_integrations_restaurant_provider on integrations(restaurant_id, provider);
+create unique index if not exists idx_external_mappings_provider_external on external_mappings(restaurant_id, provider, entity_type, external_id);
+create index if not exists idx_integration_events_restaurant on integration_events(restaurant_id, provider, event_type, received_at);

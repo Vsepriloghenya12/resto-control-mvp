@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import ExcelJS from 'exceljs';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import {
   loadDb,
@@ -167,6 +168,102 @@ function ensureRestaurantActive(req, res, next) {
 
 function sameRestaurant(items, restaurant_id) {
   return (items || []).filter(i => i.restaurant_id === restaurant_id);
+}
+
+
+function integrationKey() {
+  return crypto.createHash('sha256').update(String(process.env.INTEGRATION_SECRET || JWT_SECRET)).digest();
+}
+
+function encryptSecret(value) {
+  const plain = String(value || '').trim();
+  if (!plain) return '';
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', integrationKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return [iv.toString('base64'), tag.toString('base64'), encrypted.toString('base64')].join(':');
+}
+
+function decryptSecret(value) {
+  if (!value) return '';
+  try {
+    const [ivRaw, tagRaw, encryptedRaw] = String(value).split(':');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', integrationKey(), Buffer.from(ivRaw, 'base64'));
+    decipher.setAuthTag(Buffer.from(tagRaw, 'base64'));
+    return Buffer.concat([decipher.update(Buffer.from(encryptedRaw, 'base64')), decipher.final()]).toString('utf8');
+  } catch {
+    return '';
+  }
+}
+
+function iikoBaseUrl() {
+  return String(process.env.IIKO_API_BASE_URL || 'https://api-ru.iiko.services').replace(/\/$/, '');
+}
+
+async function iikoCloudRequest(pathname, body, token = '') {
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(`${iikoBaseUrl()}${pathname}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body || {})
+  });
+  const text = await response.text();
+  let data = {};
+  try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+  if (!response.ok) {
+    throw new Error(data?.errorDescription || data?.message || data?.error || 'iiko не ответила на запрос');
+  }
+  return data;
+}
+
+function publicIntegration(integration) {
+  if (!integration) {
+    return {
+      id: '',
+      provider: 'iiko',
+      status: 'autonomous',
+      organization_id: '',
+      terminal_group_id: '',
+      sync_interval_seconds: 60,
+      sync_bookings: false,
+      sync_shifts: false,
+      last_sync_at: null,
+      last_error: '',
+      has_api_login: false
+    };
+  }
+  const { api_login_encrypted, ...safe } = integration;
+  const hasApiLogin = Boolean(api_login_encrypted);
+  return {
+    ...safe,
+    status: hasApiLogin ? safe.status : 'autonomous',
+    sync_bookings: hasApiLogin ? safe.sync_bookings !== false : false,
+    sync_shifts: hasApiLogin ? safe.sync_shifts !== false : false,
+    has_api_login: hasApiLogin
+  };
+}
+
+function getIikoIntegration(restaurantId) {
+  return sameRestaurant(db.integrations, restaurantId).find(item => item.provider === 'iiko') || null;
+}
+
+function integrationEvent(restaurantId, eventType, payload, status = 'received', error = '') {
+  const event = {
+    id: uid('intevt'),
+    restaurant_id: restaurantId,
+    provider: 'iiko',
+    event_type: eventType,
+    external_id: String(payload?.id || payload?.external_id || payload?.organizationId || ''),
+    payload: payload || {},
+    status,
+    received_at: nowIso(),
+    processed_at: status === 'processed' ? nowIso() : null,
+    error
+  };
+  db.integration_events.push(event);
+  return event;
 }
 
 function employeeLimitForRestaurant(restaurant) {
@@ -1260,6 +1357,151 @@ app.get('/api/admin/reports/operations.csv', auth, ensureRestaurantActive, admin
   sendCsv(res, `operations-${rid}.csv`, rows);
 });
 
+
+
+app.get('/api/admin/integrations/iiko', auth, ensureRestaurantActive, adminOnly, (req, res) => {
+  const rid = req.user.restaurant_id;
+  const integration = getIikoIntegration(rid);
+  const mappings = sameRestaurant(db.external_mappings, rid).filter(item => item.provider === 'iiko');
+  const events = sameRestaurant(db.integration_events, rid)
+    .filter(item => item.provider === 'iiko')
+    .sort((a, b) => String(b.received_at || '').localeCompare(String(a.received_at || '')))
+    .slice(0, 10);
+  res.json({
+    integration: publicIntegration(integration),
+    mappings: {
+      employees: mappings.filter(item => item.entity_type === 'employee').length,
+      tables: mappings.filter(item => item.entity_type === 'table').length,
+      halls: mappings.filter(item => item.entity_type === 'hall').length,
+      bookings: mappings.filter(item => item.entity_type === 'booking').length,
+      shifts: mappings.filter(item => item.entity_type === 'shift').length
+    },
+    events
+  });
+});
+
+app.post('/api/admin/integrations/iiko', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
+  const rid = req.user.restaurant_id;
+  const body = req.body || {};
+  const apiLogin = String(body.api_login || '').trim();
+  let integration = getIikoIntegration(rid);
+  if (!integration) {
+    integration = {
+      id: uid('int'),
+      restaurant_id: rid,
+      provider: 'iiko',
+      status: 'draft',
+      api_login_encrypted: '',
+      organization_id: '',
+      terminal_group_id: '',
+      sync_interval_seconds: 60,
+      sync_bookings: true,
+      sync_shifts: true,
+      last_sync_at: null,
+      last_error: '',
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+    db.integrations.push(integration);
+  }
+
+  if (body.autonomous === true) integration.api_login_encrypted = '';
+  if (apiLogin) integration.api_login_encrypted = encryptSecret(apiLogin);
+  const hasApiLogin = Boolean(integration.api_login_encrypted);
+  integration.organization_id = String(hasApiLogin ? (body.organization_id ?? integration.organization_id ?? '') : '').trim();
+  integration.terminal_group_id = String(hasApiLogin ? (body.terminal_group_id ?? integration.terminal_group_id ?? '') : '').trim();
+  integration.sync_interval_seconds = Math.max(30, Math.min(900, Number(body.sync_interval_seconds || integration.sync_interval_seconds || 60)));
+  integration.sync_bookings = hasApiLogin && body.sync_bookings !== false;
+  integration.sync_shifts = hasApiLogin && body.sync_shifts !== false;
+  integration.status = hasApiLogin ? 'connected' : 'autonomous';
+  integration.last_error = '';
+  integration.updated_at = nowIso();
+
+  integrationEvent(rid, 'settings_updated', { mode: hasApiLogin ? 'iiko_cloud' : 'autonomous', organization_id: integration.organization_id, terminal_group_id: integration.terminal_group_id }, 'processed');
+  await persist();
+  res.json({ integration: publicIntegration(integration) });
+}));
+
+app.post('/api/admin/integrations/iiko/test', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
+  const rid = req.user.restaurant_id;
+  const integration = getIikoIntegration(rid);
+  const apiLogin = decryptSecret(integration?.api_login_encrypted);
+  if (!apiLogin) {
+    integrationEvent(rid, 'connection_tested', { mode: 'autonomous' }, 'processed');
+    await persist();
+    return res.json({ ok: true, autonomous: true, organizations: [], message: 'API-ключ не указан. Приложение работает автономно.' });
+  }
+
+  try {
+    const authData = await iikoCloudRequest('/api/1/access_token', { apiLogin });
+    const token = authData.token || authData.accessToken || authData.access_token;
+    if (!token) throw new Error('iiko не вернула токен доступа');
+    const organizationsData = await iikoCloudRequest('/api/1/organizations', { returnAdditionalInfo: true, includeDisabled: false }, token);
+    integration.status = 'connected';
+    integration.last_error = '';
+    integration.updated_at = nowIso();
+    integrationEvent(rid, 'connection_tested', { organizations: organizationsData.organizations || [] }, 'processed');
+    await persist();
+    res.json({ ok: true, organizations: organizationsData.organizations || [] });
+  } catch (error) {
+    integration.status = 'error';
+    integration.last_error = error.message || 'Ошибка подключения iiko';
+    integration.updated_at = nowIso();
+    integrationEvent(rid, 'connection_tested', { error: integration.last_error }, 'failed', integration.last_error);
+    await persist();
+    res.status(400).json({ error: integration.last_error });
+  }
+}));
+
+app.post('/api/admin/integrations/iiko/sync', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
+  const rid = req.user.restaurant_id;
+  const integration = getIikoIntegration(rid);
+  const apiLogin = decryptSecret(integration?.api_login_encrypted);
+  if (!integration || !apiLogin) {
+    integrationEvent(rid, 'cloud_sync_skipped', { mode: 'autonomous' }, 'processed');
+    await persist();
+    return res.json({
+      ok: true,
+      autonomous: true,
+      integration: publicIntegration(integration),
+      organizations: [],
+      message: 'API-ключ не указан. Синхронизация iiko пропущена, приложение работает на локальных бронях и сменах.'
+    });
+  }
+
+  try {
+    const authData = await iikoCloudRequest('/api/1/access_token', { apiLogin });
+    const token = authData.token || authData.accessToken || authData.access_token;
+    if (!token) throw new Error('iiko не вернула токен доступа');
+    const organizationsData = await iikoCloudRequest('/api/1/organizations', { returnAdditionalInfo: true, includeDisabled: false }, token);
+    const organizations = organizationsData.organizations || [];
+    const selectedOrganization = integration.organization_id
+      ? organizations.find(org => org.id === integration.organization_id)
+      : organizations[0];
+
+    if (selectedOrganization && !integration.organization_id) integration.organization_id = selectedOrganization.id;
+    integration.status = 'connected';
+    integration.last_sync_at = nowIso();
+    integration.last_error = '';
+    integration.updated_at = nowIso();
+    integrationEvent(rid, 'cloud_sync', { organizations_count: organizations.length, selected_organization_id: integration.organization_id }, 'processed');
+    await persist();
+
+    res.json({
+      ok: true,
+      integration: publicIntegration(integration),
+      organizations,
+      message: 'Базовая связь с iiko проверена. Следующий шаг — маппинг сотрудников, залов и столов.'
+    });
+  } catch (error) {
+    integration.status = 'error';
+    integration.last_error = error.message || 'Ошибка синхронизации iiko';
+    integration.updated_at = nowIso();
+    integrationEvent(rid, 'cloud_sync', { error: integration.last_error }, 'failed', integration.last_error);
+    await persist();
+    res.status(400).json({ error: integration.last_error });
+  }
+}));
 
 app.get('/api/health', (req, res) => {
   res.json({ ok: true, app: 'Resto Control MVP', time: nowIso() });

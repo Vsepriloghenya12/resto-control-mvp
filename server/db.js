@@ -43,7 +43,10 @@ const SNAPSHOT_TABLES = [
   { name: 'shifts', columns: ['id', 'restaurant_id', 'user_id', 'role', 'department', 'location', 'status', 'opened_at', 'closed_at', 'comment'] },
   { name: 'notifications', columns: ['id', 'restaurant_id', 'user_id', 'title', 'body', 'entity_type', 'entity_id', 'read_at', 'created_at'] },
   { name: 'activity_events', columns: ['id', 'restaurant_id', 'actor_id', 'type', 'title', 'entity_type', 'entity_id', 'metadata', 'created_at'], jsonColumns: ['metadata'] },
-  { name: 'comments', columns: ['id', 'restaurant_id', 'entity_type', 'entity_id', 'user_id', 'body', 'created_at'] }
+  { name: 'comments', columns: ['id', 'restaurant_id', 'entity_type', 'entity_id', 'user_id', 'body', 'created_at'] },
+  { name: 'integrations', columns: ['id', 'restaurant_id', 'provider', 'status', 'api_login_encrypted', 'organization_id', 'terminal_group_id', 'sync_interval_seconds', 'sync_bookings', 'sync_shifts', 'last_sync_at', 'last_error', 'created_at', 'updated_at'] },
+  { name: 'external_mappings', columns: ['id', 'restaurant_id', 'provider', 'entity_type', 'local_id', 'external_id', 'label', 'created_at'] },
+  { name: 'integration_events', columns: ['id', 'restaurant_id', 'provider', 'event_type', 'external_id', 'payload', 'status', 'received_at', 'processed_at', 'error'], jsonColumns: ['payload'] }
 ];
 
 let pool;
@@ -88,8 +91,8 @@ function writeJsonDb(db) {
 }
 
 function encodeColumnValue(column, value) {
-  if (column === 'allowed_roles' || column === 'metadata' || column === 'table_ids' || column === 'ingredients') {
-    if (column === 'metadata') return JSON.stringify(value || {});
+  if (column === 'allowed_roles' || column === 'metadata' || column === 'table_ids' || column === 'ingredients' || column === 'payload') {
+    if (column === 'metadata' || column === 'payload') return JSON.stringify(value || {});
     return JSON.stringify(value || []);
   }
   if (column === 'supplier') return value || 'Без поставщика';
@@ -111,7 +114,11 @@ async function ensurePostgresSchema() {
   await getPool().query(`alter table if exists tasks add column if not exists target_department text`);
   await getPool().query(`alter table if exists knowledge_documents add column if not exists photo_url text`);
   await getPool().query(`alter table if exists knowledge_documents add column if not exists ingredients jsonb not null default '[]'`);
+  await getPool().query(`alter table if exists integrations add column if not exists sync_interval_seconds int not null default 60`);
+  await getPool().query(`alter table if exists integrations add column if not exists sync_bookings boolean not null default true`);
+  await getPool().query(`alter table if exists integrations add column if not exists sync_shifts boolean not null default true`);
 }
+
 
 async function loadPostgresSnapshot() {
   const db = emptyDb();
@@ -203,7 +210,10 @@ function emptyDb() {
     shifts: [],
     notifications: [],
     activity_events: [],
-    comments: []
+    comments: [],
+    integrations: [],
+    external_mappings: [],
+    integration_events: []
   };
 }
 

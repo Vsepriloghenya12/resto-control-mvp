@@ -7577,3 +7577,14 @@ body {
 .bookingQuickSeatForm {
   margin-top: 12px;
 }
+
+.integrationModeCheck {
+  grid-column: 1 / -1;
+}
+
+.integrationModeNote {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
