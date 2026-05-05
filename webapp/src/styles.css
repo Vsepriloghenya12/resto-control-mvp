@@ -7043,3 +7043,537 @@ body {
     margin-top: -4px;
   }
 }
+
+/* Compact functional visual pass */
+.compactAccordionList {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.compactAccordion {
+  border: 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  background: transparent;
+}
+
+.compactAccordion:last-child {
+  border-bottom: 0;
+}
+
+.compactAccordionSummary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 50px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--text);
+}
+
+.compactAccordionSummary::-webkit-details-marker {
+  display: none;
+}
+
+.compactAccordionSummary > div,
+.compactAccordionSummary > span:first-child {
+  min-width: 0;
+}
+
+.compactAccordionSummary b,
+.compactAccordionSummary strong,
+.compactAccordionSummary h3 {
+  margin: 0;
+  font-size: 0.96rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.compactAccordionSummary span,
+.compactAccordionSummary em {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-style: normal;
+}
+
+.compactAccordionBody {
+  display: grid;
+  gap: 10px;
+  padding: 0 14px 14px;
+}
+
+.employeeDetailSection.compactAccordion {
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.employeeDetailSectionHead.compactAccordionSummary {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.employeeDetailSectionBody.compactAccordionBody {
+  padding-top: 12px;
+}
+
+.checklistTemplateCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  background: transparent;
+}
+
+.checklistTemplateCard:last-child {
+  border-bottom: 0;
+}
+
+.checklistTemplateCardSummary {
+  min-height: 58px;
+  padding: 12px 0;
+}
+
+.checklistTemplateActions {
+  padding-right: 0;
+}
+
+.inlineChecklistEditor {
+  grid-column: 1 / -1;
+  padding: 0 0 14px;
+}
+
+.knowledgeAdminList {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 14px;
+}
+
+.knowledgeAdminFolder {
+  border: 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 0;
+  background: transparent;
+}
+
+.knowledgeAdminFolder:last-child {
+  border-bottom: 0;
+}
+
+.knowledgeAdminFolderHead {
+  border-bottom: 0;
+}
+
+.knowledgeAdminFolder[open] .knowledgeAdminFolderHead {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.knowledgeAdminDocs.compactAccordionBody {
+  padding: 0;
+  gap: 0;
+}
+
+.knowledgeAdminDocRow {
+  padding: 10px 14px;
+}
+
+.inventoryAccordionSummary em {
+  display: none;
+}
+
+.inventoryAccordion .inventorySectionList,
+.inventoryPreviewList.compactAccordionBody {
+  max-height: 52vh;
+  overflow: auto;
+}
+
+@media (max-width: 980px) {
+  .mobileSectionStack {
+    gap: 14px;
+  }
+
+  .mobileSection,
+  .mobileFlatPanel,
+  .mobileAccordionSection,
+  .mobileInventoryPlainPanel {
+    display: grid;
+    gap: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .mobileAccordionSection {
+    border-top: 1px solid rgba(148, 163, 184, 0.14);
+  }
+
+  .mobileAccordionSection:last-of-type {
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  }
+
+  .mobileListSectionHead.compactAccordionSummary,
+  .mobileListSectionHead {
+    min-height: 48px;
+    padding: 10px 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .mobileListSectionHead h3 {
+    font-size: 0.98rem;
+  }
+
+  .mobileSectionCount {
+    min-width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(148, 163, 184, 0.12);
+    color: var(--text);
+    font-size: 0.78rem;
+    font-weight: 800;
+  }
+
+  .mobileTaskList,
+  .mobileOverviewList,
+  .mobileKnowledgeFolderList,
+  .mobileKnowledgeDocList,
+  .inventoryPlainList,
+  .mobileChecklistPlainList {
+    gap: 0;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .mobileOverviewRow,
+  .mobileTaskRow,
+  .mobileKnowledgeFolderRow,
+  .mobileKnowledgeDocRow,
+  .inventoryPlainItem,
+  .mobileChecklistLine {
+    min-height: 54px;
+    padding: 12px 0;
+    border: 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.13);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .mobileOverviewRow:last-child,
+  .mobileTaskRow:last-child,
+  .mobileKnowledgeFolderRow:last-child,
+  .mobileKnowledgeDocRow:last-child,
+  .inventoryPlainItem:last-child,
+  .mobileChecklistLine:last-child {
+    border-bottom: 0;
+  }
+
+  .mobileOverviewIcon {
+    width: 38px;
+    height: 38px;
+    border-radius: 13px;
+  }
+
+  .mobileTaskRow.static {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .mobileTaskRow.static .btn,
+  .mobileTaskRow.static .commentsPanel {
+    grid-column: 2;
+  }
+
+  .mobileChecklistPicker {
+    display: grid;
+    gap: 0;
+    overflow: hidden;
+    padding: 0;
+    border-top: 1px solid rgba(148, 163, 184, 0.13);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.13);
+  }
+
+  .mobileChecklistPickerItem {
+    min-width: 0;
+    padding: 12px 0;
+    border: 0;
+    border-radius: 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.13);
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .mobileChecklistPickerItem:last-child {
+    border-bottom: 0;
+  }
+
+  .mobileChecklistPickerItem.active {
+    background: transparent;
+    color: #bbf7d0;
+  }
+
+  .mobileChecklistProgressCard {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .mobileChecklistLine {
+    grid-template-columns: 42px minmax(0, 1fr);
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .mobileChecklistLine.done {
+    background: transparent;
+  }
+
+  .mobileChecklistToggle {
+    width: 36px;
+    height: 36px;
+    border-radius: 12px;
+  }
+
+  .mobileChecklistLineHead span {
+    min-width: auto;
+    height: auto;
+    background: transparent;
+  }
+
+  .mobileChecklistSmartTags em,
+  .mobileChecklistSmartTags b {
+    min-height: 22px;
+    padding: 2px 7px;
+    font-size: 0.7rem;
+  }
+
+  .mobileChecklistLineMeta {
+    padding: 8px 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .mobileInventoryToolbar {
+    display: grid;
+    gap: 10px;
+  }
+
+  .mobileInventoryToolbar .field {
+    margin: 0;
+  }
+
+  .mobileInventoryToolbar .mobileChipRow {
+    border-bottom: 1px solid rgba(148, 163, 184, 0.13);
+    padding-bottom: 10px;
+  }
+
+  .mobileInventoryPlainPanel .mobilePrimaryButton,
+  .mobileChecklistActions.single .mobilePrimaryButton {
+    margin-top: 12px;
+  }
+
+  .bookingHallSection.mobileAccordionSection .floorTablesGrid {
+    padding: 8px 0 14px;
+  }
+
+  .bookingMobileScreen .mobileListSurface,
+  .mobileFilterSurface {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+}
+
+.mobileCompletedNotice {
+  display: grid;
+  gap: 8px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.mobileCompletedNotice strong {
+  font-size: 15px;
+}
+
+.mobileCompletedNotice span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.checklistStatusButtons {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.checklistStatusButtons button {
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.checklistStatusButtons button.active {
+  border-color: rgba(34, 197, 94, .55);
+  background: rgba(34, 197, 94, .12);
+}
+
+.checklistStatusButtons button.problem,
+.checklistStatusButtons button.active.problem {
+  border-color: rgba(239, 68, 68, .55);
+  background: rgba(239, 68, 68, .12);
+}
+
+.checklistStatusButtons button.active.muted {
+  border-color: rgba(100, 116, 139, .45);
+  background: rgba(100, 116, 139, .10);
+}
+
+.mobileInlineHint.withAction {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.inventoryPlainMain {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 92px auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.inventoryPlainComment {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--border);
+  padding: 10px 0 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+
+.roleAccessPicker {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface-soft);
+}
+
+.roleAccessHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.roleAccessHead span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.roleAccessGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.roleAccessOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.knowledgeStatsRow {
+  border-bottom: 1px solid var(--border);
+}
+
+.knowledgePendingUsers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 0 12px;
+}
+
+.knowledgePendingUsers span {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.floorTableTile.reservedSoon .floorTableNumber,
+.floorTableStatusBadge.reservedSoon {
+  color: #b45309;
+}
+
+.floorTableStatusBadge.reservedSoon {
+  background: rgba(245, 158, 11, .14);
+}
+
+.upcomingBookingsList {
+  display: grid;
+}
+
+.upcomingBookingRow {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 12px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.upcomingBookingRow strong {
+  font-size: 14px;
+}
+
+.upcomingBookingRow span {
+  color: var(--muted);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bookingQuickSeatForm {
+  margin-top: 12px;
+}

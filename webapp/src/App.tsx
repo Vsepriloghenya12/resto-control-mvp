@@ -431,7 +431,6 @@ const navIcons: Record<string, IconName> = {
   overview: 'overview',
   users: 'users',
   checklists: 'checklists',
-  requests: 'requests',
   bookings: 'bookings',
   inventory: 'inventory',
   tasks: 'tasks',
@@ -603,13 +602,11 @@ function RestaurantWorkspace({
 
   const mobileCreateItems: MobileActionItem[] = managerMode
     ? [
-      { id: 'bookings', title: 'Открыть брони', subtitle: 'Схема зала и посадка гостей', icon: 'bookings', onClick: () => setActive('bookings') },
-      { id: 'tasks', title: 'Создать задачу', subtitle: 'Поставить задачу или обработать проблему', icon: 'tasks', onClick: () => setActive('tasks') },
-      { id: 'users', title: 'Сотрудники', subtitle: 'Доступы и роли команды', icon: 'users', onClick: () => setActive('users') }
+      { id: 'tasks', title: 'Создать задачу', subtitle: 'Поставить задачу команде', icon: 'tasks', onClick: () => setActive('tasks') }
     ]
     : [
-      { id: 'users', title: 'Сотрудники', subtitle: 'Добавить и управлять доступами', icon: 'users', onClick: () => setActive('users') },
-      { id: 'inventory', title: 'Номенклатура', subtitle: 'Товары, бланки и Excel-отчёты', icon: 'inventory', onClick: () => setActive('inventory') }
+      { id: 'users', title: 'Добавить сотрудника', subtitle: 'Открыть управление доступами', icon: 'users', onClick: () => setActive('users') },
+      { id: 'inventory', title: 'Добавить товар', subtitle: 'Открыть номенклатуру', icon: 'inventory', onClick: () => setActive('inventory') }
     ];
 
   const mobileProfileItems: MobileActionItem[] = managerMode
@@ -751,7 +748,7 @@ function RestaurantAdmin({ user, restaurant, onLogout }: any) {
     { id: 'checklists', title: 'Чек-листы' },
     { id: 'inventory', title: 'Номенклатура' },
     { id: 'bookings', title: 'Брони / залы' },
-    { id: 'tasks', title: 'Проблемы / задачи' },
+    { id: 'tasks', title: 'Проблемы' },
     { id: 'knowledge', title: 'База знаний' }
   ]);
   const section = useMemo(() => {
@@ -872,10 +869,12 @@ function AdminOverview({ mode = 'owner', onNavigate }: { mode?: 'owner' | 'manag
 }
 
 function EmployeeDetailList({ title, count, empty, children }: { title: string; count?: number; empty: string; children: ReactNode }) {
-  return <section className="employeeDetailSection">
-    <div className="employeeDetailSectionHead"><strong>{title}</strong>{count !== undefined && <span>{count}</span>}</div>
-    {count === 0 ? <p className="employeeDetailEmpty">{empty}</p> : <div className="employeeDetailSectionBody">{children}</div>}
-  </section>;
+  return <details className="employeeDetailSection compactAccordion">
+    <summary className="employeeDetailSectionHead compactAccordionSummary"><strong>{title}</strong>{count !== undefined && <span>{count}</span>}</summary>
+    <div className="employeeDetailSectionBody compactAccordionBody">
+      {count === 0 ? <p className="employeeDetailEmpty">{empty}</p> : children}
+    </div>
+  </details>;
 }
 
 function EmployeeDetailBullets({ items, done = false }: { items: any[]; done?: boolean }) {
@@ -1095,10 +1094,10 @@ function OverviewEmployeeMetrics({ rows }: { rows: any[] }) {
               <strong>{row.user?.name || 'Сотрудник'}</strong>
               <span>{roles[row.user?.role] || row.user?.role || 'Роль не указана'}</span>
             </div>
-            <span className="employeeMetricValue" data-label="ЧЛ">{metricPair(row.checklists?.done, row.checklists?.not_done)}</span>
+            <span className="employeeMetricValue" data-label="Чек-листы">{metricPair(row.checklists?.done, row.checklists?.not_done)}</span>
             <span className="employeeMetricValue wide" data-label="Задачи">{taskNumbers(row.tasks)}</span>
-            <span className="employeeMetricValue" data-label="Док">{metricNumber(row.documents?.pending, 'todo')}</span>
-            <span className="employeeMetricValue" data-label="Инв">{metricPair(row.inventories?.ready, row.inventories?.not_ready)}</span>
+            <span className="employeeMetricValue" data-label="Документы">{metricNumber(row.documents?.pending, 'todo')}</span>
+            <span className="employeeMetricValue" data-label="Учёт">{metricPair(row.inventories?.ready, row.inventories?.not_ready)}</span>
           </button>
           {expanded && <EmployeeMetricsExpanded row={row} />}
         </div>;
@@ -1113,7 +1112,6 @@ function UsersAdmin({ user }: any) {
   const [editingUserId, setEditingUserId] = useState('');
   const [editForm, setEditForm] = useState<any>({ name: '', login: '', password: '', role: 'waiter', active: true });
   const [msg, setMsg] = useState('');
-  const canSeeEmployeePasswords = user?.is_super_admin || user?.role === 'owner' || user?.role === 'manager';
   async function load() { setUsers(await api('/api/admin/users')); }
   useEffect(() => { load(); }, []);
   async function submit(e: FormEvent) {
@@ -1165,7 +1163,7 @@ function UsersAdmin({ user }: any) {
       {msg && <div className={msg.includes('удал') || msg.includes('обнов') || msg.includes('добав') ? 'notice compactNotice' : 'error compactNotice'}>{msg}</div>}
     </Card>
 
-    <Card title="Сотрудники" right={<span className="muted adminHint">Нажмите на строку, чтобы редактировать</span>}>
+    <Card title="Сотрудники" right={<span className="badge">{users.length}</span>}>
       <div className="adminCompactList">{users.map(u => {
         const editing = editingUserId === u.id;
         return <div className={cx('adminEditableRow', editing && 'editing', u.role === 'owner' && 'locked')} key={u.id}>
@@ -1180,7 +1178,6 @@ function UsersAdmin({ user }: any) {
             <div className="adminRowMain">
               <b>{u.name}</b>
               <span>{u.login} · {roles[u.role]} · {departments[u.department]}</span>
-              {canSeeEmployeePasswords && u.role !== 'owner' && <span className="adminPasswordLine">Пароль: <code>{u.access_password || 'задайте новый пароль'}</code></span>}
             </div>
             <div className="adminRowMeta"><span className={`badge ${u.active ? 'active' : 'cancelled'}`}>{u.active ? 'активен' : 'выкл'}</span><em>{u.role === 'owner' ? 'Владелец' : 'Изменить'}</em></div>
           </button>}
@@ -1198,14 +1195,14 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
   const isSenior = seniorRoles.includes(user.role);
   const tabs = withIcons([
     { id: 'today', title: 'Сегодня' }, { id: 'checklists', title: 'Чек-лист' }, { id: 'bookings', title: 'Брони' },
-    { id: 'inventory', title: 'Инвент.' }, { id: 'tasks', title: 'Проблемы / задачи' }, { id: 'knowledge', title: 'База' },
+    { id: 'inventory', title: 'Учёт' }, { id: 'tasks', title: 'Проблемы' }, { id: 'knowledge', title: 'База' },
     ...(isSenior ? [{ id: 'admin-checklists', title: 'Редактор ЧЛ' }, { id: 'admin-tasks', title: 'Задачи отдела' }] : [])
   ]);
 
   async function refreshNotifications() {
     try {
-      const [notifications, tasks] = await Promise.all([api('/api/notifications').catch(() => []), api('/api/tasks').catch(() => [])]);
-      setNotificationCount(notifications.filter((item: any) => !item.read_at).length + tasks.filter((task: any) => !task.assignment?.done).length);
+      const notifications = await api('/api/notifications').catch(() => []);
+      setNotificationCount(notifications.filter((item: any) => !item.read_at).length);
     } catch {
       setNotificationCount(0);
     }
@@ -1304,15 +1301,19 @@ function Today({
       api('/api/bookings').catch(() => []),
       api('/api/tasks').catch(() => []),
       api('/api/inventory/templates').catch(() => []),
-      api('/api/tech-requests').catch(() => [])
-    ]).then(([checklists, bookings, tasks, templates, techRequests]) => {
+      api('/api/tech-requests').catch(() => []),
+      api('/api/checklists/runs').catch(() => []),
+      api('/api/inventory/runs').catch(() => [])
+    ]).then(([checklists, bookings, tasks, templates, techRequests, checklistRuns, inventoryRuns]) => {
       if (!active) return;
       setOverview({
         checklists,
         bookings,
         tasks,
         templates,
-        techRequests
+        techRequests,
+        checklistRuns,
+        inventoryRuns
       });
     });
 
@@ -1334,12 +1335,24 @@ function Today({
 
   const openTasks = overview.tasks.filter((task: any) => !task.assignment?.done);
   const completedTasks = overview.tasks.filter((task: any) => task.assignment?.done);
+  const todayKey = new Date().toISOString().slice(0, 10);
   const activeBookings = overview.bookings.filter((booking: any) => ['booked', 'seated'].includes(booking.status));
+  const upcomingBookings = activeBookings
+    .filter((booking: any) => String(booking.reserved_for || '').slice(0, 10) === todayKey)
+    .sort((a: any, b: any) => String(a.reserved_for || '').localeCompare(String(b.reserved_for || '')))
+    .slice(0, 3);
+  const completedChecklistTemplateIds = new Set((overview.checklistRuns || []).filter((run: any) => String(run.created_at || '').slice(0, 10) === todayKey).map((run: any) => run.template_id));
+  const completedInventoryTemplateIds = new Set((overview.inventoryRuns || []).filter((run: any) => String(run.created_at || '').slice(0, 10) === todayKey).map((run: any) => run.template_id));
   const openTechRequests = (overview.techRequests || []).filter((request: any) => !['done', 'cancelled'].includes(request.status));
   const readyInventoryTemplates = overview.templates.filter((template: any) => template.items?.length);
+  const pendingChecklists = overview.checklists.filter((template: any) => !completedChecklistTemplateIds.has(template.id));
+  const pendingInventoryTemplates = readyInventoryTemplates.filter((template: any) => !completedInventoryTemplateIds.has(template.id));
   const priorityItems = [
+    ...pendingChecklists.map((template: any) => ({ id: `checklist-${template.id}`, title: template.title, subtitle: `${checklistTypes[template.type] || 'Чек-лист'} · не выполнен сегодня`, onClick: onOpenChecklists, icon: 'checklists' as IconName })),
     ...openTasks.map((task: any) => ({ id: `task-${task.id}`, title: task.title, subtitle: `${task.description || 'Открыть задачу'}${task.due_at ? ` · срок: ${fmtDate(task.due_at)}` : ''}`, onClick: onOpenTasks, icon: 'tasks' as IconName })),
-    ...openTechRequests.map((request: any) => ({ id: `tech-${request.id}`, title: request.title, subtitle: request.manager_comment || 'Проблема ожидает реакции менеджера', onClick: onOpenTasks, icon: 'support' as IconName }))
+    ...openTechRequests.map((request: any) => ({ id: `tech-${request.id}`, title: request.title, subtitle: request.manager_comment || 'Проблема ожидает реакции менеджера', onClick: onOpenTasks, icon: 'support' as IconName })),
+    ...upcomingBookings.map((booking: any) => ({ id: `booking-${booking.id}`, title: `${booking.guest_name || 'Гость'} · ${booking.guests_count} гост.`, subtitle: `${fmtDate(booking.reserved_for)} · ${booking.tables?.map((table: any) => table.label).join(', ') || 'стол не выбран'}`, onClick: onOpenBookings, icon: 'bookings' as IconName })),
+    ...pendingInventoryTemplates.map((template: any) => ({ id: `inventory-${template.id}`, title: template.title, subtitle: 'Инвентаризация не отправлена сегодня', onClick: onOpenInventory, icon: 'inventory' as IconName }))
   ];
 
   return <div className="mobileSectionStack">
@@ -1351,7 +1364,7 @@ function Today({
         <div className="mobileOverviewIcon blue"><AppIcon name="checklists" className="navIcon" /></div>
         <div className="mobileOverviewCopy">
           <strong>Чек-листы</strong>
-          <span>{overview.checklists.length} на сегодня</span>
+          <span>{completedChecklistTemplateIds.size} из {overview.checklists.length} выполнено</span>
         </div>
         <b>{overview.checklists.length}</b>
       </button>
@@ -1367,7 +1380,7 @@ function Today({
         <div className="mobileOverviewIcon rose"><AppIcon name="bookings" className="navIcon" /></div>
         <div className="mobileOverviewCopy">
           <strong>Брони</strong>
-          <span>{activeBookings.length} активных</span>
+          <span>{upcomingBookings.length ? `ближайшая: ${fmtDate(upcomingBookings[0].reserved_for)}` : `${activeBookings.length} активных`}</span>
         </div>
         <b>{activeBookings.length}</b>
       </button>
@@ -1375,7 +1388,7 @@ function Today({
         <div className="mobileOverviewIcon purple"><AppIcon name="inventory" className="navIcon" /></div>
         <div className="mobileOverviewCopy">
           <strong>Инвентаризация</strong>
-          <span>{readyInventoryTemplates.length} бланков доступно</span>
+          <span>{pendingInventoryTemplates.length ? `${pendingInventoryTemplates.length} нужно отправить` : 'отправлено сегодня'}</span>
         </div>
         <b>{readyInventoryTemplates.length}</b>
       </button>
@@ -1391,7 +1404,7 @@ function Today({
           </div>
           <AppIcon name="chevron" className="navIcon" />
         </button>)}
-        {priorityItems.length === 0 && <Empty text="Нет открытых задач и проблем на эту смену" />}
+        {priorityItems.length === 0 && <Empty text="На смену нет срочных действий" />}
       </div>
       {completedTasks.length > 0 && <div className="mobileInlineHint">Выполнено за смену: {completedTasks.length}</div>}
     </Card>
@@ -1401,7 +1414,9 @@ function Today({
 function Checklists({ user, admin = false }: any) {
   const [templates, setTemplates] = useState<any[]>([]);
   const [runs, setRuns] = useState<any[]>([]);
+  const [employeeRuns, setEmployeeRuns] = useState<any[]>([]);
   const [answers, setAnswers] = useState<any>({});
+  const [repeatingTemplates, setRepeatingTemplates] = useState<Record<string, boolean>>({});
   const [runMsg, setRunMsg] = useState('');
   const [editorMsg, setEditorMsg] = useState('');
   const [cameraTarget, setCameraTarget] = useState<{ itemId: string; title: string } | null>(null);
@@ -1438,6 +1453,7 @@ function Checklists({ user, admin = false }: any) {
   async function load() {
     setTemplates(await api('/api/checklists/templates'));
     if (admin) setRuns(await api('/api/admin/checklists/runs'));
+    else setEmployeeRuns(await api('/api/checklists/runs'));
   }
   useEffect(() => { load(); }, []);
   async function loadShift() {
@@ -1560,20 +1576,44 @@ function Checklists({ user, admin = false }: any) {
     }
   }
 
+  async function startShiftFromChecklist() {
+    setRunMsg('');
+    try {
+      const result = await api('/api/shifts/start', { method: 'POST', body: JSON.stringify({ location: departments[user.department] || '' }) });
+      setRunMsg(result?.offline ? 'Смена сохранена офлайн' : 'Смена начата');
+      await loadShift();
+    } catch (error: any) {
+      setRunMsg(error.message || 'Не удалось начать смену');
+    }
+  }
+
   async function submit(template: any) {
     setRunMsg('');
     if (!shiftState.current) { setRunMsg('Сначала начните смену'); return; }
     const templateAnswers: any = {};
-    template.items.forEach((i: any) => { templateAnswers[i.id] = answers[i.id] || { done: false, comment: '' }; });
-    const missingRequired = template.items.find((i: any) => i.required !== false && !templateAnswers[i.id]?.done);
-    if (missingRequired) { setRunMsg(`Обязательный пункт "${missingRequired.text}" не выполнен`); return; }
-    const missingPhoto = template.items.find((i: any) => i.needs_photo && templateAnswers[i.id]?.done && !templateAnswers[i.id]?.photo_url);
+    template.items.forEach((i: any) => {
+      const answer = answers[i.id] || {};
+      const status = answer.status || (answer.done ? 'ok' : '');
+      templateAnswers[i.id] = {
+        ...answer,
+        status,
+        done: status === 'ok' || status === 'na' || Boolean(answer.done && status !== 'problem'),
+        comment: status === 'problem' && !String(answer.comment || '').trim() ? '' : (answer.comment || '')
+      };
+    });
+    const missingRequired = template.items.find((i: any) => i.required !== false && !['ok', 'problem', 'na'].includes(templateAnswers[i.id]?.status));
+    if (missingRequired) { setRunMsg(`Выберите статус для обязательного пункта "${missingRequired.text}"`); return; }
+    const missingPhoto = template.items.find((i: any) => i.needs_photo && templateAnswers[i.id]?.status === 'ok' && !templateAnswers[i.id]?.photo_url);
     if (missingPhoto) { setRunMsg(`Для пункта "${missingPhoto.text}" нужно сделать фото`); return; }
-    const missingComment = template.items.find((i: any) => i.needs_comment && templateAnswers[i.id]?.done && !String(templateAnswers[i.id]?.comment || '').trim());
+    const missingComment = template.items.find((i: any) => {
+      const value = templateAnswers[i.id] || {};
+      return (value.status === 'problem' || (i.needs_comment && value.status === 'ok')) && !String(value.comment || '').trim();
+    });
     if (missingComment) { setRunMsg(`Для пункта "${missingComment.text}" нужен комментарий`); return; }
     const result = await api('/api/checklists/runs', { method: 'POST', body: JSON.stringify({ template_id: template.id, answers: templateAnswers }) });
     setRunMsg(result?.offline ? 'Чек-лист сохранён офлайн' : result?.shift_closed ? 'Чек-лист сохранён, смена закрыта' : 'Чек-лист сохранён');
     setAnswers({});
+    setRepeatingTemplates((current) => ({ ...current, [template.id]: false }));
     load().catch(() => undefined);
     loadShift().catch(() => undefined);
   }
@@ -1601,20 +1641,40 @@ function Checklists({ user, admin = false }: any) {
     ? availableTemplates.find((template) => template.id === selectedTemplateId) || availableTemplates[0]
     : null;
 
+  const latestRunByTemplate = useMemo(() => {
+    const map = new Map<string, any>();
+    employeeRuns
+      .filter((run: any) => String(run.created_at || '').slice(0, 10) === new Date().toISOString().slice(0, 10))
+      .forEach((run: any) => {
+        const current = map.get(run.template_id);
+        if (!current || String(run.created_at || '').localeCompare(String(current.created_at || '')) > 0) map.set(run.template_id, run);
+      });
+    return map;
+  }, [employeeRuns]);
+
   const completedChecklistItems = selectedTemplate
-    ? selectedTemplate.items.filter((item: any) => answers[item.id]?.done).length
+    ? selectedTemplate.items.filter((item: any) => ['ok', 'na'].includes(answers[item.id]?.status) || answers[item.id]?.done).length
     : 0;
+  const problemChecklistItems = selectedTemplate
+    ? selectedTemplate.items.filter((item: any) => answers[item.id]?.status === 'problem').length
+    : 0;
+  const selectedCompletedRun = selectedTemplate ? latestRunByTemplate.get(selectedTemplate.id) : null;
+  const selectedTemplateCompleted = Boolean(selectedCompletedRun && !repeatingTemplates[selectedTemplate?.id || '']);
 
   const checklistRequiresPhoto = selectedTemplate?.items.some((item: any) => item.needs_photo && answers[item.id]?.done && !answers[item.id]?.photo_url);
 
-  function toggleChecklistItem(item: any) {
-    const current = answers[item.id] || {};
-    if (current.done) {
-      updateAnswer(item.id, { done: false, photo_url: '', comment: '' });
+  function setChecklistItemStatus(item: any, status: 'ok' | 'problem' | 'na') {
+    if (status === 'ok' && item.needs_photo && !answers[item.id]?.photo_url) {
+      updateAnswer(item.id, { status, done: true });
+      setCameraTarget({ itemId: item.id, title: item.text });
       return;
     }
-    if (item.needs_photo) { setCameraTarget({ itemId: item.id, title: item.text }); return; }
-    updateAnswer(item.id, { done: true });
+    updateAnswer(item.id, {
+      status,
+      done: status === 'ok' || status === 'na',
+      photo_url: status === 'ok' ? answers[item.id]?.photo_url || '' : '',
+      comment: answers[item.id]?.comment || ''
+    });
   }
 
   function renderTemplateEditorForm() {
@@ -1681,59 +1741,62 @@ function Checklists({ user, admin = false }: any) {
         <div className="mobileProgressCardCopy compact">
           <div>
             <h3>{selectedTemplate.title}</h3>
-            <p>Выполнено {completedChecklistItems} из {selectedTemplate.items.length}</p>
+            <p>{selectedTemplateCompleted ? `Выполнено сегодня: ${fmtDate(selectedCompletedRun.created_at)}` : `Готово ${completedChecklistItems} из ${selectedTemplate.items.length}${problemChecklistItems ? ` · проблем: ${problemChecklistItems}` : ''}`}</p>
           </div>
           <span className="badge active mobileProgressBadge">{completedChecklistItems}/{selectedTemplate.items.length}</span>
         </div>
-        <ProgressBar value={completedChecklistItems} max={selectedTemplate.items.length} />
+        <ProgressBar value={completedChecklistItems + problemChecklistItems} max={selectedTemplate.items.length} />
       </Card>}
 
-      {selectedTemplate && <div className="mobileChecklistPlainList">
+      {selectedTemplate && selectedTemplateCompleted && <div className="mobileCompletedNotice">
+        <strong>Чек-лист уже выполнен сегодня</strong>
+        <span>{fmtDate(selectedCompletedRun.created_at)}</span>
+        <button type="button" className="sectionLink" onClick={() => setRepeatingTemplates((current) => ({ ...current, [selectedTemplate.id]: true }))}>Повторить</button>
+      </div>}
+
+      {selectedTemplate && !selectedTemplateCompleted && <div className="mobileChecklistPlainList">
         {selectedTemplate.items.map((item: any, index: number) => {
           const itemAnswer = answers[item.id] || {};
-          const isDone = !!itemAnswer.done;
-          return <div key={item.id} className={cx('mobileChecklistLine', isDone && 'done', item.required !== false && 'required')}>
-            <button
-              type="button"
-              className={cx('mobileChecklistToggle', isDone && 'done')}
-              onClick={() => toggleChecklistItem(item)}
-              aria-label={isDone ? 'Снять отметку' : 'Отметить выполненным'}
-              aria-pressed={isDone}
-            >
-              {isDone && <span>✓</span>}
-            </button>
+          const status = itemAnswer.status || '';
+          const isDone = status === 'ok' || status === 'na' || !!itemAnswer.done;
+          return <div key={item.id} className={cx('mobileChecklistLine', isDone && 'done', status === 'problem' && 'problem', item.required !== false && 'required')}>
             <div className="mobileChecklistLineBody">
               <div className="mobileChecklistLineHead">
                 <strong>{item.text}</strong>
                 <span className="mobileChecklistIndex">{index + 1}</span>
               </div>
-              <div className="mobileChecklistSmartTags">{item.required !== false && <em>обязательный</em>}{item.needs_photo && <em>фото</em>}{item.needs_comment && <em>комментарий</em>}<b className={isDone ? 'done' : 'pending'}>{isDone ? 'готово' : 'ожидает'}</b></div>
-              {itemAnswer.done && item.needs_photo && <div className="mobileChecklistLineMeta">
+              <div className="mobileChecklistSmartTags">{item.required !== false && <em>обязательный</em>}{item.needs_photo && <em>фото</em>}{item.needs_comment && <em>комментарий</em>}<b className={status === 'problem' ? 'problem' : isDone ? 'done' : 'pending'}>{status === 'problem' ? 'проблема' : status === 'na' ? 'не относится' : isDone ? 'готово' : 'ожидает'}</b></div>
+              <div className="checklistStatusButtons">
+                <button type="button" className={cx(status === 'ok' && 'active')} onClick={() => setChecklistItemStatus(item, 'ok')}>Готово</button>
+                <button type="button" className={cx(status === 'problem' && 'active problem')} onClick={() => setChecklistItemStatus(item, 'problem')}>Проблема</button>
+                <button type="button" className={cx(status === 'na' && 'active muted')} onClick={() => setChecklistItemStatus(item, 'na')}>Не относится</button>
+              </div>
+              {status === 'ok' && item.needs_photo && <div className="mobileChecklistLineMeta">
                 <span className="mobileChecklistPhotoStatus">
                   <AppIcon name="camera" className="navIcon" />
-                  Фото добавлено
+                  {itemAnswer.photo_url ? 'Фото добавлено' : 'Фото нужно добавить'}
                 </span>
                 <button
                   type="button"
                   className="mobileChecklistRetake"
                   onClick={() => setCameraTarget({ itemId: item.id, title: item.text })}
                 >
-                  Переснять
+                  {itemAnswer.photo_url ? 'Переснять' : 'Снять'}
                 </button>
               </div>}
-              {itemAnswer.done && itemAnswer.photo_url && <img className="mobileChecklistPhoto" src={itemAnswer.photo_url} alt={`Фото: ${item.text}`} />}
-              {itemAnswer.done && <Textarea
-                label={item.needs_comment ? 'Комментарий обязателен' : 'Комментарий'}
+              {status === 'ok' && itemAnswer.photo_url && <img className="mobileChecklistPhoto" src={itemAnswer.photo_url} alt={`Фото: ${item.text}`} />}
+              {(status === 'ok' || status === 'problem') && <Textarea
+                label={status === 'problem' || item.needs_comment ? 'Комментарий обязателен' : 'Комментарий'}
                 value={itemAnswer.comment || ''}
                 onChange={(e: any) => updateAnswer(item.id, { comment: e.target.value })}
-                placeholder="Комментарий"
+                placeholder={status === 'problem' ? 'Что не так' : 'Комментарий'}
               />}
             </div>
           </div>;
         })}
       </div>}
 
-      {selectedTemplate && <div className="mobileChecklistActions single">
+      {selectedTemplate && !selectedTemplateCompleted && <div className="mobileChecklistActions single">
         <Button
           type="button"
           className="mobilePrimaryButton"
@@ -1742,7 +1805,7 @@ function Checklists({ user, admin = false }: any) {
         >
           {selectedTemplate.type === 'close' ? 'Завершить и закрыть смену' : 'Завершить чек-лист'}
         </Button>
-        {!shiftState.current && <div className="mobileInlineHint">Перед чек-листом нужно начать смену.</div>}
+        {!shiftState.current && <div className="mobileInlineHint withAction"><span>Перед чек-листом нужно начать смену.</span><Button kind="soft" type="button" onClick={startShiftFromChecklist}>Начать смену</Button></div>}
       </div>}
 
       {runMsg && <div className={runMsg.includes('сохранён') ? 'notice mobileInlineNotice' : 'error mobileInlineNotice'}>{runMsg}</div>}
@@ -1779,14 +1842,8 @@ function Checklists({ user, admin = false }: any) {
                 </div>
                 <em>{template.items?.length || 0} пунктов</em>
               </div>
-              {!isEditing && <div className="checklistTemplatePreview">
-                {(template.items || []).slice(0, 4).map((item: any, index: number) => <span key={item.id || index}>{index + 1}. {item.text}</span>)}
-                {(template.items || []).length > 4 && <span>+ ещё {(template.items || []).length - 4}</span>}
-              </div>}
-              <div className="checklistTemplateCardFoot">{isEditing ? 'Редактирование открыто' : 'Редактировать'}</div>
             </button>
             <div className="checklistTemplateActions">
-              {!isEditing && <Button kind="soft" type="button" onClick={() => startTemplateEdit(template)}>Редактировать</Button>}
               <Button kind="danger" type="button" onClick={() => deleteTemplate(template)}>Удалить</Button>
             </div>
             {isEditing && <div className="inlineChecklistEditor">
@@ -1830,8 +1887,11 @@ function readFileAsDataUrl(file: File): Promise<string> {
 function Inventory({ user, admin = false }: any) {
   const [templates, setTemplates] = useState<any[]>([]);
   const [runs, setRuns] = useState<any[]>([]);
+  const [employeeRuns, setEmployeeRuns] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [values, setValues] = useState<any>({});
+  const [valueComments, setValueComments] = useState<any>({});
+  const [repeatingInventory, setRepeatingInventory] = useState<Record<string, boolean>>({});
   const [msg, setMsg] = useState('');
   const [productMsg, setProductMsg] = useState('');
   const [importMsg, setImportMsg] = useState('');
@@ -1852,12 +1912,14 @@ function Inventory({ user, admin = false }: any) {
     const [templateRows, productRows, runRows] = await Promise.all([
       api('/api/inventory/templates'),
       admin ? api('/api/products') : Promise.resolve([]),
-      admin ? api('/api/admin/inventory/runs') : Promise.resolve([])
+      admin ? api('/api/admin/inventory/runs') : api('/api/inventory/runs')
     ]);
     setTemplates(templateRows);
     if (admin) {
       setProducts(productRows);
       setRuns(runRows);
+    } else {
+      setEmployeeRuns(runRows);
     }
   }
   useEffect(() => { load(); }, []);
@@ -1997,9 +2059,13 @@ function Inventory({ user, admin = false }: any) {
 
   async function submit(t: any) {
     const payload: any = {};
-    t.items.forEach((i: any) => { payload[i.product_id] = { qty: values[i.product_id] || '', comment: '' }; });
+    t.items.forEach((i: any) => { payload[i.product_id] = { qty: values[i.product_id] || '', comment: valueComments[i.product_id] || '' }; });
     const result = await api('/api/inventory/runs', { method: 'POST', body: JSON.stringify({ template_id: t.id, values: payload }) });
-    setValues({}); setMsg(result?.offline ? 'Инвентаризация сохранена офлайн' : 'Инвентаризация сохранена'); load().catch(() => undefined);
+    setValues({});
+    setValueComments({});
+    setRepeatingInventory((current) => ({ ...current, [t.id]: false }));
+    setMsg(result?.offline ? 'Инвентаризация сохранена офлайн' : 'Инвентаризация сохранена');
+    load().catch(() => undefined);
   }
 
   useEffect(() => {
@@ -2019,11 +2085,11 @@ function Inventory({ user, admin = false }: any) {
       if (!inventoryFilter.trim()) return true;
       return String(item.product?.name || '').toLowerCase().includes(inventoryFilter.trim().toLowerCase());
     }) || [];
+    const selectedCompletedRun = selectedTemplate ? employeeRuns.find((run: any) => run.template_id === selectedTemplate.id) : null;
+    const selectedTemplateCompleted = Boolean(selectedCompletedRun && !repeatingInventory[selectedTemplate?.id || '']);
 
-    return <div className="mobileSectionStack">
-      <SectionTitle title="Инвентаризация" />
-
-      <Card className="mobileCard">
+    return <div className="mobileSectionStack mobileInventoryScreen">
+      <div className="mobileInventoryToolbar">
         <Field
           label="Поиск товара"
           icon="search"
@@ -2042,35 +2108,45 @@ function Inventory({ user, admin = false }: any) {
             <b>{template.items.length}</b>
           </button>)}
         </div>
-      </Card>
+      </div>
 
-      <Card title={selectedTemplate?.title || 'Бланк инвентаризации'} className="mobileCard inventoryPlainCard">
-        {filteredItems.length === 0 && <Empty text="Нет товаров по этому фильтру" />}
-        <div className="inventoryPlainList">
-          {filteredItems.map((item: any) => {
-            const rawValue = values[item.product_id] || '';
-            const preview = previewInventoryTotal(rawValue);
-            return <label key={item.product_id} className="inventoryPlainItem">
-              <div className="inventoryPlainTitle">
-                <strong>{item.product?.name}</strong>
-                <span>{item.product?.unit || 'шт.'}</span>
-              </div>
-              <input
-                type="text"
-                inputMode="tel"
-                pattern="[0-9+,.\s]*"
-                autoComplete="off"
-                value={rawValue}
-                onChange={(e) => setValues({ ...values, [item.product_id]: e.target.value })}
-                placeholder="Например: 3+2,2+0,04"
-              />
-              {preview && <em>Итого: {preview}</em>}
-            </label>;
-          })}
-        </div>
-        {selectedTemplate && <Button type="button" className="mobilePrimaryButton" onClick={() => submit(selectedTemplate)}>Сохранить остатки</Button>}
+      <div className="mobileInventoryPlainPanel">
+        <div className="mobileListSectionHead"><h3>{selectedTemplate?.title || 'Бланк инвентаризации'}</h3><span className="mobileSectionCount">{filteredItems.length}</span></div>
+        {selectedTemplateCompleted ? <div className="mobileCompletedNotice">
+          <strong>Инвентаризация уже отправлена сегодня</strong>
+          <span>{fmtDate(selectedCompletedRun?.created_at)}</span>
+          <Button kind="soft" type="button" onClick={() => setRepeatingInventory((current) => ({ ...current, [selectedTemplate.id]: true }))}>Отправить повторно</Button>
+        </div> : <>
+          {filteredItems.length === 0 && <Empty text="Нет товаров по этому фильтру" />}
+          <div className="inventoryPlainList">
+            {filteredItems.map((item: any) => {
+              const rawValue = values[item.product_id] || '';
+              const preview = previewInventoryTotal(rawValue);
+              return <div key={item.product_id} className="inventoryPlainItem">
+                <label className="inventoryPlainMain">
+                  <div className="inventoryPlainTitle">
+                    <strong>{item.product?.name}</strong>
+                    <span>{item.product?.unit || 'шт.'}</span>
+                  </div>
+                  <input
+                    type="text"
+                    inputMode="tel"
+                    pattern="[0-9+,.\s]*"
+                    autoComplete="off"
+                    value={rawValue}
+                    onChange={(e) => setValues({ ...values, [item.product_id]: e.target.value })}
+                    placeholder="0"
+                  />
+                  {preview && <em>Итого: {preview}</em>}
+                </label>
+                <input className="inventoryPlainComment" value={valueComments[item.product_id] || ''} onChange={(e) => setValueComments({ ...valueComments, [item.product_id]: e.target.value })} placeholder="Комментарий" />
+              </div>;
+            })}
+          </div>
+          {selectedTemplate && <Button type="button" className="mobilePrimaryButton" onClick={() => submit(selectedTemplate)}>Сохранить остатки</Button>}
+        </>}
         {msg && <div className="notice mobileInlineNotice">{msg}</div>}
-      </Card>
+      </div>
     </div>;
   }
 
@@ -2144,7 +2220,7 @@ function Inventory({ user, admin = false }: any) {
               <summary className="inventoryAccordionSummary">
                 <span>
                   <b>{section.title}</b>
-                  <em>{section.products.length ? 'Нажмите, чтобы раскрыть список' : 'Список пока пуст'}</em>
+                  <em>{section.products.length ? `${section.products.length} позиций` : 'Список пока пуст'}</em>
                 </span>
                 <span className="inventoryAccordionMeta">
                   <span className="badge">{section.products.length} поз.</span>
@@ -2166,15 +2242,16 @@ function Inventory({ user, admin = false }: any) {
         </Card>
 
         <Card title="Бланки, которые заполняют сотрудники">
-          <div className="grid cardsGrid">
-            {templates.map(template => <div className="miniCard" key={template.id}>
-              <div className="rowBetween"><b>{template.title}</b><span className="badge">{departments[template.department]}</span></div>
-              <p>Позиций в бланке: {template.items.length}</p>
-              <div className="inventoryPreviewList">
-                {template.items.slice(0, 5).map((item: any) => <span key={item.product_id}>{item.product?.name || 'Товар'} · {item.product?.unit || 'шт.'}</span>)}
-                {template.items.length > 5 && <span className="muted">И ещё {template.items.length - 5} позиций</span>}
+          <div className="compactAccordionList">
+            {templates.map(template => <details className="compactAccordion" key={template.id}>
+              <summary className="compactAccordionSummary">
+                <div><b>{template.title}</b><span>{departments[template.department]}</span></div>
+                <em>{template.items.length} поз.</em>
+              </summary>
+              <div className="compactAccordionBody inventoryPreviewList">
+                {template.items.map((item: any) => <span key={item.product_id}>{item.product?.name || 'Товар'} · {item.product?.unit || 'шт.'}</span>)}
               </div>
-            </div>)}
+            </details>)}
           </div>
         </Card>
 
@@ -2362,6 +2439,22 @@ function KnowledgeDocumentModal({ doc, onClose, onAck, plainMobile = false }: { 
   </div>;
 }
 
+function RoleAccessPicker({ value, onChange }: { value: string[]; onChange: (roles: string[]) => void }) {
+  const selected = Array.isArray(value) ? value : [];
+  function toggle(role: string) {
+    onChange(selected.includes(role) ? selected.filter(item => item !== role) : [...selected, role]);
+  }
+  return <div className="roleAccessPicker">
+    <div className="roleAccessHead"><strong>Доступ</strong><span>{selected.length ? `${selected.length} ролей` : 'Все сотрудники'}</span></div>
+    <div className="roleAccessGrid">
+      {executableRoles.map(([key, label]) => <label key={key} className="roleAccessOption">
+        <input type="checkbox" checked={selected.includes(key)} onChange={() => toggle(key)} />
+        <span>{label}</span>
+      </label>)}
+    </div>
+  </div>;
+}
+
 function Knowledge({ user, admin = false }: any) {
   const emptyDocForm = { category_id: '', title: '', type: 'text', content: '', file: null, photo: null, allowed_roles: [], requires_acknowledgement: true };
   const [categories, setCategories] = useState<any[]>([]);
@@ -2484,7 +2577,8 @@ function Knowledge({ user, admin = false }: any) {
         ...docForm,
         title: docForm.title || (nextType !== 'ttk' ? filenameToTitle(docForm.file?.file_name) : ''),
         category_id: docForm.category_id || selectedCategoryId || categories[0]?.id || '',
-        allowed_roles: []
+        allowed_roles: Array.isArray(docForm.allowed_roles) ? docForm.allowed_roles : [],
+        requires_acknowledgement: docForm.requires_acknowledgement !== false
       };
       const created = await api('/api/admin/knowledge/documents', { method: 'POST', body: JSON.stringify(payload) });
       setDocForm({ ...emptyDocForm, category_id: payload.category_id, type: docForm.type });
@@ -2513,7 +2607,7 @@ function Knowledge({ user, admin = false }: any) {
   async function saveDoc(docId: string) {
     setKnowledgeMsg('');
     try {
-      await api(`/api/admin/knowledge/documents/${docId}`, { method: 'PATCH', body: JSON.stringify({ ...docEditForm, allowed_roles: [] }) });
+      await api(`/api/admin/knowledge/documents/${docId}`, { method: 'PATCH', body: JSON.stringify({ ...docEditForm, allowed_roles: Array.isArray(docEditForm.allowed_roles) ? docEditForm.allowed_roles : [], requires_acknowledgement: docEditForm.requires_acknowledgement !== false }) });
       setEditingDocId('');
       setDocEditForm(emptyDocForm);
       setKnowledgeMsg('Документ сохранён');
@@ -2622,6 +2716,8 @@ function Knowledge({ user, admin = false }: any) {
             <em>{docForm.photo?.file_name || 'Фото можно добавить позже'}</em>
           </label>}
         </div>}
+        <RoleAccessPicker value={docForm.allowed_roles} onChange={(allowed_roles) => setDocForm({ ...docForm, allowed_roles })} />
+        <label className="checkboxRow compactCheckbox"><input type="checkbox" checked={docForm.requires_acknowledgement !== false} onChange={(e) => setDocForm({ ...docForm, requires_acknowledgement: e.target.checked })} /><span>Требовать ознакомление</span></label>
         <Button>{docForm.type === 'ttk' ? 'Загрузить и разобрать ТТК' : 'Добавить документ'}</Button>
       </form>
       {knowledgeMsg && <div className={knowledgeMsg.includes('создан') || knowledgeMsg.includes('сохран') || knowledgeMsg.includes('удал') ? 'notice' : 'error'}>{knowledgeMsg}</div>}
@@ -2629,12 +2725,12 @@ function Knowledge({ user, admin = false }: any) {
 
     <Card title="База знаний / ТТК / сервис-бук">
       {categories.length === 0 && <Empty text="Документов нет" />}
-      <div className="knowledgeAdminList">{categories.map(c => <div className="knowledgeAdminFolder" key={c.id}>
-        <div className="knowledgeAdminFolderHead">
+      <div className="knowledgeAdminList">{categories.map(c => <details className="knowledgeAdminFolder compactAccordion" key={c.id}>
+        <summary className="knowledgeAdminFolderHead compactAccordionSummary">
           {editingCategoryId === c.id
             ? <input value={categoryEditTitle} onChange={(e) => setCategoryEditTitle(e.target.value)} placeholder="Название папки" />
             : <div><b>{c.title}</b><span>{c.documents.length} документов</span></div>}
-          <div className="adminInlineActions">
+          <div className="adminInlineActions" onClick={(event) => event.stopPropagation()}>
             {editingCategoryId === c.id ? <>
               <Button kind="soft" type="button" onClick={() => setEditingCategoryId('')}>Отмена</Button>
               <Button type="button" onClick={() => saveCategory(c.id)}>Сохранить</Button>
@@ -2643,9 +2739,9 @@ function Knowledge({ user, admin = false }: any) {
               <Button kind="danger" type="button" onClick={() => deleteCategory(c)}>Удалить</Button>
             </>}
           </div>
-        </div>
+        </summary>
 
-        <div className="knowledgeAdminDocs">
+        <div className="knowledgeAdminDocs compactAccordionBody">
           {c.documents.map((d: any) => <div className="knowledgeAdminDocRow" key={d.id}>
             {editingDocId === d.id ? <div className="knowledgeDocEditForm">
               <div className="form two">
@@ -2671,6 +2767,8 @@ function Knowledge({ user, admin = false }: any) {
                   <em>{docEditForm.photo?.file_name || 'Оставьте пустым, чтобы не менять фото'}</em>
                 </label>}
               </div>}
+              <RoleAccessPicker value={docEditForm.allowed_roles} onChange={(allowed_roles) => setDocEditForm({ ...docEditForm, allowed_roles })} />
+              <label className="checkboxRow compactCheckbox"><input type="checkbox" checked={docEditForm.requires_acknowledgement !== false} onChange={(e) => setDocEditForm({ ...docEditForm, requires_acknowledgement: e.target.checked })} /><span>Требовать ознакомление</span></label>
               <div className="actions">
                 <Button kind="soft" type="button" onClick={() => setEditingDocId('')}>Отмена</Button>
                 <Button type="button" onClick={() => saveDoc(d.id)}>Сохранить</Button>
@@ -2688,10 +2786,10 @@ function Knowledge({ user, admin = false }: any) {
           </div>)}
           {c.documents.length === 0 && <Empty text="В папке пока нет документов" />}
         </div>
-      </div>)}</div>
+      </details>)}</div>
     </Card>
 
     {openDoc && <KnowledgeDocumentModal doc={openDoc} onClose={() => setOpenDoc(null)} onAck={ack} />}
-    <Card title="Статистика ознакомления"><div className="list">{stats.map(s => <div className="listRow" key={s.id}><div><b>{s.title}</b><span>Просмотры: {s.views}</span></div><span className="badge active">Ознакомились: {s.acknowledgements}</span></div>)}</div></Card>
+    <Card title="Статистика ознакомления"><div className="list">{stats.map(s => <details className="knowledgeStatsRow compactAccordion" key={s.id}><summary className="listRow compactAccordionSummary"><div><b>{s.title}</b><span>Просмотры: {s.views}</span></div><span className="badge active">Ознакомились: {s.acknowledgements} из {s.targets_count || 0}</span></summary>{s.pending_users?.length > 0 && <div className="compactAccordionBody knowledgePendingUsers">{s.pending_users.map((employee: any) => <span key={employee.id}>{employee.name}</span>)}</div>}</details>)}</div></Card>
   </>;
 }

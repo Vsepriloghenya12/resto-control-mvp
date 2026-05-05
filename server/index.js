@@ -37,7 +37,6 @@ const knowledgeUploadsDir = path.join(uploadsDir, 'knowledge');
 const MANAGER_ROLES = ['owner', 'manager'];
 const SENIOR_ROLE_DEPARTMENT = { senior_waiter: 'hall', senior_bartender: 'bar', senior_cook: 'kitchen' };
 const SENIOR_ROLES = Object.keys(SENIOR_ROLE_DEPARTMENT);
-const REQUEST_SENIOR_ROLE_BY_DEPARTMENT = { hall: 'senior_waiter', bar: 'senior_bartender', kitchen: 'senior_cook' };
 const DEPARTMENT_ROLE_MAP = {
   hall: ['senior_waiter', 'waiter', 'hostess'],
   bar: ['senior_bartender', 'bartender'],
@@ -47,8 +46,7 @@ const DEPARTMENT_ROLE_MAP = {
 const STAFF_ROLES = ['manager', 'senior_waiter', 'senior_bartender', 'senior_cook', 'hostess', 'waiter', 'bartender', 'cook'];
 const departments = { hall: 'Зал', bar: 'Бар', kitchen: 'Кухня', common: 'Общее' };
 const techRequestStatuses = { new: 'новая', in_progress: 'в работе', done: 'выполнена', cancelled: 'отклонена' };
-const productRequestStatuses = { sent: 'отправлена', ordered: 'заказано', partial: 'частично пришло', received: 'получено', done: 'завершена', not_received: 'не получено', cancelled: 'отменена' };
-const problemTypeLabels = { task: 'Задача', tech_request: 'Техзаявка', product_request: 'Заявка' };
+const problemTypeLabels = { task: 'Задача', tech_request: 'Проблема', checklist_run: 'Чек-лист', inventory_run: 'Инвентаризация', booking: 'Бронь' };
 const bookingStatuses = { booked: 'забронирован', seated: 'гости пришли', completed: 'завершён', cancelled: 'отменён' };
 const tariffEmployeeLimits = {
   trial: 10,
@@ -194,114 +192,7 @@ function normalizeStaffRole(role) {
 }
 
 function serializeAdminUser(user, viewer) {
-  const safe = publicUser(user);
-  if (!safe) return null;
-  if ((viewer?.is_super_admin || MANAGER_ROLES.includes(viewer?.role)) && user.role !== 'owner') {
-    safe.access_password = user.access_password || '';
-  }
-  return safe;
-}
-
-function normalizeRequestItems(restaurant_id, department, rawItems = []) {
-  const positiveItems = Array.isArray(rawItems) ? rawItems.filter(i => Number(i?.qty_ordered) > 0) : [];
-  if (!positiveItems.length) {
-    return { error: 'Добавьте хотя бы одну позицию' };
-  }
-
-  const items = [];
-  for (const item of positiveItems) {
-    const product = db.products.find(p => p.id === item.product_id && p.restaurant_id === restaurant_id && p.active);
-    if (!product) {
-      return { error: 'Одна или несколько позиций не найдены' };
-    }
-    if (product.department !== department) {
-      return { error: 'В заявке могут быть только товары выбранного отдела' };
-    }
-    items.push({
-      product_id: product.id,
-      qty_ordered: Number(item.qty_ordered),
-      comment: item.comment || ''
-    });
-  }
-
-  return { items };
-}
-
-function requestDepartmentForUser(user, requestedDepartment) {
-  const ownDepartment = user.department || roleDepartment(user.role);
-  const department = String(requestedDepartment || ownDepartment || '').trim();
-  if (!departments[department]) {
-    return { error: 'Неизвестное подразделение' };
-  }
-  if (!user.is_super_admin && !MANAGER_ROLES.includes(user.role) && department !== ownDepartment) {
-    return { error: 'Нельзя создавать заявки другого подразделения' };
-  }
-  return { department };
-}
-
-function activeRestaurantUsers(restaurant_id) {
-  return sameRestaurant(db.users, restaurant_id).filter(user => user.active);
-}
-
-function resolveProductRequestTarget(restaurant_id, department) {
-  const seniorRole = REQUEST_SENIOR_ROLE_BY_DEPARTMENT[department];
-  if (seniorRole) {
-    const senior = activeRestaurantUsers(restaurant_id)
-      .find(user => user.role === seniorRole && (user.department === department || roleDepartment(user.role) === department));
-    if (senior) {
-      return { target_role: seniorRole, target_user_id: senior.id, fallback_to_manager: false };
-    }
-  }
-
-  const manager = activeRestaurantUsers(restaurant_id)
-    .find(user => user.role === 'manager')
-    || activeRestaurantUsers(restaurant_id).find(user => user.role === 'owner');
-  return { target_role: 'manager', target_user_id: manager?.id || null, fallback_to_manager: true };
-}
-
-function productRequestRecipientUsers(restaurant_id, request) {
-  const users = activeRestaurantUsers(restaurant_id);
-  if (request.target_role === 'manager') {
-    const managers = users.filter(user => MANAGER_ROLES.includes(user.role));
-    return managers.length ? managers : users.filter(user => user.role === 'owner');
-  }
-
-  if (request.target_role) {
-    const byRole = users.filter(user => user.role === request.target_role && (!request.department || user.department === request.department || roleDepartment(user.role) === request.department));
-    if (byRole.length) return byRole;
-  }
-
-  if (request.target_user_id) {
-    return users.filter(user => user.id === request.target_user_id);
-  }
-
-  return users.filter(user => MANAGER_ROLES.includes(user.role));
-}
-
-function canSeeProductRequest(user, request) {
-  if (user?.is_super_admin || MANAGER_ROLES.includes(user?.role)) return true;
-  if (SENIOR_ROLES.includes(user?.role)) {
-    return request.department === manageableDepartment(user)
-      || request.target_role === user.role
-      || request.target_user_id === user.id;
-  }
-  return request.created_by === user.id || request.department === (user.department || roleDepartment(user.role));
-}
-
-function canHandleProductRequest(user, request) {
-  if (user?.is_super_admin || MANAGER_ROLES.includes(user?.role)) return true;
-  return SENIOR_ROLES.includes(user?.role) && request.department === manageableDepartment(user);
-}
-
-function serializeProductRequest(request) {
-  return {
-    ...request,
-    created_by_user: publicUser(db.users.find(u => u.id === request.created_by)),
-    target_user: publicUser(db.users.find(u => u.id === request.target_user_id)),
-    items: db.request_items
-      .filter(i => i.request_id === request.id)
-      .map(i => ({ ...i, product: db.products.find(p => p.id === i.product_id) }))
-  };
+  return publicUser(user);
 }
 
 function normalizeChecklistTemplateItems(rawItems = []) {
@@ -1305,7 +1196,6 @@ app.get('/api/admin/problems', auth, ensureRestaurantActive, adminOnly, (req, re
     return task?.due_at && new Date(task.due_at).getTime() < now;
   });
   const openTech = sameRestaurant(db.tech_requests, rid).filter(t => !['done', 'cancelled'].includes(t.status));
-  const openRequests = sameRestaurant(db.product_requests, rid).filter(r => !['received', 'done', 'cancelled'].includes(r.status));
   const staff = sameRestaurant(db.users, rid).filter(u => u.active && !u.is_super_admin && !MANAGER_ROLES.includes(u.role));
   const requiredDocs = sameRestaurant(db.knowledge_documents, rid).filter(d => d.is_active && d.requires_acknowledgement);
   const pendingAck = requiredDocs.reduce((total, doc) => {
@@ -1319,10 +1209,9 @@ app.get('/api/admin/problems', auth, ensureRestaurantActive, adminOnly, (req, re
       const user = db.users.find(u => u.id === a.user_id);
       return { id: `task-${a.id}`, tone: 'danger', title: task?.title || 'Просроченная задача', subtitle: `${user?.name || 'Сотрудник'} · дедлайн ${fmtDate(task?.due_at)}`, type: 'task', type_label: problemTypeLabels.task, entity_id: task?.id || a.task_id };
     }),
-    ...openTech.slice(0, 8).map(t => ({ id: `tech-${t.id}`, tone: t.status === 'new' ? 'warning' : 'info', title: t.title, subtitle: `Техзаявка · ${techRequestStatuses[t.status] || t.status}`, type: 'tech_request', type_label: problemTypeLabels.tech_request, entity_id: t.id })),
-    ...openRequests.slice(0, 8).map(r => ({ id: `request-${r.id}`, tone: 'warning', title: `Заявка ${departments[r.department] || r.department}`, subtitle: `${productRequestStatuses[r.status] || r.status} · ${fmtDate(r.created_at)}`, type: 'product_request', type_label: problemTypeLabels.product_request, entity_id: r.id }))
+    ...openTech.slice(0, 8).map(t => ({ id: `tech-${t.id}`, tone: t.status === 'new' ? 'warning' : 'info', title: t.title, subtitle: `Проблема · ${techRequestStatuses[t.status] || t.status}`, type: 'tech_request', type_label: problemTypeLabels.tech_request, entity_id: t.id }))
   ];
-  res.json({ metrics: { open_shifts: collection('shifts').filter(s => s.restaurant_id === rid && s.status === 'open').length, open_tasks: openAssignments.length, overdue_tasks: overdueAssignments.length, open_tech_requests: openTech.length, open_product_requests: openRequests.length, checklist_runs_today: sameRestaurant(db.checklist_runs, rid).filter(r => String(r.created_at||'').slice(0,10) === today).length, pending_acknowledgements: pendingAck }, problems: problems.slice(0,20) });
+  res.json({ metrics: { open_shifts: collection('shifts').filter(s => s.restaurant_id === rid && s.status === 'open').length, open_tasks: openAssignments.length, overdue_tasks: overdueAssignments.length, open_tech_requests: openTech.length, checklist_runs_today: sameRestaurant(db.checklist_runs, rid).filter(r => String(r.created_at||'').slice(0,10) === today).length, pending_acknowledgements: pendingAck }, problems: problems.slice(0,20) });
 });
 
 app.get('/api/comments', auth, ensureRestaurantActive, (req, res) => {
@@ -1416,8 +1305,7 @@ app.get('/api/super/restaurants', auth, superOnly, (req, res) => {
       ...r,
       computed_status: restaurantStatus(r),
       users_count: users.length,
-      checklist_runs_count: db.checklist_runs.filter(x => x.restaurant_id === r.id).length,
-      requests_count: db.product_requests.filter(x => x.restaurant_id === r.id).length
+      checklist_runs_count: db.checklist_runs.filter(x => x.restaurant_id === r.id).length
     };
   });
   res.json(rows);
@@ -1469,8 +1357,6 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
       .map(run => `${run.user_id}:${run.template_id}`)
       .filter(key => expectedChecklistKeys.has(key))
   );
-  const productRequests = sameRestaurant(db.product_requests, rid);
-  const openProductRequests = productRequests.filter(r => !['received', 'done', 'cancelled'].includes(r.status));
   const inventoryRuns = sameRestaurant(db.inventory_runs, rid);
   const inventoryRunsToday = inventoryRuns.filter(r => r.created_at?.slice(0, 10) === today);
   const activeInventoryTemplates = sameRestaurant(db.inventory_templates, rid).filter(t => t.active !== false);
@@ -1516,12 +1402,6 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
     done: completedChecklistKeys.size,
     not_done: Math.max(0, expectedChecklistKeys.size - completedChecklistKeys.size),
     total: expectedChecklistKeys.size
-  };
-  const requestSummary = {
-    new: productRequests.filter(r => r.status === 'sent').length,
-    in_progress: productRequests.filter(r => ['ordered', 'partial', 'not_received'].includes(r.status)).length,
-    closed: productRequests.filter(r => ['received', 'done', 'cancelled'].includes(r.status)).length,
-    open: openProductRequests.length
   };
   const documentSummary = {
     total: activeDocuments.length,
@@ -1636,28 +1516,12 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
         };
       });
       const acknowledgedDocuments = documentDetails.filter(doc => doc.status === 'acknowledged');
-      const userRequests = productRequests.filter(request => request.created_by === user.id);
-      const requestDetails = userRequests
-        .slice()
-        .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
-        .map(request => ({
-          id: request.id,
-          department: request.department,
-          status: request.status,
-          created_at: request.created_at,
-          updated_at: request.updated_at,
-          items_count: db.request_items.filter(item => item.request_id === request.id).length
-        }));
       return {
         user: publicUser(user),
         checklists: {
           done: userChecklistDoneKeys.size,
           not_done: Math.max(0, userChecklistTemplates.length - userChecklistDoneKeys.size),
           details: checklistDetails
-        },
-        requests: {
-          new: productRequests.filter(request => request.created_by === user.id && request.status === 'sent').length,
-          details: requestDetails
         },
         tasks: {
           new: userTaskAssignments.filter(assignment => String(taskById.get(assignment.task_id)?.created_at || '').slice(0, 10) === today).length,
@@ -1692,7 +1556,6 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
     users_total: staffUsers.length,
     employee_limit: employeeLimitForRestaurant(restaurant),
     checklists_today: checklistSummary.done,
-    requests_open: requestSummary.open,
     inventories: inventoryRuns.length,
     tasks_open: taskSummary.open,
     docs: documentSummary.total,
@@ -1704,7 +1567,6 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
         limit: employeeLimitForRestaurant(restaurant)
       },
       checklists: checklistSummary,
-      requests: requestSummary,
       tasks: taskSummary,
       documents: documentSummary,
       inventories: inventorySummary
@@ -1909,6 +1771,21 @@ app.delete('/api/admin/checklists/templates/:id', auth, ensureRestaurantActive, 
   res.json({ ok: true });
 }));
 
+app.get('/api/checklists/runs', auth, ensureRestaurantActive, (req, res) => {
+  const rid = req.user.restaurant_id;
+  const today = String(req.query.date || new Date().toISOString().slice(0, 10));
+  const rows = sameRestaurant(db.checklist_runs, rid)
+    .filter(run => run.user_id === req.user.id)
+    .filter(run => String(run.created_at || '').slice(0, 10) === today)
+    .map(run => ({
+      ...run,
+      template: db.checklist_templates.find(t => t.id === run.template_id),
+      answers: db.checklist_answers.filter(answer => answer.run_id === run.id)
+    }))
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  res.json(rows);
+});
+
 app.post('/api/checklists/runs', auth, ensureRestaurantActive, runAsync(async (req, res) => {
   const rid = req.user.restaurant_id;
   const { template_id, answers, comment } = req.body;
@@ -1919,34 +1796,60 @@ app.post('/api/checklists/runs', auth, ensureRestaurantActive, runAsync(async (r
   const currentShift = currentOpenShiftFor(req.user);
   if (!currentShift) return res.status(400).json({ error: 'Сначала начните смену' });
   const templateItems = db.checklist_items.filter(i => i.template_id === template.id);
-  const missingRequiredItem = templateItems.find(item => item.required && !answers?.[item.id]?.done);
-  if (missingRequiredItem) return res.status(400).json({ error: `Обязательный пункт "${missingRequiredItem.text}" не выполнен` });
+  const answerValue = (item) => answers?.[item.id] || {};
+  const answerStatus = (item) => String(answerValue(item).status || (answerValue(item).done ? 'ok' : '')).trim();
+  const missingRequiredItem = templateItems.find(item => item.required && !['ok', 'problem', 'na'].includes(answerStatus(item)));
+  if (missingRequiredItem) return res.status(400).json({ error: `Выберите статус для обязательного пункта "${missingRequiredItem.text}"` });
   const missingPhotoItem = templateItems.find(item => {
-    const value = answers?.[item.id] || {};
-    return Boolean(item.needs_photo) && Boolean(value.done) && !value.photo_url;
+    const value = answerValue(item);
+    return Boolean(item.needs_photo) && answerStatus(item) === 'ok' && !value.photo_url;
   });
   if (missingPhotoItem) return res.status(400).json({ error: `Для пункта "${missingPhotoItem.text}" нужно сделать фото` });
   const missingCommentItem = templateItems.find(item => {
-    const value = answers?.[item.id] || {};
-    return Boolean(item.needs_comment) && Boolean(value.done) && !String(value.comment || '').trim();
+    const value = answerValue(item);
+    const status = answerStatus(item);
+    return (status === 'problem' || (Boolean(item.needs_comment) && status === 'ok')) && !String(value.comment || '').trim();
   });
   if (missingCommentItem) return res.status(400).json({ error: `Для пункта "${missingCommentItem.text}" нужен комментарий` });
 
   const run = { id: uid('clrun'), restaurant_id: rid, template_id, user_id: req.user.id, status: 'completed', comment: comment || '', created_at: nowIso(), completed_at: nowIso() };
   db.checklist_runs.push(run);
+  const problemItems = [];
   try {
     templateItems.forEach(item => {
-      const value = answers?.[item.id] || {};
-      const done = Boolean(value.done);
-      const photo_url = done && value.photo_url ? saveChecklistPhoto(value.photo_url, rid, run.id, item.id) : '';
-      db.checklist_answers.push({ id: uid('clans'), restaurant_id: rid, run_id: run.id, item_id: item.id, done, comment: value.comment || '', photo_url });
+      const value = answerValue(item);
+      const status = answerStatus(item);
+      const done = status === 'ok' || status === 'na' || Boolean(value.done && status !== 'problem');
+      const photo_url = status === 'ok' && value.photo_url ? saveChecklistPhoto(value.photo_url, rid, run.id, item.id) : '';
+      const statusPrefix = status === 'problem' ? 'Проблема: ' : status === 'na' ? 'Не относится. ' : '';
+      const savedComment = `${statusPrefix}${String(value.comment || '').trim()}`.trim();
+      db.checklist_answers.push({ id: uid('clans'), restaurant_id: rid, run_id: run.id, item_id: item.id, done, comment: savedComment, photo_url });
+      if (status === 'problem') problemItems.push({ item, comment: String(value.comment || '').trim() });
     });
   } catch (error) {
     db.checklist_runs = db.checklist_runs.filter(savedRun => savedRun.id !== run.id);
     return res.status(400).json({ error: error.message || 'Не удалось сохранить фото' });
   }
-  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'checklist_completed', title: `${req.user.name} завершил чек-лист "${template.title}"`, entity_type: 'checklist_run', entity_id: run.id, metadata: { total: templateItems.length } });
-  notifyManagers(rid, { title: 'Чек-лист выполнен', body: `${req.user.name}: ${template.title}`, entity_type: 'checklist_run', entity_id: run.id });
+  problemItems.forEach(({ item, comment: itemComment }) => {
+    const request = {
+      id: uid('tech'),
+      restaurant_id: rid,
+      created_by: req.user.id,
+      title: `Проблема в чек-листе: ${item.text}`,
+      description: itemComment || `Пункт отмечен как проблема в чек-листе "${template.title}"`,
+      category: 'other',
+      status: 'new',
+      manager_comment: '',
+      started_at: null,
+      resolved_at: null,
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+    db.tech_requests.push(request);
+    notifyManagers(rid, { title: 'Проблема в чек-листе', body: `${req.user.name}: ${item.text}`, entity_type: 'tech_request', entity_id: request.id });
+  });
+  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'checklist_completed', title: `${req.user.name} завершил чек-лист "${template.title}"`, entity_type: 'checklist_run', entity_id: run.id, metadata: { total: templateItems.length, problems: problemItems.length } });
+  notifyManagers(rid, { title: problemItems.length ? 'Чек-лист выполнен с проблемами' : 'Чек-лист выполнен', body: `${req.user.name}: ${template.title}`, entity_type: 'checklist_run', entity_id: run.id });
   let closedShift = null;
   if (template.type === 'close') {
     currentShift.status = 'closed';
@@ -2038,61 +1941,6 @@ app.delete('/api/admin/products/:id', auth, ensureRestaurantActive, adminOnly, r
   res.json({ ok: true });
 }));
 
-// REQUESTS
-app.get('/api/requests', auth, ensureRestaurantActive, (req, res) => {
-  const rid = req.user.restaurant_id;
-  const ownDepartment = req.user.department || roleDepartment(req.user.role);
-  const department = req.user.is_super_admin || MANAGER_ROLES.includes(req.user.role)
-    ? (req.query.department || null)
-    : ownDepartment;
-  const rows = sameRestaurant(db.product_requests, rid)
-    .filter(r => !department || r.department === department)
-    .filter(r => canSeeProductRequest(req.user, r))
-    .map(serializeProductRequest)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at));
-  res.json(rows);
-});
-
-app.post('/api/requests', auth, ensureRestaurantActive, runAsync(async (req, res) => {
-  const rid = req.user.restaurant_id;
-  const departmentResult = requestDepartmentForUser(req.user, req.body.department);
-  if (departmentResult.error) return res.status(403).json({ error: departmentResult.error });
-  const department = departmentResult.department;
-  const normalized = normalizeRequestItems(rid, department, req.body.items);
-  if (normalized.error) return res.status(400).json({ error: normalized.error });
-  const target = resolveProductRequestTarget(rid, department);
-  const request = { id: uid('req'), restaurant_id: rid, department, created_by: req.user.id, target_role: target.target_role, target_user_id: target.target_user_id, status: 'sent', comment: req.body.comment || '', created_at: nowIso(), updated_at: nowIso() };
-  db.product_requests.push(request);
-  normalized.items.forEach(i => {
-    db.request_items.push({ id: uid('reqi'), restaurant_id: rid, request_id: request.id, product_id: i.product_id, qty_ordered: i.qty_ordered, qty_received: 0, status: 'ordered', comment: i.comment });
-  });
-  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'request_created', title: `${req.user.name} создал заявку ${departments[department] || department}`, entity_type: 'product_request', entity_id: request.id, metadata: { department, target_role: target.target_role, target_user_id: target.target_user_id, fallback_to_manager: target.fallback_to_manager, items_count: normalized.items.length } });
-  notifyUsers(rid, productRequestRecipientUsers(rid, request), { title: 'Новая заявка', body: `${req.user.name} · ${departments[department] || department}`, entity_type: 'product_request', entity_id: request.id });
-  await persist();
-  res.status(201).json(serializeProductRequest(request));
-}));
-
-app.patch('/api/requests/:id/receive', auth, ensureRestaurantActive, runAsync(async (req, res) => {
-  const rid = req.user.restaurant_id;
-  const request = db.product_requests.find(r => r.id === req.params.id && r.restaurant_id === rid);
-  if (!request) return res.status(404).json({ error: 'Заявка не найдена' });
-  if (!canHandleProductRequest(req.user, request)) return res.status(403).json({ error: 'Нет доступа к этой заявке' });
-  const received = req.body.received || {};
-  const items = db.request_items.filter(i => i.request_id === request.id);
-  items.forEach(i => {
-    if (received[i.id] !== undefined) i.qty_received = Number(received[i.id] || 0);
-    if (i.qty_received <= 0) i.status = 'not_received';
-    else if (i.qty_received < i.qty_ordered) i.status = 'partial';
-    else i.status = 'received';
-  });
-  const allReceived = items.every(i => i.status === 'received');
-  const someReceived = items.some(i => ['received', 'partial'].includes(i.status));
-  request.status = allReceived ? 'received' : someReceived ? 'partial' : 'sent';
-  request.updated_at = nowIso();
-  await persist();
-  res.json({ ...serializeProductRequest(request), items });
-}));
-
 // INVENTORY
 app.post('/api/admin/inventory/import-template', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
   const rid = req.user.restaurant_id;
@@ -2166,12 +2014,30 @@ app.post('/api/inventory/runs', auth, ensureRestaurantActive, runAsync(async (re
 
   const run = { id: uid('invrun'), restaurant_id: rid, template_id, user_id: req.user.id, department: template.department, comment: comment || '', status: 'completed', created_at: nowIso() };
   db.inventory_runs.push(run);
-  parsedValues.forEach(value => db.inventory_values.push({ id: uid('invv'), restaurant_id: rid, inventory_run_id: run.id, product_id: value.product_id, qty: value.qty, comment: value.expression || value.comment || '' }));
+  parsedValues.forEach(value => {
+    const savedComment = [value.expression, value.comment].filter(Boolean).join(' · ');
+    db.inventory_values.push({ id: uid('invv'), restaurant_id: rid, inventory_run_id: run.id, product_id: value.product_id, qty: value.qty, comment: savedComment });
+  });
   logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'inventory_completed', title: `${req.user.name} отправил инвентаризацию "${template.title}"`, entity_type: 'inventory_run', entity_id: run.id, metadata: { template_id, department: template.department } });
   notifyManagers(rid, { title: 'Инвентаризация отправлена', body: `${req.user.name}: ${template.title}`, entity_type: 'inventory_run', entity_id: run.id });
   await persist();
   res.status(201).json(run);
 }));
+
+app.get('/api/inventory/runs', auth, ensureRestaurantActive, (req, res) => {
+  const rid = req.user.restaurant_id;
+  const today = String(req.query.date || new Date().toISOString().slice(0, 10));
+  const rows = sameRestaurant(db.inventory_runs, rid)
+    .filter(run => run.user_id === req.user.id)
+    .filter(run => String(run.created_at || '').slice(0, 10) === today)
+    .map(run => ({
+      ...run,
+      template: db.inventory_templates.find(t => t.id === run.template_id),
+      values: db.inventory_values.filter(value => value.inventory_run_id === run.id)
+    }))
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  res.json(rows);
+});
 
 app.get('/api/admin/inventory/runs', auth, ensureRestaurantActive, adminOnly, (req, res) => {
   const rid = req.user.restaurant_id;
@@ -2525,7 +2391,7 @@ app.post('/api/tech-requests', auth, ensureRestaurantActive, runAsync(async (req
   const description = String(req.body.description || '').trim();
   const category = String(req.body.category || 'other').trim() || 'other';
 
-  if (!title) return res.status(400).json({ error: 'Нужно указать тему заявки' });
+  if (!title) return res.status(400).json({ error: 'Нужно указать тему проблемы' });
 
   const request = {
     id: uid('tech'),
@@ -2542,15 +2408,15 @@ app.post('/api/tech-requests', auth, ensureRestaurantActive, runAsync(async (req
     updated_at: nowIso()
   };
   db.tech_requests.push(request);
-  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'tech_request_created', title: `${req.user.name} создал техзаявку "${title}"`, entity_type: 'tech_request', entity_id: request.id, metadata: { category } });
-  notifyManagers(rid, { title: 'Новая техзаявка', body: `${req.user.name}: ${title}`, entity_type: 'tech_request', entity_id: request.id });
+  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'tech_request_created', title: `${req.user.name} создал проблему "${title}"`, entity_type: 'tech_request', entity_id: request.id, metadata: { category } });
+  notifyManagers(rid, { title: 'Новая проблема', body: `${req.user.name}: ${title}`, entity_type: 'tech_request', entity_id: request.id });
   await persist();
   res.status(201).json(request);
 }));
 
 app.patch('/api/tech-requests/:id', auth, ensureRestaurantActive, adminOnly, runAsync(async (req, res) => {
   const request = db.tech_requests.find(item => item.id === req.params.id && item.restaurant_id === req.user.restaurant_id);
-  if (!request) return res.status(404).json({ error: 'Техзаявка не найдена' });
+  if (!request) return res.status(404).json({ error: 'Проблема не найдена' });
 
   const allowedStatuses = ['new', 'in_progress', 'done', 'cancelled'];
   const nextStatus = req.body.status !== undefined ? String(req.body.status).trim() : request.status;
@@ -2571,8 +2437,8 @@ app.patch('/api/tech-requests/:id', auth, ensureRestaurantActive, adminOnly, run
     request.resolved_at = null;
   }
   request.updated_at = nowIso();
-  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'tech_request_updated', title: `${req.user.name} обновил техзаявку "${request.title}"`, entity_type: 'tech_request', entity_id: request.id, metadata: { status: request.status, manager_comment: request.manager_comment } });
-  notifyUsers(req.user.restaurant_id, [db.users.find(user => user.id === request.created_by)], { title: 'Техзаявка обновлена', body: `${request.title}: ${techRequestStatuses[request.status] || request.status}`, entity_type: 'tech_request', entity_id: request.id });
+  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'tech_request_updated', title: `${req.user.name} обновил проблему "${request.title}"`, entity_type: 'tech_request', entity_id: request.id, metadata: { status: request.status, manager_comment: request.manager_comment } });
+  notifyUsers(req.user.restaurant_id, [db.users.find(user => user.id === request.created_by)], { title: 'Проблема обновлена', body: `${request.title}: ${techRequestStatuses[request.status] || request.status}`, entity_type: 'tech_request', entity_id: request.id });
 
   await persist();
   res.json({
@@ -2800,11 +2666,20 @@ app.post('/api/knowledge/:id/ack', auth, ensureRestaurantActive, runAsync(async 
 app.get('/api/admin/knowledge/stats', auth, ensureRestaurantActive, adminOnly, (req, res) => {
   const rid = req.user.restaurant_id;
   const docs = sameRestaurant(db.knowledge_documents, rid).filter(d => d.is_active);
-  res.json(docs.map(d => ({
-    ...d,
-    views: db.knowledge_views.filter(v => v.document_id === d.id).length,
-    acknowledgements: db.knowledge_acknowledgements.filter(a => a.document_id === d.id && a.version === d.version).length
-  })));
+  const employees = sameRestaurant(db.users, rid).filter(user => user.active !== false && !user.is_super_admin && user.role !== 'owner');
+  res.json(docs.map(d => {
+    const targets = d.requires_acknowledgement === false ? [] : employees.filter(employee => hasRoleAccess(employee, d.allowed_roles));
+    const ackUserIds = new Set(db.knowledge_acknowledgements
+      .filter(a => a.document_id === d.id && a.version === d.version)
+      .map(a => a.user_id));
+    return {
+      ...d,
+      views: db.knowledge_views.filter(v => v.document_id === d.id).length,
+      acknowledgements: targets.length ? targets.filter(employee => ackUserIds.has(employee.id)).length : 0,
+      targets_count: targets.length,
+      pending_users: targets.filter(employee => !ackUserIds.has(employee.id)).map(publicUser)
+    };
+  }));
 });
 
 app.use((error, req, res, next) => {

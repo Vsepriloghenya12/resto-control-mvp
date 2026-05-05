@@ -72,16 +72,6 @@ export const bookingStatuses: Record<string, string> = {
   cancelled: 'отменён'
 };
 
-export const requestStatuses: Record<string, string> = {
-  sent: 'отправлена',
-  ordered: 'заказано',
-  partial: 'частично пришло',
-  received: 'получено',
-  done: 'завершена',
-  not_received: 'не получено',
-  cancelled: 'отменена'
-};
-
 export const techRequestCategories: Record<string, string> = {
   refrigeration: 'Холодильники',
   plumbing: 'Сантехника / засор',
@@ -100,7 +90,6 @@ export const techRequestStatuses: Record<string, string> = {
 export const entityTypeLabels: Record<string, string> = {
   task: 'Задача',
   tech_request: 'Проблема',
-  product_request: 'Заявка на продукты',
   checklist_run: 'Выполнение чек-листа',
   booking: 'Бронь',
   floor_table: 'План зала',
@@ -112,7 +101,6 @@ export const entityTypeLabels: Record<string, string> = {
 export const problemTypeLabels: Record<string, string> = {
   task: 'Задача',
   tech_request: 'Проблема',
-  product_request: 'Заявка',
   checklist_run: 'Чек-лист',
   booking: 'Бронь',
   inventory_run: 'Инвентаризация',

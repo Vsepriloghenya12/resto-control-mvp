@@ -25,7 +25,7 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
   const [techMsg, setTechMsg] = useState('');
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [showTechForm, setShowTechForm] = useState(false);
-  const [techForm, setTechForm] = useState<any>({ title: '', description: '', category: 'equipment' });
+  const [techForm, setTechForm] = useState<any>({ title: '', description: '', category: 'equipment', urgency: 'normal' });
   const isSenior = seniorRoles.includes(user?.role);
   const canCreateTasks = admin || isSenior;
   const canManageTechRequests = admin && ['owner', 'manager'].includes(user?.role);
@@ -78,8 +78,9 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
   async function createTechRequest(e: FormEvent) {
     e.preventDefault();
     setTechMsg('');
-    const result = await api('/api/tech-requests', { method: 'POST', body: JSON.stringify(techForm) });
-    setTechForm({ title: '', description: '', category: 'equipment' });
+    const urgencyLabel = techForm.urgency === 'critical' ? 'Критично' : techForm.urgency === 'today' ? 'Сегодня' : 'Обычная';
+    const result = await api('/api/tech-requests', { method: 'POST', body: JSON.stringify({ ...techForm, description: `[${urgencyLabel}] ${techForm.description || ''}`.trim() }) });
+    setTechForm({ title: '', description: '', category: 'equipment', urgency: 'normal' });
     setTechMsg(result?.offline ? 'Проблема сохранена офлайн' : 'Проблема отправлена менеджеру');
     setShowTechForm(false);
     onCloseComposer?.();
@@ -137,9 +138,9 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
           <b>+</b>
         </button>
 
-        <section className="mobileSection mobileFlatPanel">
-          <div className="mobileListSectionHead"><h3>Сегодня</h3><div className="mobileSectionHeadActions"><span className="mobileSectionCount">{activeTasks.length}</span>{isSenior && <button type="button" className="sectionLink" onClick={() => setShowTaskForm(true)}>+ задача</button>}</div></div>
-          <div className="mobileTaskList">
+        <details className="mobileSection mobileAccordionSection">
+          <summary className="mobileListSectionHead compactAccordionSummary"><h3>Сегодня</h3><div className="mobileSectionHeadActions"><span className="mobileSectionCount">{activeTasks.length}</span>{isSenior && <button type="button" className="sectionLink" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setShowTaskForm(true); }}>+ задача</button>}</div></summary>
+          <div className="mobileTaskList compactAccordionBody">
             {activeTasks.length === 0 && <Empty text="Нет активных задач на текущую смену" />}
             {activeTasks.map((task) => <div key={task.id} className="mobileTaskRow static">
               <span className="mobileTaskStatus" />
@@ -148,25 +149,26 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
               <CommentsPanel entityType="task" entityId={task.id} />
             </div>)}
           </div>
-        </section>
+        </details>
 
-        {openTechRequests.length > 0 && <section className="mobileSection mobileFlatPanel">
-          <div className="mobileListSectionHead"><h3>Мои проблемы</h3><span className="mobileSectionCount">{openTechRequests.length}</span></div>
-          <div className="mobileTaskList">
+        <details className="mobileSection mobileAccordionSection">
+          <summary className="mobileListSectionHead compactAccordionSummary"><h3>Мои проблемы</h3><span className="mobileSectionCount">{openTechRequests.length}</span></summary>
+          <div className="mobileTaskList compactAccordionBody">
+            {openTechRequests.length === 0 && <Empty text="Открытых проблем нет" />}
             {openTechRequests.map((request) => <div key={request.id} className="mobileTaskRow static techRequestEmployeeView">
               <span className={cx('badge', request.status === 'new' ? 'warning' : 'trial')}>{techRequestStatuses[request.status] || request.status}</span>
               <div className="mobileTaskCopy"><strong>{request.title}</strong><span>{techRequestCategories[request.category] || 'Другое'} · {request.manager_comment || 'Комментария менеджера пока нет'}</span></div>
             </div>)}
           </div>
-        </section>}
+        </details>
 
-        <section className="mobileSection mobileFlatPanel">
-          <div className="mobileListSectionHead"><h3>Выполнено</h3><span className="mobileSectionCount">{completedTasks.length}</span></div>
-          <div className="mobileTaskList">
+        <details className="mobileSection mobileAccordionSection">
+          <summary className="mobileListSectionHead compactAccordionSummary"><h3>Выполнено</h3><span className="mobileSectionCount">{completedTasks.length}</span></summary>
+          <div className="mobileTaskList compactAccordionBody">
             {completedTasks.length === 0 && <Empty text="Пока нет завершённых задач" />}
             {completedTasks.map((task) => <div key={task.id} className="mobileTaskRow static done"><span className="mobileTaskStatus done" /><div className="mobileTaskCopy"><strong>{task.title}</strong><span>{task.description || 'Задача выполнена'}</span></div><span className="badge active">Готово</span></div>)}
           </div>
-        </section>
+        </details>
         {taskMsg && <div className="notice mobileInlineNotice">{taskMsg}</div>}
         {techMsg && <div className="notice mobileInlineNotice">{techMsg}</div>}
       </div>
@@ -192,6 +194,11 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
         <form className="form" id="tech-request-form" onSubmit={createTechRequest}>
           <Field label="Тема проблемы" value={techForm.title} onChange={(e: any) => setTechForm({ ...techForm, title: e.target.value })} placeholder="Например: вызвать мастера по холодильнику" />
           <Select label="Тип проблемы" value={techForm.category} onChange={(e: any) => setTechForm({ ...techForm, category: e.target.value })}>{Object.entries(techRequestCategories).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</Select>
+          <Select label="Срочность" value={techForm.urgency} onChange={(e: any) => setTechForm({ ...techForm, urgency: e.target.value })}>
+            <option value="critical">Критично — мешает работе</option>
+            <option value="today">Важно — нужно сегодня</option>
+            <option value="normal">Обычно — можно позже</option>
+          </Select>
           <Textarea label="Что случилось" value={techForm.description} onChange={(e: any) => setTechForm({ ...techForm, description: e.target.value })} placeholder="Опишите проблему" />
         </form>
       </MobileSheetModal>}
@@ -201,45 +208,55 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
   return <>
     {canManageTechRequests && <Card title="Проблемы сотрудников" right={<span className="badge warning">{techRequests.filter((request) => !['done', 'cancelled'].includes(request.status)).length} открыто</span>}>
       {techRequests.length === 0 && <Empty text="Проблем пока нет" />}
-      <div className="grid cardsGrid">
+      <div className="compactAccordionList">
         {techRequests.map((request) => {
           const draft = techDrafts[request.id] || { status: request.status, manager_comment: request.manager_comment || '' };
-          return <div className="miniCard techRequestCard" key={request.id}>
-            <div className="rowBetween"><b>{request.title}</b><span className={`badge ${request.status === 'done' ? 'active' : request.status === 'cancelled' ? 'cancelled' : request.status === 'new' ? 'warning' : 'trial'}`}>{techRequestStatuses[request.status] || request.status}</span></div>
-            <div className="techRequestMeta"><span>{request.created_by_user?.name || 'Сотрудник'}</span><span>{techRequestCategories[request.category] || 'Другое'}</span><span>{fmtDate(request.created_at)}</span></div>
-            {request.description && <p>{request.description}</p>}
-            <div className="techRequestAdmin">
-              <Select label="Статус" value={draft.status} onChange={(e: any) => updateTechDraft(request.id, { status: e.target.value })}>
-                {Object.entries(techRequestStatuses).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
-              </Select>
-              <Textarea label="Комментарий менеджера" value={draft.manager_comment || ''} onChange={(e: any) => updateTechDraft(request.id, { manager_comment: e.target.value })} placeholder="Что сделано или что нужно передать сотруднику" />
-              <div className="actions">
-                {request.status === 'new' && <Button kind="soft" type="button" onClick={() => updateTechRequest(request, 'in_progress')}>Взять в работу</Button>}
-                <Button type="button" onClick={() => updateTechRequest(request)}>Сохранить</Button>
-                {request.status !== 'done' && <Button kind="soft" type="button" onClick={() => updateTechRequest(request, 'done')}>Закрыть</Button>}
+          return <details className="compactAccordion techRequestCard" key={request.id}>
+            <summary className="compactAccordionSummary">
+              <div>
+                <b>{request.title}</b>
+                <span>{request.created_by_user?.name || 'Сотрудник'} · {techRequestCategories[request.category] || 'Другое'} · {fmtDate(request.created_at)}</span>
               </div>
+              <span className={`badge ${request.status === 'done' ? 'active' : request.status === 'cancelled' ? 'cancelled' : request.status === 'new' ? 'warning' : 'trial'}`}>{techRequestStatuses[request.status] || request.status}</span>
+            </summary>
+            <div className="compactAccordionBody">
+              {request.description && <p>{request.description}</p>}
+              <div className="techRequestAdmin">
+                <Select label="Статус" value={draft.status} onChange={(e: any) => updateTechDraft(request.id, { status: e.target.value })}>
+                  {Object.entries(techRequestStatuses).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+                </Select>
+                <Textarea label="Комментарий менеджера" value={draft.manager_comment || ''} onChange={(e: any) => updateTechDraft(request.id, { manager_comment: e.target.value })} placeholder="Что сделано или что нужно передать сотруднику" />
+                <div className="actions">
+                  {request.status === 'new' && <Button kind="soft" type="button" onClick={() => updateTechRequest(request, 'in_progress')}>В работу</Button>}
+                  <Button type="button" onClick={() => updateTechRequest(request)}>Сохранить</Button>
+                  {request.status !== 'done' && <Button kind="soft" type="button" onClick={() => updateTechRequest(request, 'done')}>Закрыть</Button>}
+                </div>
+              </div>
+              <CommentsPanel entityType="tech_request" entityId={request.id} />
             </div>
-            <CommentsPanel entityType="tech_request" entityId={request.id} />
-          </div>;
+          </details>;
         })}
       </div>
       {techMsg && <div className={techMsg.includes('обновлена') ? 'notice' : 'error'}>{techMsg}</div>}
     </Card>}
 
-    <Card title={isSenior ? "Создать задачу подразделению" : "Создать задачу"}>
+    <Card title="Задачи команды">
       <div className="desktopTaskForm">{taskForm}</div>
       <div className="actions"><Button type="submit" form="department-task-form">Создать задачу</Button></div>
       {taskMsg && <div className="notice">{taskMsg}</div>}
     </Card>
 
-    <Card title="Задачи ресторана">
-      <div className="grid">{tasks.map(t => <div className="miniCard" key={t.id}>
-        <div className="rowBetween"><b>{t.title}</b></div>
-        <p>{t.description}</p>
-        {t.due_at && <p>Срок: {fmtDate(t.due_at)}</p>}
-        <p>Назначено: {t.assignments?.length || 0}, выполнено: {t.assignments?.filter((a: any) => a.done).length || 0}</p>
-        <CommentsPanel entityType="task" entityId={t.id} />
-      </div>)}</div>
+    <Card title="История задач">
+      <div className="compactAccordionList">{tasks.map(t => <details className="compactAccordion" key={t.id}>
+        <summary className="compactAccordionSummary">
+          <div><b>{t.title}</b><span>{t.due_at ? `Срок: ${fmtDate(t.due_at)}` : 'Без срока'}</span></div>
+          <em>{t.assignments?.filter((a: any) => a.done).length || 0}/{t.assignments?.length || 0}</em>
+        </summary>
+        <div className="compactAccordionBody">
+          <p>{t.description || 'Без описания'}</p>
+          <CommentsPanel entityType="task" entityId={t.id} />
+        </div>
+      </details>)}</div>
     </Card>
   </>;
 }

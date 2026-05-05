@@ -17,6 +17,7 @@ export function Bookings({ admin = false }: any) {
   const [showForm, setShowForm] = useState(false);
   const [viewingReservation, setViewingReservation] = useState<any>(null);
   const [freeTable, setFreeTable] = useState<any>(null);
+  const [freeSeatForm, setFreeSeatForm] = useState<any>({ guests_count: 2, comment: '' });
   const [bookingAction, setBookingAction] = useState('');
   const [editingReservationId, setEditingReservationId] = useState('');
   const [editingTableId, setEditingTableId] = useState('');
@@ -133,7 +134,7 @@ export function Bookings({ admin = false }: any) {
 
   async function seatTable(table: any) {
     await runBookingAction(`seat-table:${table.id}`, async () => {
-      const reservation = await api(`/api/bookings/tables/${table.id}/seat`, { method: 'POST', body: JSON.stringify({}) });
+      const reservation = await api(`/api/bookings/tables/${table.id}/seat`, { method: 'POST', body: JSON.stringify({ guests_count: freeSeatForm.guests_count, comment: freeSeatForm.comment }) });
       if (reservation?.offline) {
         setMsg('Посадка сохранена офлайн и отправится при подключении');
         setFreeTable(null);
@@ -141,6 +142,7 @@ export function Bookings({ admin = false }: any) {
       }
       setMsg('Стол отмечен занятым');
       setFreeTable(null);
+      setFreeSeatForm({ guests_count: 2, comment: '' });
       setViewingReservation(reservation);
       load();
     });
@@ -265,17 +267,34 @@ export function Bookings({ admin = false }: any) {
     return text.replace(/^стол\s*/i, '').trim() || text || '—';
   }
 
+  function minutesUntil(value: string) {
+    return Math.round((new Date(value).getTime() - Date.now()) / 60000);
+  }
+
+  function bookingTimeLabel(reservation: any) {
+    const date = new Date(reservation.reserved_for);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  }
+
   function tableStateForDay(table: any) {
     const tableReservations = bookingsForDate
       .filter((reservation: any) => (Array.isArray(reservation.table_ids) ? reservation.table_ids : []).includes(table.id))
       .filter((reservation: any) => ['booked', 'seated'].includes(reservation.status))
       .sort((a: any, b: any) => String(a.reserved_for || '').localeCompare(String(b.reserved_for || '')));
-    if (!tableReservations.length) return { tone: 'free', badge: 'Свободен', reservation: null as any };
-    const nextReservation = tableReservations[0];
+    const seated = tableReservations.find((reservation: any) => reservation.status === 'seated');
+    if (seated) return { tone: 'occupied', badge: 'Занято', hint: `с ${bookingTimeLabel(seated)}`, reservation: seated, next: null as any };
+    const future = tableReservations.filter((reservation: any) => new Date(reservation.reserved_for).getTime() >= Date.now());
+    const nextReservation = future[0] || tableReservations[0];
+    if (!nextReservation) return { tone: 'free', badge: 'Свободен', hint: '', reservation: null as any, next: null as any };
+    const minutes = minutesUntil(nextReservation.reserved_for);
+    const soon = minutes >= 0 && minutes <= 90;
     return {
-      tone: nextReservation.status === 'seated' ? 'occupied' : 'reserved',
-      badge: nextReservation.status === 'seated' ? 'Занято' : 'Забронировано',
-      reservation: nextReservation
+      tone: soon ? 'reservedSoon' : 'free',
+      badge: soon ? `Бронь ${minutes} мин` : 'Свободен',
+      hint: `бронь в ${bookingTimeLabel(nextReservation)}`,
+      reservation: soon ? nextReservation : null,
+      next: nextReservation
     };
   }
 
@@ -289,6 +308,7 @@ export function Bookings({ admin = false }: any) {
     } else {
       setViewingReservation(null);
       setFreeTable(table);
+      setFreeSeatForm({ guests_count: 2, comment: '' });
       resetReservationForm(dateFilter, [table.id]);
     }
   }
@@ -321,13 +341,18 @@ export function Bookings({ admin = false }: any) {
 
   const isBookingActionBusy = Boolean(bookingAction);
   const messageLooksPositive = (text: string) => ['обнов', 'создан', 'отмен', 'добавлен', 'удалён', 'занят', 'посаж', 'освобожд', 'офлайн'].some(fragment => text.toLowerCase().includes(fragment));
+  const upcomingBookings = bookingsForDate
+    .filter((reservation: any) => ['booked', 'seated'].includes(reservation.status))
+    .filter((reservation: any) => reservation.status === 'seated' || new Date(reservation.reserved_for).getTime() >= Date.now())
+    .slice(0, 5);
+
   const inlineNotice = msg ? <div className={messageLooksPositive(msg) ? 'notice mobileInlineNotice' : 'error mobileInlineNotice'}>{msg}</div> : null;
   const compactNotice = msg ? <div className={messageLooksPositive(msg) ? 'notice compactNotice' : 'error compactNotice'}>{msg}</div> : null;
   const floorPlanSections = <>
     {hallGroups.length === 0 && <section className="mobileSection bookingHallSection"><div className="mobileListSurface"><Empty text="Администратор ещё не настроил зал и столы" /></div></section>}
-    {hallGroups.map((hall) => <section className="mobileSection bookingHallSection" key={hall.name}>
-      <div className="mobileListSectionHead"><h3>{hall.name}</h3><span className="mobileSectionCount">{hall.tables.length}</span></div>
-      <div className="bookingTablesGrid floorTablesGrid">
+    {hallGroups.map((hall) => <details className="mobileSection bookingHallSection mobileAccordionSection" key={hall.name}>
+      <summary className="mobileListSectionHead compactAccordionSummary"><h3>{hall.name}</h3><span className="mobileSectionCount">{hall.tables.length}</span></summary>
+      <div className="bookingTablesGrid floorTablesGrid compactAccordionBody">
         {hall.tables.map((table: any) => {
           const state = tableStateForDay(table);
           return <button key={table.id} type="button" className={cx('bookingTableButton', 'floorTableTile', state.tone)} onClick={() => openTable(table)}>
@@ -335,11 +360,11 @@ export function Bookings({ admin = false }: any) {
               <strong className="floorTableNumber">{tableNumberLabel(table.label)}</strong>
               <span className={cx('floorTableStatusBadge', state.tone)}>{state.badge}</span>
             </div>
-            <span className="floorTableSeats">{table.seats} мест</span>
+            <span className="floorTableSeats">{state.hint || `${table.seats} мест`}</span>
           </button>;
         })}
       </div>
-    </section>)}
+    </details>)}
   </>;
   const freeTableAction = freeTable?.id ? `seat-table:${freeTable.id}` : '';
   const viewingReservationTableId = Array.isArray(viewingReservation?.table_ids) ? viewingReservation.table_ids[0] : '';
@@ -356,7 +381,11 @@ export function Bookings({ admin = false }: any) {
     >
       <div className="bookingDetailsList">
         <div><span>Статус</span><strong>Свободен</strong></div>
-        <div><span>Действие</span><strong>Отметьте «Гости сели», если стол заняли без брони.</strong></div>
+        <div><span>Следующая бронь</span><strong>{tableStateForDay(freeTable).next ? bookingTimeLabel(tableStateForDay(freeTable).next) : 'Нет на выбранную дату'}</strong></div>
+      </div>
+      <div className="form bookingQuickSeatForm">
+        <Field label="Гостей" type="number" min="1" value={freeSeatForm.guests_count} onChange={(e: any) => setFreeSeatForm({ ...freeSeatForm, guests_count: e.target.value })} />
+        <Textarea label="Комментарий" rows={3} value={freeSeatForm.comment} onChange={(e: any) => setFreeSeatForm({ ...freeSeatForm, comment: e.target.value })} placeholder="Например: гости без брони" />
       </div>
     </MobileSheetModal>}
 
@@ -392,6 +421,15 @@ export function Bookings({ admin = false }: any) {
         <section className="mobileSection">
           <div className="mobileListSurface mobileFilterSurface"><Field label="Дата" type="date" value={dateFilter} onChange={(e: any) => setDateFilter(e.target.value)} /></div>
         </section>
+        {upcomingBookings.length > 0 && <details className="mobileSection mobileAccordionSection upcomingBookingsSection">
+          <summary className="mobileListSectionHead compactAccordionSummary"><h3>Ближайшие брони</h3><span className="mobileSectionCount">{upcomingBookings.length}</span></summary>
+          <div className="compactAccordionBody upcomingBookingsList">
+            {upcomingBookings.map((reservation: any) => <button type="button" className="upcomingBookingRow" key={reservation.id} onClick={() => setViewingReservation(reservation)}>
+              <strong>{bookingTimeLabel(reservation)}</strong>
+              <span>{reservation.guest_name || 'Гость'} · {reservation.guests_count} гост. · {tablesSummary(reservation) || 'стол не выбран'}</span>
+            </button>)}
+          </div>
+        </details>}
         {floorPlanSections}
         {inlineNotice}
       </div>
