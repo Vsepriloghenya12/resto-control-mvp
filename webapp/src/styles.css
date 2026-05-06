@@ -7482,10 +7482,6 @@ body {
   white-space: normal;
 }
 
-.mobileChecklistScreen .checklistStatusButtons button:last-child {
-  grid-column: 1 / -1;
-}
-
 .mobileInlineHint.withAction {
   display: flex;
   align-items: center;

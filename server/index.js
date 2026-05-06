@@ -2203,8 +2203,12 @@ app.post('/api/checklists/runs', auth, ensureRestaurantActive, runAsync(async (r
   if (!currentShift) return res.status(400).json({ error: 'Сначала начните смену' });
   const templateItems = db.checklist_items.filter(i => i.template_id === template.id);
   const answerValue = (item) => answers?.[item.id] || {};
-  const answerStatus = (item) => String(answerValue(item).status || (answerValue(item).done ? 'ok' : '')).trim();
-  const missingRequiredItem = templateItems.find(item => item.required && !['ok', 'problem', 'na'].includes(answerStatus(item)));
+  const answerStatus = (item) => {
+    const value = answerValue(item);
+    const status = String(value.status || (value.done ? 'ok' : '')).trim();
+    return status === 'na' ? '' : status;
+  };
+  const missingRequiredItem = templateItems.find(item => item.required && !['ok', 'problem'].includes(answerStatus(item)));
   if (missingRequiredItem) return res.status(400).json({ error: `Выберите статус для обязательного пункта "${missingRequiredItem.text}"` });
   const missingPhotoItem = templateItems.find(item => {
     const value = answerValue(item);
@@ -2214,7 +2218,7 @@ app.post('/api/checklists/runs', auth, ensureRestaurantActive, runAsync(async (r
   const missingCommentItem = templateItems.find(item => {
     const value = answerValue(item);
     const status = answerStatus(item);
-    return (status === 'problem' || (Boolean(item.needs_comment) && status === 'ok')) && !String(value.comment || '').trim();
+    return status === 'problem' && !String(value.comment || '').trim();
   });
   if (missingCommentItem) return res.status(400).json({ error: `Для пункта "${missingCommentItem.text}" нужен комментарий` });
 
@@ -2225,10 +2229,9 @@ app.post('/api/checklists/runs', auth, ensureRestaurantActive, runAsync(async (r
     templateItems.forEach(item => {
       const value = answerValue(item);
       const status = answerStatus(item);
-      const done = status === 'ok' || status === 'na' || Boolean(value.done && status !== 'problem');
+      const done = status === 'ok';
       const photo_url = status === 'ok' && value.photo_url ? saveChecklistPhoto(value.photo_url, rid, run.id, item.id) : '';
-      const statusPrefix = status === 'problem' ? 'Проблема: ' : status === 'na' ? 'Не относится. ' : '';
-      const savedComment = `${statusPrefix}${String(value.comment || '').trim()}`.trim();
+      const savedComment = status === 'problem' ? `Проблема: ${String(value.comment || '').trim()}`.trim() : '';
       db.checklist_answers.push({ id: uid('clans'), restaurant_id: rid, run_id: run.id, item_id: item.id, done, comment: savedComment, photo_url });
       if (status === 'problem') problemItems.push({ item, comment: String(value.comment || '').trim() });
     });

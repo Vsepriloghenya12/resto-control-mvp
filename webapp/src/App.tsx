@@ -1903,21 +1903,22 @@ function Checklists({ user, admin = false }: any) {
     const templateAnswers: any = {};
     template.items.forEach((i: any) => {
       const answer = answers[i.id] || {};
-      const status = answer.status || (answer.done ? 'ok' : '');
+      const rawStatus = answer.status || (answer.done ? 'ok' : '');
+      const status = rawStatus === 'na' ? '' : rawStatus;
       templateAnswers[i.id] = {
         ...answer,
         status,
-        done: status === 'ok' || status === 'na' || Boolean(answer.done && status !== 'problem'),
-        comment: status === 'problem' && !String(answer.comment || '').trim() ? '' : (answer.comment || '')
+        done: status === 'ok',
+        comment: status === 'problem' ? (answer.comment || '') : ''
       };
     });
-    const missingRequired = template.items.find((i: any) => i.required !== false && !['ok', 'problem', 'na'].includes(templateAnswers[i.id]?.status));
+    const missingRequired = template.items.find((i: any) => i.required !== false && !['ok', 'problem'].includes(templateAnswers[i.id]?.status));
     if (missingRequired) { setRunMsg(`Выберите статус для обязательного пункта "${missingRequired.text}"`); return; }
     const missingPhoto = template.items.find((i: any) => i.needs_photo && templateAnswers[i.id]?.status === 'ok' && !templateAnswers[i.id]?.photo_url);
     if (missingPhoto) { setRunMsg(`Для пункта "${missingPhoto.text}" нужно сделать фото`); return; }
     const missingComment = template.items.find((i: any) => {
       const value = templateAnswers[i.id] || {};
-      return (value.status === 'problem' || (i.needs_comment && value.status === 'ok')) && !String(value.comment || '').trim();
+      return value.status === 'problem' && !String(value.comment || '').trim();
     });
     if (missingComment) { setRunMsg(`Для пункта "${missingComment.text}" нужен комментарий`); return; }
     const result = await api('/api/checklists/runs', { method: 'POST', body: JSON.stringify({ template_id: template.id, answers: templateAnswers }) });
@@ -1963,7 +1964,7 @@ function Checklists({ user, admin = false }: any) {
   }, [employeeRuns]);
 
   const completedChecklistItems = selectedTemplate
-    ? selectedTemplate.items.filter((item: any) => ['ok', 'na'].includes(answers[item.id]?.status) || answers[item.id]?.done).length
+    ? selectedTemplate.items.filter((item: any) => answers[item.id]?.status === 'ok' || (answers[item.id]?.done && !['problem', 'na'].includes(answers[item.id]?.status))).length
     : 0;
   const problemChecklistItems = selectedTemplate
     ? selectedTemplate.items.filter((item: any) => answers[item.id]?.status === 'problem').length
@@ -1971,19 +1972,19 @@ function Checklists({ user, admin = false }: any) {
   const selectedCompletedRun = selectedTemplate ? latestRunByTemplate.get(selectedTemplate.id) : null;
   const selectedTemplateCompleted = Boolean(selectedCompletedRun && !repeatingTemplates[selectedTemplate?.id || '']);
 
-  const checklistRequiresPhoto = selectedTemplate?.items.some((item: any) => item.needs_photo && answers[item.id]?.done && !answers[item.id]?.photo_url);
+  const checklistRequiresPhoto = selectedTemplate?.items.some((item: any) => item.needs_photo && answers[item.id]?.status === 'ok' && !answers[item.id]?.photo_url);
 
-  function setChecklistItemStatus(item: any, status: 'ok' | 'problem' | 'na') {
+  function setChecklistItemStatus(item: any, status: 'ok' | 'problem') {
     if (status === 'ok' && item.needs_photo && !answers[item.id]?.photo_url) {
-      updateAnswer(item.id, { status, done: true });
+      updateAnswer(item.id, { status, done: true, comment: '' });
       setCameraTarget({ itemId: item.id, title: item.text });
       return;
     }
     updateAnswer(item.id, {
       status,
-      done: status === 'ok' || status === 'na',
+      done: status === 'ok',
       photo_url: status === 'ok' ? answers[item.id]?.photo_url || '' : '',
-      comment: answers[item.id]?.comment || ''
+      comment: status === 'problem' ? answers[item.id]?.comment || '' : ''
     });
   }
 
@@ -2068,18 +2069,17 @@ function Checklists({ user, admin = false }: any) {
         {selectedTemplate.items.map((item: any, index: number) => {
           const itemAnswer = answers[item.id] || {};
           const status = itemAnswer.status || '';
-          const isDone = status === 'ok' || status === 'na' || !!itemAnswer.done;
+          const isDone = status === 'ok' || (!!itemAnswer.done && !['problem', 'na'].includes(status));
           return <div key={item.id} className={cx('mobileChecklistLine', isDone && 'done', status === 'problem' && 'problem', item.required !== false && 'required')}>
             <div className="mobileChecklistLineBody">
               <div className="mobileChecklistLineHead">
                 <strong>{item.text}</strong>
                 <span className="mobileChecklistIndex">{index + 1}</span>
               </div>
-              <div className="mobileChecklistSmartTags">{item.required !== false && <em>обязательный</em>}{item.needs_photo && <em>фото</em>}{item.needs_comment && <em>комментарий</em>}<b className={status === 'problem' ? 'problem' : isDone ? 'done' : 'pending'}>{status === 'problem' ? 'проблема' : status === 'na' ? 'не относится' : isDone ? 'готово' : 'ожидает'}</b></div>
+              <div className="mobileChecklistSmartTags">{item.required !== false && <em>обязательный</em>}{item.needs_photo && <em>фото</em>}<b className={status === 'problem' ? 'problem' : isDone ? 'done' : 'pending'}>{status === 'problem' ? 'проблема' : isDone ? 'готово' : 'ожидает'}</b></div>
               <div className="checklistStatusButtons">
                 <button type="button" className={cx(status === 'ok' && 'active')} onClick={() => setChecklistItemStatus(item, 'ok')}>Готово</button>
                 <button type="button" className={cx(status === 'problem' && 'active problem')} onClick={() => setChecklistItemStatus(item, 'problem')}>Проблема</button>
-                <button type="button" className={cx(status === 'na' && 'active muted')} onClick={() => setChecklistItemStatus(item, 'na')}>Не относится</button>
               </div>
               {status === 'ok' && item.needs_photo && <div className="mobileChecklistLineMeta">
                 <span className="mobileChecklistPhotoStatus">
@@ -2095,11 +2095,11 @@ function Checklists({ user, admin = false }: any) {
                 </button>
               </div>}
               {status === 'ok' && itemAnswer.photo_url && <img className="mobileChecklistPhoto" src={itemAnswer.photo_url} alt={`Фото: ${item.text}`} />}
-              {(status === 'ok' || status === 'problem') && <Textarea
-                label={status === 'problem' || item.needs_comment ? 'Комментарий обязателен' : 'Комментарий'}
+              {status === 'problem' && <Textarea
+                label="Комментарий к проблеме"
                 value={itemAnswer.comment || ''}
                 onChange={(e: any) => updateAnswer(item.id, { comment: e.target.value })}
-                placeholder={status === 'problem' ? 'Что не так' : 'Комментарий'}
+                placeholder="Что не так"
               />}
             </div>
           </div>;
