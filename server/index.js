@@ -1215,6 +1215,146 @@ function sendCsv(res, filename, rows) {
   res.send(`\ufeff${csv}`);
 }
 
+function billingAccess(req, res, next) {
+  if (req.user?.is_super_admin || req.user?.role === 'owner') return next();
+  return res.status(403).json({ error: 'Доступ к оплате только для владельца' });
+}
+
+function getBillingProfile(restaurantId) {
+  return sameRestaurant(collection('billing_profiles'), restaurantId)[0] || null;
+}
+
+function publicBillingProfile(profile) {
+  if (!profile) return null;
+  return {
+    customer_type: profile.customer_type || 'ip',
+    legal_name: profile.legal_name || '',
+    inn: profile.inn || '',
+    kpp: profile.kpp || '',
+    ogrn: profile.ogrn || '',
+    legal_address: profile.legal_address || '',
+    bank_name: profile.bank_name || '',
+    bik: profile.bik || '',
+    checking_account: profile.checking_account || '',
+    correspondent_account: profile.correspondent_account || '',
+    edo_operator: profile.edo_operator || '',
+    edo_id: profile.edo_id || '',
+    email: profile.email || '',
+    phone: profile.phone || ''
+  };
+}
+
+function validateBillingProfile(profile) {
+  if (!profile?.legal_name) return 'Укажите юридическое название';
+  if (!profile?.inn) return 'Укажите ИНН';
+  if (!profile?.legal_address) return 'Укажите юридический адрес';
+  if (!profile?.bank_name) return 'Укажите банк';
+  if (!profile?.bik) return 'Укажите БИК';
+  if (!profile?.checking_account) return 'Укажите расчётный счёт';
+  return '';
+}
+
+function billingPlan(planId) {
+  return billingPlans.find(plan => plan.id === planId) || billingPlans.find(plan => plan.id === 'standard') || billingPlans[0];
+}
+
+function sequenceNumber(prefix, items) {
+  const year = new Date().getFullYear();
+  const sameYearCount = items.filter(item => String(item.number || '').startsWith(`${prefix}-${year}-`)).length + 1;
+  return `${prefix}-${year}-${String(sameYearCount).padStart(4, '0')}`;
+}
+
+function invoiceNumber() {
+  return sequenceNumber('INV', collection('billing_invoices'));
+}
+
+function closingDocumentNumber(type = 'act') {
+  return sequenceNumber(String(type || 'ACT').toUpperCase(), collection('closing_documents'));
+}
+
+function currentSellerRequisites() {
+  return { ...defaultSellerRequisites };
+}
+
+function dateOnly(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+  return date.toLocaleDateString('ru-RU');
+}
+
+function money(value) {
+  return new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'RUB', maximumFractionDigits: 0 }).format(Number(value || 0));
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function requisitesLines(requisites = {}) {
+  return [
+    requisites.legal_name,
+    requisites.inn ? `ИНН ${requisites.inn}` : '',
+    requisites.kpp ? `КПП ${requisites.kpp}` : '',
+    requisites.ogrn ? `ОГРН/ОГРНИП ${requisites.ogrn}` : '',
+    requisites.legal_address,
+    requisites.bank_name,
+    requisites.bik ? `БИК ${requisites.bik}` : '',
+    requisites.checking_account ? `р/с ${requisites.checking_account}` : '',
+    requisites.correspondent_account ? `к/с ${requisites.correspondent_account}` : '',
+    requisites.email,
+    requisites.phone
+  ].filter(Boolean);
+}
+
+function billingDocumentHtml({ title, number, restaurant, customer, seller, rows, total, footerTitle, footerText }) {
+  const serviceRows = rows.map(row => `<tr><td>${escapeHtml(row.name)}</td><td>${escapeHtml(row.qty)}</td><td>${money(row.price)}</td><td>${money(row.amount)}</td></tr>`).join('');
+  const block = (heading, requisites) => `<section><h2>${escapeHtml(heading)}</h2>${requisitesLines(requisites).map(line => `<p>${escapeHtml(line)}</p>`).join('')}</section>`;
+  return `<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>${escapeHtml(title)} ${escapeHtml(number)}</title>
+  <style>
+    body { font-family: Arial, sans-serif; color: #111827; margin: 32px; }
+    h1 { margin: 0 0 8px; font-size: 26px; }
+    h2 { margin: 0 0 8px; font-size: 16px; }
+    p { margin: 3px 0; }
+    .meta { color: #4b5563; margin-bottom: 24px; }
+    .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 24px 0; }
+    section { border: 1px solid #d1d5db; border-radius: 8px; padding: 14px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 24px; }
+    th, td { border: 1px solid #d1d5db; padding: 10px; text-align: left; vertical-align: top; }
+    th { background: #f3f4f6; }
+    .total { text-align: right; font-size: 20px; font-weight: 700; margin-top: 18px; }
+    .footer { margin-top: 28px; }
+  </style>
+</head>
+<body>
+  <h1>${escapeHtml(title)} № ${escapeHtml(number)}</h1>
+  <div class="meta">${escapeHtml(restaurant?.name || 'Ресторан')} · ${dateOnly(new Date().toISOString())}</div>
+  <div class="parties">${block('Поставщик', seller)}${block('Покупатель', customer)}</div>
+  <table>
+    <thead><tr><th>Услуга</th><th>Кол-во</th><th>Цена</th><th>Сумма</th></tr></thead>
+    <tbody>${serviceRows}</tbody>
+  </table>
+  <div class="total">Итого: ${money(total)}</div>
+  <div class="footer"><strong>${escapeHtml(footerTitle || '')}</strong><p>${escapeHtml(footerText || '')}</p></div>
+</body>
+</html>`;
+}
+
+function sendHtml(res, filename, html) {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+  res.send(html);
+}
+
 function logActivity({ restaurant_id, actor_id, type, title, entity_type = '', entity_id = '', metadata = {} }) {
   const event = { id: uid('act'), restaurant_id, actor_id: actor_id || null, type, title, entity_type, entity_id, metadata, created_at: nowIso() };
   collection('activity_events').push(event);
