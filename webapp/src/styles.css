@@ -5494,6 +5494,7 @@ textarea {
   position: relative;
   display: grid;
   gap: 14px;
+  width: 100%;
   min-height: 164px;
   padding: 18px;
   border-radius: 20px;
@@ -5502,13 +5503,34 @@ textarea {
     radial-gradient(circle at top right, rgba(34, 197, 94, 0.14), transparent 42%),
     rgba(255, 255, 255, 0.035);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
 }
 
 .tariffCard.featured {
   border-color: rgba(34, 197, 94, 0.42);
   background:
     radial-gradient(circle at top right, rgba(34, 197, 94, 0.26), transparent 44%),
-    linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(15, 23, 42, 0.2));
+      linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(15, 23, 42, 0.2));
+}
+
+.tariffCard.clickable {
+  cursor: pointer;
+}
+
+.tariffCard.clickable:hover,
+.tariffCard.clickable:focus-visible {
+  border-color: rgba(34, 197, 94, 0.5);
+  background:
+    radial-gradient(circle at top right, rgba(34, 197, 94, 0.2), transparent 42%),
+    rgba(255, 255, 255, 0.055);
+  outline: none;
+}
+
+.tariffCard.selected {
+  border-color: rgba(34, 197, 94, 0.72);
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .tariffBadge {
@@ -5522,6 +5544,11 @@ textarea {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.tariffBadge.selected {
+  color: #dcfce7;
+  background: rgba(34, 197, 94, 0.22);
 }
 
 .tariffCardHead {
@@ -5554,8 +5581,8 @@ textarea {
 
 .tariffPrice b {
   color: var(--text-primary);
-  font-size: clamp(1.28rem, 3vw, 1.8rem);
-  letter-spacing: -0.04em;
+  font-size: 1.45rem;
+  letter-spacing: 0;
 }
 
 .tariffPrice em {
@@ -7634,6 +7661,29 @@ body {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.billingPlanChooser {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 8px;
+}
+
+.billingPlanChooser .tariffGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+}
+
+.billingPlanChooser .tariffCard {
+  min-height: 138px;
+  padding: 14px;
+  border-radius: 14px;
+}
+
+.fieldCaption {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
 .rowActions {
   display: inline-flex;
   align-items: center;
@@ -7645,6 +7695,10 @@ body {
   .billingAdmin .adminCompactGrid,
   .billingRequisitesForm,
   .billingInvoiceForm {
+    grid-template-columns: 1fr;
+  }
+
+  .billingPlanChooser .tariffGrid {
     grid-template-columns: 1fr;
   }
 

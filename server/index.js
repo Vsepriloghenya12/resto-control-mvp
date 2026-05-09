@@ -55,11 +55,17 @@ const tariffEmployeeLimits = {
   старт: 10,
   team: 25,
   команда: 25,
-  business: 50,
-  бизнес: 50,
   standard: 30,
   стандарт: 30,
   pro: 30,
+  team40: 40,
+  'команда 40': 40,
+  business: 50,
+  бизнес: 50,
+  team50: 50,
+  'команда 50': 50,
+  team60: 60,
+  'команда 60': 60,
   network: 100,
   сеть: 100,
   enterprise: null
@@ -67,6 +73,9 @@ const tariffEmployeeLimits = {
 const billingPlans = [
   { id: 'start', title: 'Старт', employees: 10, monthly_amount: 2990 },
   { id: 'standard', title: 'Стандарт', employees: 30, monthly_amount: 5990 },
+  { id: 'team40', title: 'Команда 40', employees: 40, monthly_amount: 6990 },
+  { id: 'team50', title: 'Команда 50', employees: 50, monthly_amount: 7990 },
+  { id: 'team60', title: 'Команда 60', employees: 60, monthly_amount: 8990 },
   { id: 'network', title: 'Сеть', employees: 100, monthly_amount: 9990 },
   { id: 'enterprise', title: 'Enterprise', employees: null, monthly_amount: 0 }
 ];

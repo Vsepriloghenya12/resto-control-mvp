@@ -73,24 +73,51 @@ const brandLogoSrc = '/resto-control-logo.png';
 const subscriptionTariffs = [
   { id: 'start', title: 'Старт', employees: 'до 10 сотрудников', price: '2 990 ₽', period: '/ мес', note: 'Счёт на оплату, закрывающие документы', featured: false },
   { id: 'standard', title: 'Стандарт', employees: 'до 30 сотрудников', price: '5 990 ₽', period: '/ мес', note: 'Оптимально для одного ресторана', featured: true },
+  { id: 'team40', title: 'Команда 40', employees: 'до 40 сотрудников', price: '6 990 ₽', period: '/ мес', note: 'Для растущей команды ресторана', featured: false },
+  { id: 'team50', title: 'Команда 50', employees: 'до 50 сотрудников', price: '7 990 ₽', period: '/ мес', note: 'Для большого зала и кухни', featured: false },
+  { id: 'team60', title: 'Команда 60', employees: 'до 60 сотрудников', price: '8 990 ₽', period: '/ мес', note: 'Для плотных смен и расширенной команды', featured: false },
   { id: 'network', title: 'Сеть', employees: 'до 100 сотрудников', price: '9 990 ₽', period: '/ мес', note: 'Для нескольких смен и большой команды', featured: false },
   { id: 'enterprise', title: 'Enterprise', employees: '100+ сотрудников', price: 'Индивидуально', period: '', note: 'Индивидуальный договор и условия', featured: false }
 ];
 
-function TariffPlans() {
+function planCardFromBillingPlan(plan: any) {
+  const fallback = subscriptionTariffs.find((tariff) => tariff.id === plan.id);
+  const amount = Number(plan.monthly_amount || 0);
+  return {
+    id: plan.id,
+    title: plan.title,
+    employees: plan.employees ? `до ${plan.employees} сотрудников` : 'Индивидуально',
+    price: amount > 0 ? `${amount.toLocaleString('ru-RU')} ₽` : 'Индивидуально',
+    period: amount > 0 ? '/ мес' : '',
+    note: fallback?.note || 'Счёт на оплату, закрывающие документы',
+    featured: fallback?.featured || false
+  };
+}
+
+function TariffPlans({ plans, selectedPlan, onSelect, showEnterprise = true }: { plans?: any[]; selectedPlan?: string; onSelect?: (planId: string) => void; showEnterprise?: boolean }) {
+  const tariffs = (plans?.length ? plans.map(planCardFromBillingPlan) : subscriptionTariffs)
+    .filter((tariff) => showEnterprise || tariff.id !== 'enterprise');
   return <div className="tariffGrid">
-    {subscriptionTariffs.map((tariff) => <div className={cx('tariffCard', tariff.featured && 'featured')} key={tariff.title}>
-      {tariff.featured && <span className="tariffBadge">Популярный</span>}
-      <div className="tariffCardHead">
-        <strong>{tariff.title}</strong>
-        <span>{tariff.employees}</span>
-      </div>
-      <div className="tariffPrice">
-        <b>{tariff.price}</b>
-        {tariff.period && <em>{tariff.period}</em>}
-      </div>
-      <p>{tariff.note}</p>
-    </div>)}
+    {tariffs.map((tariff) => {
+      const clickable = Boolean(onSelect && tariff.id !== 'enterprise');
+      const content = <>
+        {tariff.featured && <span className="tariffBadge">Популярный</span>}
+        {selectedPlan === tariff.id && <span className="tariffBadge selected">Выбран</span>}
+        <div className="tariffCardHead">
+          <strong>{tariff.title}</strong>
+          <span>{tariff.employees}</span>
+        </div>
+        <div className="tariffPrice">
+          <b>{tariff.price}</b>
+          {tariff.period && <em>{tariff.period}</em>}
+        </div>
+        <p>{tariff.note}</p>
+      </>;
+      const className = cx('tariffCard', clickable && 'clickable', tariff.featured && 'featured', selectedPlan === tariff.id && 'selected');
+      return clickable
+        ? <button type="button" className={className} key={tariff.id} onClick={() => onSelect?.(tariff.id)} aria-pressed={selectedPlan === tariff.id}>{content}</button>
+        : <div className={className} key={tariff.id}>{content}</div>;
+    })}
   </div>;
 }
 
@@ -522,6 +549,7 @@ function RestaurantWorkspace({
   setActive,
   onLogout,
   banner,
+  onBillingPlanSelect,
   children
 }: {
   user: any;
@@ -531,6 +559,7 @@ function RestaurantWorkspace({
   setActive: (next: string) => void;
   onLogout: () => void;
   banner: (openBilling: () => void) => any;
+  onBillingPlanSelect?: (planId: string) => void;
   children: any;
 }) {
   const [modalKind, setModalKind] = useState<WorkspaceModalKind>(null);
@@ -573,7 +602,14 @@ function RestaurantWorkspace({
       : modalKind === 'billing'
         ? {
             title: 'Оплата и документы',
-            details: <TariffPlans />,
+            details: <TariffPlans
+              selectedPlan={restaurant?.plan}
+              onSelect={(planId) => {
+                onBillingPlanSelect?.(planId);
+                setActive('billing');
+                closeModal();
+              }}
+            />,
             actions: [
               { label: 'Открыть оплату', kind: 'primary', onClick: () => setActive('billing') },
               { label: 'Открыть обзор', onClick: () => setActive('overview') }
@@ -766,6 +802,7 @@ function SuperAdmin({ user, onLogout }: any) {
 
 function RestaurantAdmin({ user, restaurant, onLogout }: any) {
   const [tab, setTab] = useState<Tab>('overview');
+  const [preferredBillingPlan, setPreferredBillingPlan] = useState('');
   const isManager = user.role === 'manager';
   const tabs = withIcons([
     { id: 'overview', title: isManager ? 'Пульт смены' : 'Обзор' },
@@ -785,9 +822,9 @@ function RestaurantAdmin({ user, restaurant, onLogout }: any) {
     if (tab === 'inventory') return <Inventory user={user} admin />;
     if (tab === 'tasks') return <Tasks user={user} admin />;
     if (tab === 'integrations') return <IntegrationsAdmin />;
-    if (tab === 'billing') return <BillingAdmin restaurant={restaurant} />;
+    if (tab === 'billing') return <BillingAdmin restaurant={restaurant} preferredPlan={preferredBillingPlan} />;
     return <Knowledge user={user} admin />;
-  }, [tab, user]);
+  }, [tab, user, restaurant, preferredBillingPlan]);
 
   return <RestaurantWorkspace
     user={user}
@@ -796,6 +833,7 @@ function RestaurantAdmin({ user, restaurant, onLogout }: any) {
     active={tab}
     setActive={setTab}
     onLogout={onLogout}
+    onBillingPlanSelect={setPreferredBillingPlan}
     banner={(openBilling) => user.role === 'owner' ? <SubscriptionBanner restaurant={restaurant} openBilling={openBilling} /> : null}
   >
     <div className="contentStack">{section}</div>
@@ -938,7 +976,7 @@ function IntegrationsAdmin() {
 }
 
 
-function BillingAdmin({ restaurant }: { restaurant: any }) {
+function BillingAdmin({ restaurant, preferredPlan }: { restaurant: any; preferredPlan?: string }) {
   const [data, setData] = useState<any>(null);
   const [form, setForm] = useState<any>({ customer_type: 'ip', legal_name: '', inn: '', kpp: '', ogrn: '', legal_address: '', bank_name: '', bik: '', checking_account: '', correspondent_account: '', edo_operator: '', edo_id: '', email: '', phone: '' });
   const [invoiceForm, setInvoiceForm] = useState<any>({ plan: 'standard', months: 1, period_start: new Date().toISOString().slice(0, 10) });
@@ -952,6 +990,9 @@ function BillingAdmin({ restaurant }: { restaurant: any }) {
   }
 
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (preferredPlan) setInvoiceForm((current: any) => ({ ...current, plan: preferredPlan }));
+  }, [preferredPlan]);
 
   function money(value: any) {
     return `${Number(value || 0).toLocaleString('ru-RU')} ₽`;
@@ -1043,9 +1084,10 @@ function BillingAdmin({ restaurant }: { restaurant: any }) {
       <summary className="compactAccordionSummary"><span>Сформировать счёт</span><em>оплата с расчётного счёта</em></summary>
       <div className="compactAccordionBody">
         <form className="form two compactAdminForm billingInvoiceForm" onSubmit={createInvoice}>
-          <Select label="Тариф" value={invoiceForm.plan} onChange={(e: any) => setInvoiceForm({ ...invoiceForm, plan: e.target.value })}>
-            {plans.filter((plan: any) => plan.id !== 'enterprise').map((plan: any) => <option value={plan.id} key={plan.id}>{plan.title} · {money(plan.monthly_amount)} / мес</option>)}
-          </Select>
+          <div className="billingPlanChooser">
+            <span className="fieldCaption">Тариф</span>
+            <TariffPlans plans={plans} selectedPlan={invoiceForm.plan} showEnterprise={false} onSelect={(planId) => setInvoiceForm({ ...invoiceForm, plan: planId })} />
+          </div>
           <Select label="Период" value={invoiceForm.months} onChange={(e: any) => setInvoiceForm({ ...invoiceForm, months: Number(e.target.value) })}>
             <option value={1}>1 месяц</option>
             <option value={3}>3 месяца</option>
