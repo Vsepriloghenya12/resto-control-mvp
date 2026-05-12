@@ -53,6 +53,8 @@ const tariffEmployeeLimits = {
   trial: 10,
   start: 10,
   старт: 10,
+  team20: 20,
+  'команда 20': 20,
   team: 25,
   команда: 25,
   standard: 30,
@@ -71,11 +73,12 @@ const tariffEmployeeLimits = {
   enterprise: null
 };
 const billingPlans = [
-  { id: 'start', title: 'Старт', employees: 10, monthly_amount: 2990 },
-  { id: 'standard', title: 'Стандарт', employees: 30, monthly_amount: 5990 },
-  { id: 'team40', title: 'Команда 40', employees: 40, monthly_amount: 6990 },
-  { id: 'team50', title: 'Команда 50', employees: 50, monthly_amount: 7990 },
-  { id: 'team60', title: 'Команда 60', employees: 60, monthly_amount: 8990 },
+  { id: 'start', title: 'Старт', employees: 10, monthly_amount: 1490 },
+  { id: 'team20', title: 'Команда 20', employees: 20, monthly_amount: 1990 },
+  { id: 'standard', title: 'Стандарт', employees: 30, monthly_amount: 2990 },
+  { id: 'team40', title: 'Команда 40', employees: 40, monthly_amount: 3990 },
+  { id: 'team50', title: 'Команда 50', employees: 50, monthly_amount: 4990 },
+  { id: 'team60', title: 'Команда 60', employees: 60, monthly_amount: 5990 },
   { id: 'network', title: 'Сеть', employees: 100, monthly_amount: 9990 },
   { id: 'enterprise', title: 'Enterprise', employees: null, monthly_amount: 0 }
 ];
@@ -93,6 +96,16 @@ const defaultSellerRequisites = {
   phone: process.env.BILLING_SELLER_PHONE || '',
   tax_note: process.env.BILLING_TAX_NOTE || 'Без НДС'
 };
+const defaultTransferRequisites = {
+  recipient: process.env.BILLING_TRANSFER_RECIPIENT || process.env.BILLING_SELLER_NAME || 'Resto Control',
+  phone: process.env.BILLING_TRANSFER_PHONE || process.env.BILLING_SELLER_PHONE || '',
+  card: process.env.BILLING_TRANSFER_CARD || '',
+  bank: process.env.BILLING_TRANSFER_BANK || process.env.BILLING_SELLER_BANK_NAME || '',
+  comment: process.env.BILLING_TRANSFER_COMMENT || 'После перевода отправьте заявку из кабинета',
+  tax_note: process.env.BILLING_TAX_NOTE || 'Без НДС'
+};
+const sellerRequisiteFields = ['legal_name', 'inn', 'kpp', 'ogrn', 'legal_address', 'bank_name', 'bik', 'checking_account', 'correspondent_account', 'email', 'phone', 'tax_note'];
+const transferRequisiteFields = ['recipient', 'phone', 'card', 'bank', 'comment', 'tax_note'];
 
 const inventoryImportSections = {
   bar: { department: 'bar', title: 'Бар', defaultCategory: 'Бар' },
@@ -1267,6 +1280,36 @@ function billingPlan(planId) {
   return billingPlans.find(plan => plan.id === planId) || billingPlans.find(plan => plan.id === 'standard') || billingPlans[0];
 }
 
+function cleanBillingFields(source = {}, fields = []) {
+  return fields.reduce((result, field) => {
+    result[field] = String(source[field] ?? '').trim();
+    return result;
+  }, {});
+}
+
+function billingSettingsRecord() {
+  return collection('platform_settings').find(item => item.key === 'billing_requisites') || null;
+}
+
+function platformBillingSettings() {
+  const value = billingSettingsRecord()?.value || {};
+  return {
+    seller: value.seller || {},
+    transfer: value.transfer || {}
+  };
+}
+
+function savePlatformBillingSettings(settings) {
+  let record = billingSettingsRecord();
+  if (!record) {
+    record = { id: uid('pset'), key: 'billing_requisites', value: {}, created_at: nowIso(), updated_at: nowIso() };
+    collection('platform_settings').push(record);
+  }
+  record.value = settings;
+  record.updated_at = nowIso();
+  return record;
+}
+
 function sequenceNumber(prefix, items) {
   const year = new Date().getFullYear();
   const sameYearCount = items.filter(item => String(item.number || '').startsWith(`${prefix}-${year}-`)).length + 1;
@@ -1282,7 +1325,30 @@ function closingDocumentNumber(type = 'act') {
 }
 
 function currentSellerRequisites() {
-  return { ...defaultSellerRequisites };
+  return { ...defaultSellerRequisites, ...platformBillingSettings().seller };
+}
+
+function currentTransferRequisites() {
+  return { ...defaultTransferRequisites, ...platformBillingSettings().transfer };
+}
+
+function sellerRequisitesReady() {
+  const requisites = currentSellerRequisites();
+  return Boolean(requisites.legal_name && requisites.inn && requisites.checking_account);
+}
+
+function transferRequisitesReady() {
+  const requisites = currentTransferRequisites();
+  return Boolean(requisites.phone || requisites.card);
+}
+
+function publicPlatformBillingSettings() {
+  return {
+    seller_requisites: currentSellerRequisites(),
+    seller_requisites_ready: sellerRequisitesReady(),
+    transfer_requisites: currentTransferRequisites(),
+    transfer_requisites_ready: transferRequisitesReady()
+  };
 }
 
 function dateOnly(value) {
@@ -1307,6 +1373,7 @@ function escapeHtml(value) {
 
 function requisitesLines(requisites = {}) {
   return [
+    requisites.recipient ? `Получатель: ${requisites.recipient}` : '',
     requisites.legal_name,
     requisites.inn ? `ИНН ${requisites.inn}` : '',
     requisites.kpp ? `КПП ${requisites.kpp}` : '',
@@ -1316,8 +1383,10 @@ function requisitesLines(requisites = {}) {
     requisites.bik ? `БИК ${requisites.bik}` : '',
     requisites.checking_account ? `р/с ${requisites.checking_account}` : '',
     requisites.correspondent_account ? `к/с ${requisites.correspondent_account}` : '',
+    requisites.card ? `Карта ${requisites.card}` : '',
     requisites.email,
-    requisites.phone
+    requisites.phone,
+    requisites.comment
   ].filter(Boolean);
 }
 
@@ -1748,6 +1817,21 @@ app.patch('/api/super/restaurants/:id/subscription', auth, superOnly, runAsync(a
   }
   await persist();
   res.json(restaurant);
+}));
+
+app.get('/api/super/billing/settings', auth, superOnly, (req, res) => {
+  res.json(publicPlatformBillingSettings());
+});
+
+app.patch('/api/super/billing/settings', auth, superOnly, runAsync(async (req, res) => {
+  const body = req.body || {};
+  const settings = {
+    seller: cleanBillingFields(body.seller_requisites || body.seller || {}, sellerRequisiteFields),
+    transfer: cleanBillingFields(body.transfer_requisites || body.transfer || {}, transferRequisiteFields)
+  };
+  savePlatformBillingSettings(settings);
+  await persist();
+  res.json(publicPlatformBillingSettings());
 }));
 
 // RESTAURANT OVERVIEW
@@ -3107,7 +3191,9 @@ app.get('/api/billing', auth, billingAccess, (req, res) => {
   res.json({
     restaurant,
     plans: billingPlans,
-    seller_requisites_ready: Boolean(defaultSellerRequisites.legal_name && defaultSellerRequisites.inn && defaultSellerRequisites.checking_account),
+    seller_requisites_ready: sellerRequisitesReady(),
+    transfer_requisites_ready: transferRequisitesReady(),
+    transfer_requisites: currentTransferRequisites(),
     profile: publicBillingProfile(getBillingProfile(rid)),
     invoices: sameRestaurant(collection('billing_invoices'), rid).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))),
     payments: sameRestaurant(collection('payments'), rid).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))),
@@ -3152,8 +3238,8 @@ app.post('/api/billing/invoices', auth, billingAccess, runAsync(async (req, res)
   const profile = getBillingProfile(rid);
   const profileError = validateBillingProfile(publicBillingProfile(profile));
   if (profileError) return res.status(400).json({ error: profileError });
-  if (!defaultSellerRequisites.legal_name || !defaultSellerRequisites.inn || !defaultSellerRequisites.checking_account) {
-    return res.status(400).json({ error: 'Заполните реквизиты ИП в переменных BILLING_SELLER_*' });
+  if (!sellerRequisitesReady()) {
+    return res.status(400).json({ error: 'Заполните реквизиты для счетов у владельца приложения' });
   }
   const plan = billingPlan(String(req.body?.plan || 'standard'));
   if (plan.id === 'enterprise') return res.status(400).json({ error: 'Для Enterprise сформируйте индивидуальный счёт' });
@@ -3183,6 +3269,49 @@ app.post('/api/billing/invoices', auth, billingAccess, runAsync(async (req, res)
   };
   collection('billing_invoices').push(invoice);
   logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'invoice_created', title: `Сформирован счёт № ${invoice.number}`, entity_type: 'billing_invoice', entity_id: invoice.id, metadata: { amount } });
+  await persist();
+  res.status(201).json(invoice);
+}));
+
+app.post('/api/billing/transfer-requests', auth, billingAccess, runAsync(async (req, res) => {
+  const rid = req.user.restaurant_id;
+  const restaurant = db.restaurants.find(r => r.id === rid);
+  const transferRequisites = currentTransferRequisites();
+  if (!transferRequisitesReady()) {
+    return res.status(400).json({ error: 'Заполните телефон или карту для оплаты переводом у владельца приложения' });
+  }
+  const plan = billingPlan(String(req.body?.plan || 'standard'));
+  if (plan.id === 'enterprise') return res.status(400).json({ error: 'Для Enterprise согласуйте индивидуальную оплату' });
+  const months = Math.max(1, Math.min(12, Number(req.body?.months || 1) || 1));
+  const periodStart = req.body?.period_start ? new Date(req.body.period_start) : new Date();
+  if (Number.isNaN(periodStart.getTime())) return res.status(400).json({ error: 'Некорректное начало периода' });
+  const amount = Number(plan.monthly_amount || 0) * months;
+  const invoice = {
+    id: uid('inv'),
+    restaurant_id: rid,
+    number: sequenceNumber('PAY', collection('billing_invoices')),
+    status: 'transfer_pending',
+    plan: plan.id,
+    plan_title: plan.title,
+    months,
+    period_start: periodStart.toISOString(),
+    period_end: addMonthsIso(periodStart, months),
+    amount,
+    currency: 'RUB',
+    customer_requisites: {
+      legal_name: restaurant?.name || 'Ресторан',
+      email: restaurant?.email || '',
+      phone: restaurant?.phone || ''
+    },
+    seller_requisites: { ...transferRequisites, payment_method: 'manual_transfer' },
+    issued_at: nowIso(),
+    due_at: addDays(3),
+    paid_at: null,
+    created_at: nowIso(),
+    updated_at: nowIso()
+  };
+  collection('billing_invoices').push(invoice);
+  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'transfer_payment_requested', title: `${req.user.name} отправил заявку на оплату переводом`, entity_type: 'billing_invoice', entity_id: invoice.id, metadata: { amount, plan: plan.id, months } });
   await persist();
   res.status(201).json(invoice);
 }));
@@ -3261,7 +3390,7 @@ app.post('/api/super/billing/invoices/:id/mark-paid', auth, superOnly, runAsync(
     invoice_id: invoice.id,
     amount: invoice.amount,
     currency: invoice.currency || 'RUB',
-    method: 'bank_transfer',
+    method: invoice.seller_requisites?.payment_method === 'manual_transfer' ? 'manual_transfer' : 'bank_transfer',
     reference: String(req.body?.reference || '').trim(),
     comment: String(req.body?.comment || '').trim(),
     paid_at: invoice.paid_at,

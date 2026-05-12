@@ -363,6 +363,14 @@ create unique index if not exists idx_integrations_restaurant_provider on integr
 create unique index if not exists idx_external_mappings_provider_external on external_mappings(restaurant_id, provider, entity_type, external_id);
 create index if not exists idx_integration_events_restaurant on integration_events(restaurant_id, provider, event_type, received_at);
 
+create table if not exists platform_settings (
+  id text primary key,
+  key text unique not null,
+  value jsonb not null default '{}'::jsonb,
+  updated_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists billing_profiles (
   id text primary key,
   restaurant_id text not null references restaurants(id) on delete cascade,

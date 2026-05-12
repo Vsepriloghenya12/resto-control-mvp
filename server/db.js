@@ -47,6 +47,7 @@ const SNAPSHOT_TABLES = [
   { name: 'integrations', columns: ['id', 'restaurant_id', 'provider', 'status', 'api_login_encrypted', 'organization_id', 'terminal_group_id', 'sync_interval_seconds', 'sync_bookings', 'sync_shifts', 'last_sync_at', 'last_error', 'created_at', 'updated_at'] },
   { name: 'external_mappings', columns: ['id', 'restaurant_id', 'provider', 'entity_type', 'local_id', 'external_id', 'label', 'created_at'] },
   { name: 'integration_events', columns: ['id', 'restaurant_id', 'provider', 'event_type', 'external_id', 'payload', 'status', 'received_at', 'processed_at', 'error'], jsonColumns: ['payload'] },
+  { name: 'platform_settings', columns: ['id', 'key', 'value', 'updated_at', 'created_at'], jsonColumns: ['value'] },
   { name: 'billing_profiles', columns: ['id', 'restaurant_id', 'customer_type', 'legal_name', 'inn', 'kpp', 'ogrn', 'legal_address', 'bank_name', 'bik', 'checking_account', 'correspondent_account', 'edo_operator', 'edo_id', 'email', 'phone', 'updated_at', 'created_at'] },
   { name: 'billing_invoices', columns: ['id', 'restaurant_id', 'number', 'status', 'plan', 'plan_title', 'months', 'period_start', 'period_end', 'amount', 'currency', 'customer_requisites', 'seller_requisites', 'issued_at', 'due_at', 'paid_at', 'created_at', 'updated_at'], jsonColumns: ['customer_requisites', 'seller_requisites'] },
   { name: 'payments', columns: ['id', 'restaurant_id', 'invoice_id', 'amount', 'currency', 'method', 'reference', 'comment', 'paid_at', 'created_by', 'created_at'] },
@@ -95,8 +96,8 @@ function writeJsonDb(db) {
 }
 
 function encodeColumnValue(column, value) {
-  if (column === 'allowed_roles' || column === 'metadata' || column === 'table_ids' || column === 'ingredients' || column === 'payload' || column === 'customer_requisites' || column === 'seller_requisites') {
-    if (column === 'metadata' || column === 'payload') return JSON.stringify(value || {});
+  if (column === 'allowed_roles' || column === 'metadata' || column === 'table_ids' || column === 'ingredients' || column === 'payload' || column === 'value' || column === 'customer_requisites' || column === 'seller_requisites') {
+    if (column === 'metadata' || column === 'payload' || column === 'value' || column === 'customer_requisites' || column === 'seller_requisites') return JSON.stringify(value || {});
     return JSON.stringify(value || []);
   }
   if (column === 'supplier') return value || 'Без поставщика';
@@ -121,6 +122,7 @@ async function ensurePostgresSchema() {
   await getPool().query(`alter table if exists integrations add column if not exists sync_interval_seconds int not null default 60`);
   await getPool().query(`alter table if exists integrations add column if not exists sync_bookings boolean not null default true`);
   await getPool().query(`alter table if exists integrations add column if not exists sync_shifts boolean not null default true`);
+  await getPool().query(`alter table if exists platform_settings add column if not exists value jsonb not null default '{}'`);
 }
 
 
@@ -219,6 +221,7 @@ function emptyDb() {
     integrations: [],
     external_mappings: [],
     integration_events: [],
+    platform_settings: [],
     billing_profiles: [],
     billing_invoices: [],
     payments: [],

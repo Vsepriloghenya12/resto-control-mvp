@@ -71,14 +71,29 @@ type MobileWorkspaceConfig = {
 const brandLogoSrc = '/resto-control-logo.png';
 
 const subscriptionTariffs = [
-  { id: 'start', title: 'Старт', employees: 'до 10 сотрудников', price: '2 990 ₽', period: '/ мес', note: 'Счёт на оплату, закрывающие документы', featured: false },
-  { id: 'standard', title: 'Стандарт', employees: 'до 30 сотрудников', price: '5 990 ₽', period: '/ мес', note: 'Оптимально для одного ресторана', featured: true },
-  { id: 'team40', title: 'Команда 40', employees: 'до 40 сотрудников', price: '6 990 ₽', period: '/ мес', note: 'Для растущей команды ресторана', featured: false },
-  { id: 'team50', title: 'Команда 50', employees: 'до 50 сотрудников', price: '7 990 ₽', period: '/ мес', note: 'Для большого зала и кухни', featured: false },
-  { id: 'team60', title: 'Команда 60', employees: 'до 60 сотрудников', price: '8 990 ₽', period: '/ мес', note: 'Для плотных смен и расширенной команды', featured: false },
+  { id: 'start', title: 'Старт', employees: 'до 10 сотрудников', price: '1 490 ₽', period: '/ мес', note: 'Счёт на оплату, закрывающие документы', featured: false },
+  { id: 'team20', title: 'Команда 20', employees: 'до 20 сотрудников', price: '1 990 ₽', period: '/ мес', note: 'Для небольшой команды с запасом роста', featured: false },
+  { id: 'standard', title: 'Стандарт', employees: 'до 30 сотрудников', price: '2 990 ₽', period: '/ мес', note: 'Оптимально для одного ресторана', featured: true },
+  { id: 'team40', title: 'Команда 40', employees: 'до 40 сотрудников', price: '3 990 ₽', period: '/ мес', note: 'Для растущей команды ресторана', featured: false },
+  { id: 'team50', title: 'Команда 50', employees: 'до 50 сотрудников', price: '4 990 ₽', period: '/ мес', note: 'Для большого зала и кухни', featured: false },
+  { id: 'team60', title: 'Команда 60', employees: 'до 60 сотрудников', price: '5 990 ₽', period: '/ мес', note: 'Для плотных смен и расширенной команды', featured: false },
   { id: 'network', title: 'Сеть', employees: 'до 100 сотрудников', price: '9 990 ₽', period: '/ мес', note: 'Для нескольких смен и большой команды', featured: false },
   { id: 'enterprise', title: 'Enterprise', employees: '100+ сотрудников', price: 'Индивидуально', period: '', note: 'Индивидуальный договор и условия', featured: false }
 ];
+const billingStatusLabels: Record<string, string> = {
+  issued: 'выставлен',
+  paid: 'оплачен',
+  transfer_pending: 'ожидает перевода',
+  cancelled: 'отменён'
+};
+
+function billingStatusLabel(status: string) {
+  return billingStatusLabels[status] || status || 'нет';
+}
+
+function transferValue(value: any) {
+  return String(value || '').trim() || '—';
+}
 
 function planCardFromBillingPlan(plan: any) {
   const fallback = subscriptionTariffs.find((tariff) => tariff.id === plan.id);
@@ -462,6 +477,8 @@ const navIcons: Record<string, IconName> = {
   tasks: 'tasks',
   knowledge: 'knowledge',
   restaurants: 'overview',
+  payments: 'trial',
+  billingSettings: 'trial',
   create: 'spark',
   today: 'overview'
 };
@@ -713,8 +730,10 @@ function SuperAdmin({ user, onLogout }: any) {
   const [tab, setTab] = useState<Tab>('restaurants');
   const [restaurants, setRestaurants] = useState<any[]>([]);
   const [billingInvoices, setBillingInvoices] = useState<any[]>([]);
+  const [billingSettingsForm, setBillingSettingsForm] = useState<any>({ seller_requisites: {}, transfer_requisites: {} });
   const [form, setForm] = useState<any>({ name: '', owner_name: '', city: '', phone: '', email: '', login: '', password: '' });
   const [msg, setMsg] = useState('');
+  const [settingsMsg, setSettingsMsg] = useState('');
 
   async function load() {
     setRestaurants(await api('/api/super/restaurants'));
@@ -722,7 +741,14 @@ function SuperAdmin({ user, onLogout }: any) {
   async function loadBilling() {
     setBillingInvoices(await api('/api/super/billing/invoices'));
   }
-  useEffect(() => { load(); loadBilling(); }, []);
+  async function loadBillingSettings() {
+    const next = await api('/api/super/billing/settings');
+    setBillingSettingsForm({
+      seller_requisites: next.seller_requisites || {},
+      transfer_requisites: next.transfer_requisites || {}
+    });
+  }
+  useEffect(() => { load(); loadBilling(); loadBillingSettings(); }, []);
 
   async function createRestaurant(e: FormEvent) {
     e.preventDefault(); setMsg('');
@@ -750,14 +776,36 @@ function SuperAdmin({ user, onLogout }: any) {
     loadBilling();
   }
 
+  async function saveBillingSettings(e: FormEvent) {
+    e.preventDefault();
+    setSettingsMsg('');
+    try {
+      const next = await api('/api/super/billing/settings', { method: 'PATCH', body: JSON.stringify(billingSettingsForm) });
+      setBillingSettingsForm({
+        seller_requisites: next.seller_requisites || {},
+        transfer_requisites: next.transfer_requisites || {}
+      });
+      setSettingsMsg('Реквизиты оплаты сохранены');
+    } catch (error: any) {
+      setSettingsMsg(error.message || 'Не удалось сохранить реквизиты');
+    }
+  }
+
   function money(value: any) {
     return `${Number(value || 0).toLocaleString('ru-RU')} ₽`;
   }
 
+  function updateBillingSettings(section: 'seller_requisites' | 'transfer_requisites', key: string, value: string) {
+    setBillingSettingsForm((current: any) => ({ ...current, [section]: { ...(current[section] || {}), [key]: value } }));
+  }
+
+  const sellerSettings = billingSettingsForm.seller_requisites || {};
+  const transferSettings = billingSettingsForm.transfer_requisites || {};
+
   return <BasicWorkspace
     user={user}
     subtitle="Супер-админ создателя"
-    tabs={withIcons([{ id: 'restaurants', title: 'Рестораны' }, { id: 'payments', title: 'Оплаты' }, { id: 'create', title: 'Создать' }])}
+    tabs={withIcons([{ id: 'restaurants', title: 'Рестораны' }, { id: 'payments', title: 'Оплаты' }, { id: 'billingSettings', title: 'Реквизиты' }, { id: 'create', title: 'Создать' }])}
     active={tab}
     setActive={setTab}
     onLogout={onLogout}
@@ -776,13 +824,47 @@ function SuperAdmin({ user, onLogout }: any) {
     {tab === 'payments' && <Card title="Счета ресторанов">
       <div className="compactAccordionList">
         {billingInvoices.length ? billingInvoices.map((invoice: any) => <details className="compactAccordion" key={invoice.id}>
-          <summary className="compactAccordionSummary"><span><b>№ {invoice.number} · {invoice.restaurant?.name || 'Ресторан'}</b><small>{invoice.plan_title} · {money(invoice.amount)}</small></span><em>{invoice.status}</em></summary>
+          <summary className="compactAccordionSummary"><span><b>№ {invoice.number} · {invoice.restaurant?.name || 'Ресторан'}</b><small>{invoice.plan_title} · {money(invoice.amount)}</small></span><em>{billingStatusLabel(invoice.status)}</em></summary>
           <div className="compactAccordionBody">
-            <div className="adminRowButton readonly"><span><b>Период</b><small>{fmtDate(invoice.period_start)} — {fmtDate(invoice.period_end)}</small></span><em>{invoice.status}</em></div>
+            <div className="adminRowButton readonly"><span><b>Период</b><small>{fmtDate(invoice.period_start)} — {fmtDate(invoice.period_end)}</small></span><em>{billingStatusLabel(invoice.status)}</em></div>
             <div className="actions"><Button type="button" kind="soft" onClick={() => download(`/api/billing/invoices/${invoice.id}/html`, `invoice-${invoice.number}.html`)}>Скачать счёт</Button>{invoice.status !== 'paid' && <Button type="button" onClick={() => markPaid(invoice.id)}>Отметить оплату</Button>}</div>
           </div>
         </details>) : <Empty text="Счетов пока нет" />}
       </div>
+    </Card>}
+    {tab === 'billingSettings' && <Card title="Реквизиты оплаты">
+      <form className="form two compactAdminForm billingSettingsForm" onSubmit={saveBillingSettings}>
+        <div className="billingSettingsGroup">
+          <div className="rowBetween"><b>Оплата переводом</b><span className="badge active">карта / СБП</span></div>
+          <div className="form two compactAdminForm">
+            <Field label="Получатель" value={transferSettings.recipient || ''} onChange={(e: any) => updateBillingSettings('transfer_requisites', 'recipient', e.target.value)} placeholder="Resto Control" />
+            <Field label="Телефон / СБП" value={transferSettings.phone || ''} onChange={(e: any) => updateBillingSettings('transfer_requisites', 'phone', e.target.value)} />
+            <Field label="Карта" value={transferSettings.card || ''} onChange={(e: any) => updateBillingSettings('transfer_requisites', 'card', e.target.value)} />
+            <Field label="Банк" value={transferSettings.bank || ''} onChange={(e: any) => updateBillingSettings('transfer_requisites', 'bank', e.target.value)} />
+            <Field label="Комментарий" value={transferSettings.comment || ''} onChange={(e: any) => updateBillingSettings('transfer_requisites', 'comment', e.target.value)} />
+            <Field label="НДС" value={transferSettings.tax_note || ''} onChange={(e: any) => updateBillingSettings('transfer_requisites', 'tax_note', e.target.value)} placeholder="Без НДС" />
+          </div>
+        </div>
+        <div className="billingSettingsGroup">
+          <div className="rowBetween"><b>Счета и документы</b><span className="badge">юр. реквизиты</span></div>
+          <div className="form two compactAdminForm">
+            <Field label="Юр. название" value={sellerSettings.legal_name || ''} onChange={(e: any) => updateBillingSettings('seller_requisites', 'legal_name', e.target.value)} placeholder="ИП Иванов Иван Иванович" />
+            <Field label="ИНН" value={sellerSettings.inn || ''} onChange={(e: any) => updateBillingSettings('seller_requisites', 'inn', e.target.value)} />
+            <Field label="КПП" value={sellerSettings.kpp || ''} onChange={(e: any) => updateBillingSettings('seller_requisites', 'kpp', e.target.value)} />
+            <Field label="ОГРН/ОГРНИП" value={sellerSettings.ogrn || ''} onChange={(e: any) => updateBillingSettings('seller_requisites', 'ogrn', e.target.value)} />
+            <Field label="Юр. адрес" value={sellerSettings.legal_address || ''} onChange={(e: any) => updateBillingSettings('seller_requisites', 'legal_address', e.target.value)} />
+            <Field label="Банк" value={sellerSettings.bank_name || ''} onChange={(e: any) => updateBillingSettings('seller_requisites', 'bank_name', e.target.value)} />
+            <Field label="БИК" value={sellerSettings.bik || ''} onChange={(e: any) => updateBillingSettings('seller_requisites', 'bik', e.target.value)} />
+            <Field label="Расчётный счёт" value={sellerSettings.checking_account || ''} onChange={(e: any) => updateBillingSettings('seller_requisites', 'checking_account', e.target.value)} />
+            <Field label="Корр. счёт" value={sellerSettings.correspondent_account || ''} onChange={(e: any) => updateBillingSettings('seller_requisites', 'correspondent_account', e.target.value)} />
+            <Field label="Email" value={sellerSettings.email || ''} onChange={(e: any) => updateBillingSettings('seller_requisites', 'email', e.target.value)} />
+            <Field label="Телефон" value={sellerSettings.phone || ''} onChange={(e: any) => updateBillingSettings('seller_requisites', 'phone', e.target.value)} />
+            <Field label="НДС" value={sellerSettings.tax_note || ''} onChange={(e: any) => updateBillingSettings('seller_requisites', 'tax_note', e.target.value)} placeholder="Без НДС" />
+          </div>
+        </div>
+        <div className="actions adminFormActions"><Button>Сохранить реквизиты</Button></div>
+      </form>
+      {settingsMsg && <div className={settingsMsg.includes('Не удалось') ? 'error' : 'notice'}>{settingsMsg}</div>}
     </Card>}
     {tab === 'create' && <Card title="Создать кабинет ресторана">
       <form className="form two" onSubmit={createRestaurant}>
@@ -1028,11 +1110,30 @@ function BillingAdmin({ restaurant, preferredPlan }: { restaurant: any; preferre
     }
   }
 
+  async function createTransferRequest(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setMessage('');
+    try {
+      const invoice = await api('/api/billing/transfer-requests', { method: 'POST', body: JSON.stringify(invoiceForm) });
+      setMessage(`Заявка на перевод № ${invoice.number} отправлена`);
+      await load();
+    } catch (error: any) {
+      setMessage(error.message || 'Не удалось отправить заявку на перевод');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!data) return <Card><Empty text="Загружаем оплату" /></Card>;
   const plans = data.plans || [];
   const invoices = data.invoices || [];
   const documents = data.documents || [];
   const currentPlan = plans.find((plan: any) => plan.id === restaurant?.plan) || plans.find((plan: any) => plan.id === 'standard') || {};
+  const selectedPlan = plans.find((plan: any) => plan.id === invoiceForm.plan) || currentPlan;
+  const transferRequisites = data.transfer_requisites || {};
+  const transferAmount = Number(selectedPlan?.monthly_amount || 0) * Number(invoiceForm.months || 1);
+  const transferPurpose = `Resto Control: ${restaurant?.name || 'ресторан'}, ${selectedPlan?.title || 'тариф'}, ${invoiceForm.months} мес.`;
   const latestInvoice = invoices[0];
 
   return <div className="contentStack billingAdmin">
@@ -1043,16 +1144,45 @@ function BillingAdmin({ restaurant, preferredPlan }: { restaurant: any; preferre
         <p>{restaurant?.subscription_ends_at ? `Оплачен до ${fmtDate(restaurant.subscription_ends_at)}` : `Пробный период до ${fmtDate(restaurant?.trial_ends_at)}`}</p>
       </div>
       <div className="miniCard">
-        <div className="rowBetween"><b>B2B-оплата</b><span className="badge active">по счёту</span></div>
-        <p>Ресторан оплачивает с расчётного счёта.</p>
-        <p>После поступления оплаты доступ продлевается, закрывающий документ появляется в разделе ниже.</p>
+        <div className="rowBetween"><b>Оплата</b><span className="badge active">перевод / счёт</span></div>
+        <p>Можно оплатить обычным переводом или сформировать счёт для юрлица.</p>
+        <p>После подтверждения оплаты доступ продлевается автоматически.</p>
       </div>
       <div className="miniCard">
-        <div className="rowBetween"><b>Последний счёт</b><span className={cx('badge', latestInvoice?.status || 'new')}>{latestInvoice?.status || 'нет'}</span></div>
-        <p>{latestInvoice ? `№ ${latestInvoice.number} · ${money(latestInvoice.amount)}` : 'Счета ещё не формировались'}</p>
+        <div className="rowBetween"><b>Последняя оплата</b><span className={cx('badge', latestInvoice?.status || 'new')}>{billingStatusLabel(latestInvoice?.status)}</span></div>
+        <p>{latestInvoice ? `№ ${latestInvoice.number} · ${money(latestInvoice.amount)}` : 'Оплат пока нет'}</p>
         {latestInvoice && <Button type="button" kind="soft" onClick={() => download(`/api/billing/invoices/${latestInvoice.id}/html`, `invoice-${latestInvoice.number}.html`)}>Скачать</Button>}
       </div>
     </div>
+
+    <details className="compactAccordion" open>
+      <summary className="compactAccordionSummary"><span>Оплата переводом</span><em>карта / СБП</em></summary>
+      <div className="compactAccordionBody">
+        <form className="form two compactAdminForm billingInvoiceForm" onSubmit={createTransferRequest}>
+          <div className="billingPlanChooser">
+            <span className="fieldCaption">Тариф</span>
+            <TariffPlans plans={plans} selectedPlan={invoiceForm.plan} showEnterprise={false} onSelect={(planId) => setInvoiceForm({ ...invoiceForm, plan: planId })} />
+          </div>
+          <Select label="Период" value={invoiceForm.months} onChange={(e: any) => setInvoiceForm({ ...invoiceForm, months: Number(e.target.value) })}>
+            <option value={1}>1 месяц</option>
+            <option value={3}>3 месяца</option>
+            <option value={6}>6 месяцев</option>
+            <option value={12}>12 месяцев</option>
+          </Select>
+          <Field label="Начало доступа" type="date" value={invoiceForm.period_start} onChange={(e: any) => setInvoiceForm({ ...invoiceForm, period_start: e.target.value })} />
+          <div className="transferPaymentBox">
+            <div className="transferPaymentRow"><span>Получатель</span><b>{transferValue(transferRequisites.recipient)}</b></div>
+            <div className="transferPaymentRow"><span>Телефон / СБП</span><b>{transferValue(transferRequisites.phone)}</b></div>
+            <div className="transferPaymentRow"><span>Карта</span><b>{transferValue(transferRequisites.card)}</b></div>
+            <div className="transferPaymentRow"><span>Банк</span><b>{transferValue(transferRequisites.bank)}</b></div>
+            <div className="transferPaymentRow amount"><span>Сумма</span><b>{money(transferAmount)}</b></div>
+            <div className="transferPaymentRow purpose"><span>Назначение</span><b>{transferPurpose}</b></div>
+          </div>
+          {!data.transfer_requisites_ready && <div className="error">Для оплаты переводом владелец приложения должен заполнить телефон или карту в реквизитах оплаты.</div>}
+          <div className="actions adminFormActions"><Button disabled={busy || !data.transfer_requisites_ready}>Сообщить о переводе</Button></div>
+        </form>
+      </div>
+    </details>
 
     <details className="compactAccordion">
       <summary className="compactAccordionSummary"><span>Реквизиты ресторана</span><em>{form.legal_name || 'не заполнены'}</em></summary>
@@ -1103,10 +1233,13 @@ function BillingAdmin({ restaurant, preferredPlan }: { restaurant: any; preferre
     <details className="compactAccordion">
       <summary className="compactAccordionSummary"><span>Счета</span><em>{invoices.length}</em></summary>
       <div className="compactAccordionBody">
-        {invoices.length ? invoices.map((invoice: any) => <div className="adminRowButton readonly" key={invoice.id}>
-          <span><b>Счёт № {invoice.number}</b><small>{invoice.plan_title} · {money(invoice.amount)} · {fmtDate(invoice.issued_at)}</small></span>
-          <span className="rowActions"><em className={cx('badge', invoice.status)}>{invoice.status}</em><Button type="button" kind="soft" onClick={() => download(`/api/billing/invoices/${invoice.id}/html`, `invoice-${invoice.number}.html`)}>Скачать</Button></span>
-        </div>) : <Empty text="Счетов пока нет" />}
+        {invoices.length ? invoices.map((invoice: any) => {
+          const isTransfer = invoice.seller_requisites?.payment_method === 'manual_transfer';
+          return <div className="adminRowButton readonly" key={invoice.id}>
+            <span><b>{isTransfer ? 'Перевод' : 'Счёт'} № {invoice.number}</b><small>{invoice.plan_title} · {money(invoice.amount)} · {fmtDate(invoice.issued_at)}</small></span>
+            <span className="rowActions"><em className={cx('badge', invoice.status)}>{billingStatusLabel(invoice.status)}</em><Button type="button" kind="soft" onClick={() => download(`/api/billing/invoices/${invoice.id}/html`, `invoice-${invoice.number}.html`)}>Скачать</Button></span>
+          </div>;
+        }) : <Empty text="Оплат пока нет" />}
       </div>
     </details>
 

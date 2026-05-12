@@ -7678,6 +7678,64 @@ body {
   border-radius: 14px;
 }
 
+.billingSettingsForm {
+  gap: 16px;
+}
+
+.billingSettingsGroup {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.billingSettingsGroup > .form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.transferPaymentBox {
+  display: grid;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 14px;
+}
+
+.transferPaymentRow {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.4fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.transferPaymentRow:last-child {
+  border-bottom: 0;
+}
+
+.transferPaymentRow span {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.transferPaymentRow b {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+.transferPaymentRow.amount b {
+  color: #bbf7d0;
+  font-size: 1.06rem;
+}
+
 .fieldCaption {
   color: var(--text-secondary);
   font-size: 0.78rem;
@@ -7700,6 +7758,15 @@ body {
 
   .billingPlanChooser .tariffGrid {
     grid-template-columns: 1fr;
+  }
+
+  .billingSettingsGroup > .form {
+    grid-template-columns: 1fr;
+  }
+
+  .transferPaymentRow {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
 
   .rowActions {
