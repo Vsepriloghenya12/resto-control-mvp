@@ -558,6 +558,22 @@ input[type='checkbox'] {
   justify-content: flex-start;
 }
 
+.sidebarSupportBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  margin-left: auto;
+  padding: 0 7px;
+  border-radius: 999px;
+  color: #fff;
+  background: #ef4444;
+  font-size: 0.74rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
 .workspaceMain {
   display: grid;
   gap: 20px;
@@ -1521,6 +1537,7 @@ input[type='checkbox'] {
 
 .badge.blocked,
 .badge.cancelled,
+.badge.danger,
 .badge.not_received,
 .badge.trial_expired,
 .badge.subscription_expired {
@@ -5493,9 +5510,11 @@ textarea {
 .tariffCard {
   position: relative;
   display: grid;
+  align-content: start;
   gap: 14px;
   width: 100%;
   min-height: 164px;
+  overflow: hidden;
   padding: 18px;
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -5543,7 +5562,7 @@ textarea {
   font-size: 0.74rem;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
 }
 
 .tariffBadge.selected {
@@ -5559,6 +5578,7 @@ textarea {
 .tariffCardHead strong {
   color: var(--text-primary);
   font-size: 1.02rem;
+  overflow-wrap: anywhere;
 }
 
 .tariffCardHead span,
@@ -5571,11 +5591,13 @@ textarea {
   margin: 0;
   line-height: 1.5;
   font-size: 0.92rem;
+  overflow-wrap: anywhere;
 }
 
 .tariffPrice {
   display: flex;
   align-items: baseline;
+  flex-wrap: wrap;
   gap: 7px;
 }
 
@@ -7661,6 +7683,44 @@ body {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.subscriptionInfoBlock {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 18px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.subscriptionInfoMain,
+.subscriptionInfoMeta {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.subscriptionInfoBlock span,
+.subscriptionInfoBlock em,
+.subscriptionInfoBlock p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-style: normal;
+}
+
+.subscriptionInfoBlock strong {
+  color: var(--text-primary);
+  font-size: 1.08rem;
+  overflow-wrap: anywhere;
+}
+
+.subscriptionInfoBlock b {
+  color: var(--text-primary);
+  font-size: 0.94rem;
+}
+
 .billingPlanChooser {
   display: grid;
   grid-column: 1 / -1;
@@ -7668,14 +7728,39 @@ body {
 }
 
 .billingPlanChooser .tariffGrid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(172px, 1fr));
   margin: 0;
 }
 
 .billingPlanChooser .tariffCard {
-  min-height: 138px;
-  padding: 14px;
+  gap: 8px;
+  min-height: 0;
+  padding: 12px;
   border-radius: 14px;
+}
+
+.billingPlanChooser .tariffBadge {
+  padding: 4px 7px;
+  font-size: 0.66rem;
+}
+
+.billingPlanChooser .tariffCardHead {
+  gap: 3px;
+}
+
+.billingPlanChooser .tariffCardHead strong {
+  font-size: 0.92rem;
+}
+
+.billingPlanChooser .tariffCardHead span,
+.billingPlanChooser .tariffCard p,
+.billingPlanChooser .tariffPrice em {
+  font-size: 0.76rem;
+  line-height: 1.3;
+}
+
+.billingPlanChooser .tariffPrice b {
+  font-size: 1.1rem;
 }
 
 .billingSettingsForm {
@@ -7724,6 +7809,29 @@ body {
 
 .supportTicket:last-child {
   border-bottom: 0;
+}
+
+.supportSummaryBadges {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: max-content;
+}
+
+.supportUnreadBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  color: #fff;
+  background: #ef4444;
+  font-size: 0.74rem;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .supportMessage {
@@ -7827,13 +7935,26 @@ body {
 
 @media (max-width: 860px) {
   .billingAdmin .adminCompactGrid,
+  .subscriptionInfoBlock,
   .billingRequisitesForm,
   .billingInvoiceForm {
     grid-template-columns: 1fr;
   }
 
+  .subscriptionInfoBlock {
+    align-items: stretch;
+  }
+
+  .subscriptionInfoBlock .btn {
+    width: 100%;
+  }
+
   .billingPlanChooser .tariffGrid {
     grid-template-columns: 1fr;
+  }
+
+  .supportSummaryBadges {
+    justify-content: flex-start;
   }
 
   .billingSettingsGroup > .form {

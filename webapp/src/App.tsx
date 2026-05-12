@@ -100,6 +100,10 @@ function supportStatusLabel(status: string) {
   return supportStatusLabels[status] || status || 'новое';
 }
 
+function supportUnreadTotal(tickets: any[], field: 'client_unread_count' | 'platform_unread_count') {
+  return tickets.reduce((total, ticket) => total + Number(ticket?.[field] || 0), 0);
+}
+
 function transferValue(value: any) {
   return String(value || '').trim() || '—';
 }
@@ -183,13 +187,19 @@ function WorkspaceInfoModal({
   </div>;
 }
 
-function SupportConversationList({ tickets, replyValues, onReplyChange, onReply, onStatusChange, admin = false }: any) {
+function SupportConversationList({ tickets, replyValues, onReplyChange, onReply, onStatusChange, onRead, admin = false }: any) {
   if (!tickets.length) return <Empty text="Обращений пока нет" />;
   return <div className="supportTicketList">
-    {tickets.map((ticket: any, index: number) => <details className="compactAccordion supportTicket" key={ticket.id} open={index === 0}>
+    {tickets.map((ticket: any) => {
+      const unreadCount = Number(admin ? ticket.platform_unread_count : ticket.client_unread_count) || 0;
+      const restaurantName = ticket.restaurant?.name || 'Ресторан';
+      return <details className="compactAccordion supportTicket" key={ticket.id} onToggle={(e: any) => { if (e.currentTarget.open) onRead?.(ticket.id); }}>
       <summary className="compactAccordionSummary">
-        <span><b>{ticket.subject}</b><small>{ticket.restaurant?.name || ticket.created_by_user?.name || 'Ресторан'} · {fmtDate(ticket.updated_at || ticket.created_at)}</small></span>
-        <em>{supportStatusLabel(ticket.status)}</em>
+        <span><b>{admin ? `${restaurantName}: ${ticket.subject}` : ticket.subject}</b><small>{admin ? ticket.created_by_user?.name || 'Клиент' : restaurantName} · {fmtDate(ticket.updated_at || ticket.created_at)}</small></span>
+        <span className="supportSummaryBadges">
+          <em>{supportStatusLabel(ticket.status)}</em>
+          {unreadCount > 0 && <b className="supportUnreadBadge">{unreadCount}</b>}
+        </span>
       </summary>
       <div className="compactAccordionBody supportThread">
         {(ticket.messages || []).map((message: any) => <article className={cx('supportMessage', message.author_type === 'platform' && 'platform')} key={message.id}>
@@ -204,11 +214,12 @@ function SupportConversationList({ tickets, replyValues, onReplyChange, onReply,
           {ticket.status !== 'closed' ? <Button type="button" kind="soft" onClick={() => onStatusChange(ticket.id, 'closed')}>Закрыть</Button> : <Button type="button" kind="soft" onClick={() => onStatusChange(ticket.id, 'open')}>Открыть снова</Button>}
         </div>}
       </div>
-    </details>)}
+    </details>;
+    })}
   </div>;
 }
 
-function ClientSupportPanel() {
+function ClientSupportPanel({ onUnreadChange }: { onUnreadChange?: (count: number) => void } = {}) {
   const [tickets, setTickets] = useState<any[]>([]);
   const [form, setForm] = useState({ subject: '', body: '' });
   const [replyValues, setReplyValues] = useState<Record<string, string>>({});
@@ -216,10 +227,16 @@ function ClientSupportPanel() {
   const [busy, setBusy] = useState(false);
 
   async function load() {
-    setTickets(await api('/api/support/tickets'));
+    const next = await api('/api/support/tickets');
+    setTickets(next);
+    onUnreadChange?.(supportUnreadTotal(next, 'client_unread_count'));
   }
 
-  useEffect(() => { load().catch(() => setTickets([])); }, []);
+  useEffect(() => {
+    load().catch(() => setTickets([]));
+    const timer = window.setInterval(() => load().catch(() => setTickets([])), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   async function createTicket(e: FormEvent) {
     e.preventDefault();
@@ -253,6 +270,20 @@ function ClientSupportPanel() {
     }
   }
 
+  async function markRead(ticketId: string) {
+    const next = tickets.map((ticket) => ticket.id === ticketId ? { ...ticket, client_unread_count: 0 } : ticket);
+    setTickets(next);
+    onUnreadChange?.(supportUnreadTotal(next, 'client_unread_count'));
+    try {
+      const updated = await api(`/api/support/tickets/${ticketId}/read`, { method: 'POST', body: JSON.stringify({}) });
+      const refreshed = tickets.map((ticket) => ticket.id === ticketId ? updated : ticket);
+      setTickets(refreshed);
+      onUnreadChange?.(supportUnreadTotal(refreshed, 'client_unread_count'));
+    } catch {
+      await load().catch(() => undefined);
+    }
+  }
+
   return <div className="supportPanel">
     <form className="supportCreateForm" onSubmit={createTicket}>
       <Field label="Тема" value={form.subject} onChange={(e: any) => setForm({ ...form, subject: e.target.value })} placeholder="Что нужно помочь решить" />
@@ -260,7 +291,7 @@ function ClientSupportPanel() {
       <div className="actions adminFormActions"><Button disabled={busy}>Написать в поддержку</Button></div>
     </form>
     {message && <div className={message.includes('Не удалось') ? 'error' : 'notice'}>{message}</div>}
-    <SupportConversationList tickets={tickets} replyValues={replyValues} onReplyChange={(id: string, value: string) => setReplyValues((current) => ({ ...current, [id]: value }))} onReply={sendReply} />
+    <SupportConversationList tickets={tickets} replyValues={replyValues} onReplyChange={(id: string, value: string) => setReplyValues((current) => ({ ...current, [id]: value }))} onReply={sendReply} onRead={markRead} />
   </div>;
 }
 
@@ -274,7 +305,11 @@ function SuperSupportAdmin() {
     setTickets(await api('/api/super/support/tickets'));
   }
 
-  useEffect(() => { load().catch(() => setTickets([])); }, []);
+  useEffect(() => {
+    load().catch(() => setTickets([]));
+    const timer = window.setInterval(() => load().catch(() => setTickets([])), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   async function sendReply(ticketId: string) {
     const body = String(replyValues[ticketId] || '').trim();
@@ -306,8 +341,20 @@ function SuperSupportAdmin() {
     }
   }
 
+  async function markRead(ticketId: string) {
+    const next = tickets.map((ticket) => ticket.id === ticketId ? { ...ticket, platform_unread_count: 0 } : ticket);
+    setTickets(next);
+    try {
+      const updated = await api(`/api/super/support/tickets/${ticketId}/read`, { method: 'POST', body: JSON.stringify({}) });
+      setTickets((current) => current.map((ticket) => ticket.id === ticketId ? updated : ticket));
+    } catch {
+      await load().catch(() => undefined);
+    }
+  }
+
   const openCount = tickets.filter((ticket) => ticket.status !== 'closed').length;
-  return <Card title="Техподдержка" right={<span className="badge active">{openCount} открыто</span>}>
+  const unreadCount = supportUnreadTotal(tickets, 'platform_unread_count');
+  return <Card title="Техподдержка" right={<span className={cx('badge', unreadCount > 0 ? 'danger' : 'active')}>{unreadCount > 0 ? `${unreadCount} новых` : `${openCount} открыто`}</span>}>
     {message && <div className={message.includes('Не удалось') ? 'error compactNotice' : 'notice compactNotice'}>{message}</div>}
     <SupportConversationList
       tickets={tickets}
@@ -315,6 +362,7 @@ function SuperSupportAdmin() {
       onReplyChange={(id: string, value: string) => setReplyValues((current) => ({ ...current, [id]: value }))}
       onReply={sendReply}
       onStatusChange={updateStatus}
+      onRead={markRead}
       admin
       busy={busy}
     />
@@ -729,6 +777,26 @@ function RestaurantWorkspace({
 }) {
   const [modalKind, setModalKind] = useState<WorkspaceModalKind>(null);
   const [sheet, setSheet] = useState<MobileSheetKind>(null);
+  const [supportUnread, setSupportUnread] = useState(0);
+
+  async function loadSupportUnread() {
+    if (!['owner', 'manager'].includes(user.role)) {
+      setSupportUnread(0);
+      return;
+    }
+    try {
+      const tickets = await api('/api/support/tickets');
+      setSupportUnread(supportUnreadTotal(tickets, 'client_unread_count'));
+    } catch {
+      setSupportUnread(0);
+    }
+  }
+
+  useEffect(() => {
+    loadSupportUnread();
+    const timer = window.setInterval(loadSupportUnread, 30000);
+    return () => window.clearInterval(timer);
+  }, [user.role, user.restaurant_id]);
 
   function openNotifications() {
     setModalKind('notifications');
@@ -759,7 +827,7 @@ function RestaurantWorkspace({
       ? {
           title: 'Техподдержка',
           text: 'Напишите владельцу приложения, если нужна помощь с оплатой, доступом или работой сервиса.',
-          details: <ClientSupportPanel />,
+          details: <ClientSupportPanel onUnreadChange={setSupportUnread} />,
           actions: []
         }
       : modalKind === 'billing'
@@ -827,6 +895,7 @@ function RestaurantWorkspace({
       onChange={setActive}
       onPromoClick={() => setActive('overview')}
       onSupportClick={openSupport}
+      supportBadgeCount={supportUnread}
     />
     <section className="workspaceMain">
       {showMobileWorkspace && <div className="mobileWorkspaceChrome">
@@ -1282,24 +1351,25 @@ function BillingAdmin({ restaurant, preferredPlan }: { restaurant: any; preferre
   const transferAmount = Number(selectedPlan?.monthly_amount || 0) * Number(invoiceForm.months || 1);
   const transferPurpose = `Resto Control: ${restaurant?.name || 'ресторан'}, ${selectedPlan?.title || 'тариф'}, ${invoiceForm.months} мес.`;
   const latestInvoice = invoices[0];
+  const subscriptionDateText = restaurant?.subscription_ends_at
+    ? `Оплачено до ${fmtDate(restaurant.subscription_ends_at)}`
+    : restaurant?.trial_ends_at
+      ? `Пробный период до ${fmtDate(restaurant.trial_ends_at)}`
+      : 'Срок доступа не указан';
 
   return <div className="contentStack billingAdmin">
-    <div className="adminCompactGrid">
-      <div className="miniCard">
-        <div className="rowBetween"><b>Доступ</b><span className={cx('badge', restaurant?.subscription_status)}>{subscriptionLabel(restaurant?.subscription_status)}</span></div>
-        <p>Тариф: {currentPlan.title || restaurant?.plan || '—'}</p>
-        <p>{restaurant?.subscription_ends_at ? `Оплачен до ${fmtDate(restaurant.subscription_ends_at)}` : `Пробный период до ${fmtDate(restaurant?.trial_ends_at)}`}</p>
+    <div className="subscriptionInfoBlock">
+      <div className="subscriptionInfoMain">
+        <span>Подписка</span>
+        <strong>{currentPlan.title || restaurant?.plan || 'Тариф не выбран'}</strong>
+        <p>{subscriptionLabel(restaurant?.subscription_status)} · {subscriptionDateText}</p>
       </div>
-      <div className="miniCard">
-        <div className="rowBetween"><b>Оплата</b><span className="badge active">перевод / счёт</span></div>
-        <p>Можно оплатить обычным переводом или сформировать счёт для юрлица.</p>
-        <p>После подтверждения оплаты доступ продлевается автоматически.</p>
+      <div className="subscriptionInfoMeta">
+        <span>Последняя оплата</span>
+        <b>{latestInvoice ? `№ ${latestInvoice.number} · ${money(latestInvoice.amount)}` : 'Оплат пока нет'}</b>
+        {latestInvoice ? <em>{billingStatusLabel(latestInvoice.status)}</em> : <em>перевод или счёт</em>}
       </div>
-      <div className="miniCard">
-        <div className="rowBetween"><b>Последняя оплата</b><span className={cx('badge', latestInvoice?.status || 'new')}>{billingStatusLabel(latestInvoice?.status)}</span></div>
-        <p>{latestInvoice ? `№ ${latestInvoice.number} · ${money(latestInvoice.amount)}` : 'Оплат пока нет'}</p>
-        {latestInvoice && <Button type="button" kind="soft" onClick={() => download(`/api/billing/invoices/${latestInvoice.id}/html`, `invoice-${latestInvoice.number}.html`)}>Скачать</Button>}
-      </div>
+      {latestInvoice && <Button type="button" kind="soft" onClick={() => download(`/api/billing/invoices/${latestInvoice.id}/html`, `invoice-${latestInvoice.number}.html`)}>Скачать</Button>}
     </div>
 
     <details className="compactAccordion" open>

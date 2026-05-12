@@ -44,7 +44,7 @@ const SNAPSHOT_TABLES = [
   { name: 'notifications', columns: ['id', 'restaurant_id', 'user_id', 'title', 'body', 'entity_type', 'entity_id', 'read_at', 'created_at'] },
   { name: 'activity_events', columns: ['id', 'restaurant_id', 'actor_id', 'type', 'title', 'entity_type', 'entity_id', 'metadata', 'created_at'], jsonColumns: ['metadata'] },
   { name: 'comments', columns: ['id', 'restaurant_id', 'entity_type', 'entity_id', 'user_id', 'body', 'created_at'] },
-  { name: 'support_tickets', columns: ['id', 'restaurant_id', 'created_by', 'subject', 'status', 'created_at', 'updated_at', 'closed_at'] },
+  { name: 'support_tickets', columns: ['id', 'restaurant_id', 'created_by', 'subject', 'status', 'client_read_at', 'platform_read_at', 'created_at', 'updated_at', 'closed_at'] },
   { name: 'support_messages', columns: ['id', 'restaurant_id', 'ticket_id', 'user_id', 'author_type', 'body', 'created_at'] },
   { name: 'integrations', columns: ['id', 'restaurant_id', 'provider', 'status', 'api_login_encrypted', 'organization_id', 'terminal_group_id', 'sync_interval_seconds', 'sync_bookings', 'sync_shifts', 'last_sync_at', 'last_error', 'created_at', 'updated_at'] },
   { name: 'external_mappings', columns: ['id', 'restaurant_id', 'provider', 'entity_type', 'local_id', 'external_id', 'label', 'created_at'] },
@@ -125,6 +125,8 @@ async function ensurePostgresSchema() {
   await getPool().query(`alter table if exists integrations add column if not exists sync_bookings boolean not null default true`);
   await getPool().query(`alter table if exists integrations add column if not exists sync_shifts boolean not null default true`);
   await getPool().query(`alter table if exists platform_settings add column if not exists value jsonb not null default '{}'`);
+  await getPool().query(`alter table if exists support_tickets add column if not exists client_read_at timestamptz`);
+  await getPool().query(`alter table if exists support_tickets add column if not exists platform_read_at timestamptz`);
 }
 
 

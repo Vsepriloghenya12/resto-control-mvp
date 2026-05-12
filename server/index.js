@@ -1228,10 +1228,20 @@ function supportTicketDetails(ticket) {
       ...message,
       user: publicUser(db.users.find(user => user.id === message.user_id))
     }));
+  const clientUnreadCount = messages.filter(message => (
+    message.author_type === 'platform'
+    && (!ticket.client_read_at || String(message.created_at || '') > String(ticket.client_read_at || ''))
+  )).length;
+  const platformUnreadCount = messages.filter(message => (
+    message.author_type === 'client'
+    && (!ticket.platform_read_at || String(message.created_at || '') > String(ticket.platform_read_at || ''))
+  )).length;
   return {
     ...ticket,
     restaurant: db.restaurants.find(restaurant => restaurant.id === ticket.restaurant_id) || null,
     created_by_user: publicUser(db.users.find(user => user.id === ticket.created_by)),
+    client_unread_count: clientUnreadCount,
+    platform_unread_count: platformUnreadCount,
     messages
   };
 }
@@ -1312,7 +1322,14 @@ function billingSettingsRecord() {
 }
 
 function platformBillingSettings() {
-  const value = billingSettingsRecord()?.value || {};
+  let value = billingSettingsRecord()?.value || {};
+  if (typeof value === 'string') {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      value = {};
+    }
+  }
   return {
     seller: value.seller || {},
     transfer: value.transfer || {}
@@ -1359,7 +1376,7 @@ function sellerRequisitesReady() {
 
 function transferRequisitesReady() {
   const requisites = currentTransferRequisites();
-  return Boolean(requisites.phone || requisites.card);
+  return Boolean(String(requisites.phone || '').trim() || String(requisites.card || '').trim());
 }
 
 function publicPlatformBillingSettings() {
@@ -1877,6 +1894,7 @@ app.post('/api/super/support/tickets/:id/messages', auth, superOnly, runAsync(as
   };
   collection('support_messages').push(message);
   ticket.status = 'answered';
+  ticket.platform_read_at = message.created_at;
   ticket.updated_at = message.created_at;
   ticket.closed_at = null;
   notifyUsers(ticket.restaurant_id, db.users.filter(user => user.restaurant_id === ticket.restaurant_id && user.role === 'owner'), { title: 'Ответ техподдержки', body: ticket.subject, entity_type: 'support_ticket', entity_id: ticket.id });
@@ -1892,6 +1910,14 @@ app.patch('/api/super/support/tickets/:id', auth, superOnly, runAsync(async (req
   ticket.status = status;
   ticket.updated_at = nowIso();
   ticket.closed_at = status === 'closed' ? nowIso() : null;
+  await persist();
+  res.json(supportTicketDetails(ticket));
+}));
+
+app.post('/api/super/support/tickets/:id/read', auth, superOnly, runAsync(async (req, res) => {
+  const ticket = collection('support_tickets').find(item => item.id === req.params.id);
+  if (!ticket) return res.status(404).json({ error: 'Обращение не найдено' });
+  ticket.platform_read_at = nowIso();
   await persist();
   res.json(supportTicketDetails(ticket));
 }));
@@ -1916,6 +1942,8 @@ app.post('/api/support/tickets', auth, runAsync(async (req, res) => {
     created_by: req.user.id,
     subject,
     status: 'open',
+    client_read_at: createdAt,
+    platform_read_at: null,
     created_at: createdAt,
     updated_at: createdAt,
     closed_at: null
@@ -1953,10 +1981,20 @@ app.post('/api/support/tickets/:id/messages', auth, runAsync(async (req, res) =>
   };
   collection('support_messages').push(message);
   ticket.status = 'open';
+  ticket.client_read_at = message.created_at;
   ticket.updated_at = message.created_at;
   ticket.closed_at = null;
   await persist();
   res.status(201).json(supportTicketDetails(ticket));
+}));
+
+app.post('/api/support/tickets/:id/read', auth, runAsync(async (req, res) => {
+  if (!canUseClientSupport(req)) return res.status(403).json({ error: 'Поддержка доступна владельцу и менеджеру ресторана' });
+  const ticket = sameRestaurant(collection('support_tickets'), req.user.restaurant_id).find(item => item.id === req.params.id);
+  if (!ticket) return res.status(404).json({ error: 'Обращение не найдено' });
+  ticket.client_read_at = nowIso();
+  await persist();
+  res.json(supportTicketDetails(ticket));
 }));
 
 // RESTAURANT OVERVIEW
@@ -3401,6 +3439,7 @@ app.post('/api/billing/invoices', auth, billingAccess, runAsync(async (req, res)
 app.post('/api/billing/transfer-requests', auth, billingAccess, runAsync(async (req, res) => {
   const rid = req.user.restaurant_id;
   const restaurant = db.restaurants.find(r => r.id === rid);
+  if (!rid || !restaurant) return res.status(400).json({ error: 'Оплата доступна только из карточки ресторана' });
   const transferRequisites = currentTransferRequisites();
   if (!transferRequisitesReady()) {
     return res.status(400).json({ error: 'Заполните телефон или карту для оплаты переводом у владельца приложения' });

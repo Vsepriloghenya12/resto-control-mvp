@@ -323,6 +323,8 @@ create table if not exists support_tickets (
   created_by text references users(id),
   subject text not null,
   status text not null default 'open',
+  client_read_at timestamptz,
+  platform_read_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   closed_at timestamptz

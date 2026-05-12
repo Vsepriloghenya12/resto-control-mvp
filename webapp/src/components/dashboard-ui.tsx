@@ -171,7 +171,8 @@ export function SidebarNav({
   active,
   onChange,
   onPromoClick,
-  onSupportClick
+  onSupportClick,
+  supportBadgeCount = 0
 }: {
   logoSrc: string;
   tabs: NavTab[];
@@ -179,6 +180,7 @@ export function SidebarNav({
   onChange: (next: string) => void;
   onPromoClick?: () => void;
   onSupportClick?: () => void;
+  supportBadgeCount?: number;
 }) {
   return <aside className="dashboardSidebar">
     <div className="sidebarBrand">
@@ -213,6 +215,7 @@ export function SidebarNav({
     <button type="button" className="sidebarSupport" onClick={onSupportClick}>
       <AppIcon name="support" className="navIcon" />
       <span>Поддержка</span>
+      {supportBadgeCount > 0 && <b className="sidebarSupportBadge">{supportBadgeCount}</b>}
     </button>
   </aside>;
 }
