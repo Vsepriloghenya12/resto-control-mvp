@@ -130,7 +130,6 @@ function TariffPlans({ plans, selectedPlan, onSelect, showEnterprise = true }: {
       const clickable = Boolean(onSelect && tariff.id !== 'enterprise');
       const content = <>
         {tariff.featured && <span className="tariffBadge">Популярный</span>}
-        {selectedPlan === tariff.id && <span className="tariffBadge selected">Выбран</span>}
         <div className="tariffCardHead">
           <strong>{tariff.title}</strong>
           <span>{tariff.employees}</span>
@@ -139,7 +138,6 @@ function TariffPlans({ plans, selectedPlan, onSelect, showEnterprise = true }: {
           <b>{tariff.price}</b>
           {tariff.period && <em>{tariff.period}</em>}
         </div>
-        <p>{tariff.note}</p>
       </>;
       const className = cx('tariffCard', clickable && 'clickable', tariff.featured && 'featured', selectedPlan === tariff.id && 'selected');
       return clickable
