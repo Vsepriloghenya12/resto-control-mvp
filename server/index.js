@@ -1379,6 +1379,15 @@ function transferRequisitesReady() {
   return Boolean(String(requisites.phone || '').trim() || String(requisites.card || '').trim());
 }
 
+function addMonthsIso(value, months) {
+  const source = value ? new Date(value) : new Date();
+  const date = Number.isNaN(source.getTime()) ? new Date() : new Date(source);
+  const day = date.getDate();
+  date.setMonth(date.getMonth() + Math.max(1, Number(months || 1) || 1));
+  if (date.getDate() !== day) date.setDate(0);
+  return date.toISOString();
+}
+
 function publicPlatformBillingSettings() {
   return {
     seller_requisites: currentSellerRequisites(),
