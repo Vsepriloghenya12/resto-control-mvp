@@ -433,6 +433,10 @@ create table if not exists billing_invoices (
   seller_requisites jsonb not null default '{}',
   issued_at timestamptz not null default now(),
   due_at timestamptz,
+  receipt_url text,
+  receipt_name text,
+  receipt_mime text,
+  receipt_uploaded_at timestamptz,
   paid_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

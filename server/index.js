@@ -35,6 +35,7 @@ const webDist = path.resolve(__dirname, '../webapp/dist');
 const uploadsDir = path.resolve(__dirname, 'data/uploads');
 const checklistUploadsDir = path.join(uploadsDir, 'checklists');
 const knowledgeUploadsDir = path.join(uploadsDir, 'knowledge');
+const billingUploadsDir = path.join(uploadsDir, 'billing');
 const MANAGER_ROLES = ['owner', 'manager'];
 const SENIOR_ROLE_DEPARTMENT = { senior_waiter: 'hall', senior_bartender: 'bar', senior_cook: 'kitchen' };
 const SENIOR_ROLES = Object.keys(SENIOR_ROLE_DEPARTMENT);
@@ -791,6 +792,33 @@ function saveKnowledgeFile(file, restaurant_id, kind = 'docs') {
   const filepath = path.join(restaurantDir, storedName);
   fs.writeFileSync(filepath, buffer);
   return { url: `/uploads/knowledge/${restaurant_id}/${kind === 'image' ? 'photos' : 'docs'}/${storedName}`, buffer, filename };
+}
+
+function saveBillingReceipt(file, restaurant_id) {
+  const filename = String(file?.file_name || file?.name || '').trim();
+  const mime = String(file?.mime_type || file?.type || '').toLowerCase();
+  const isPdf = filename.toLowerCase().endsWith('.pdf') || mime.includes('pdf');
+  const isImage = mime.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(filename);
+  if (!file || !filename) throw new Error('Прикрепите чек оплаты');
+  if (!isPdf && !isImage) throw new Error('Чек должен быть фото или PDF-файлом');
+
+  const buffer = decodeBase64File(file);
+  const maxSize = 15 * 1024 * 1024;
+  if (buffer.length > maxSize) throw new Error('Чек слишком большой. Максимум 15 МБ');
+
+  const ext = path.extname(filename || '').toLowerCase() || (isPdf ? '.pdf' : '.jpg');
+  const restaurantDir = path.join(billingUploadsDir, restaurant_id);
+  fs.mkdirSync(restaurantDir, { recursive: true });
+  const sourceName = path.extname(filename) ? filename : `${filename || 'receipt'}${ext}`;
+  const storedName = safeUploadName(sourceName, 'receipt');
+  const filepath = path.join(restaurantDir, storedName);
+  fs.writeFileSync(filepath, buffer);
+  return {
+    url: `/uploads/billing/${restaurant_id}/${storedName}`,
+    name: filename || storedName,
+    mime_type: mime || (isPdf ? 'application/pdf' : 'image/jpeg'),
+    uploaded_at: nowIso()
+  };
 }
 
 function cleanTtkText(value) {
@@ -1831,11 +1859,18 @@ app.get('/api/me', auth, (req, res) => {
 app.get('/api/super/restaurants', auth, superOnly, (req, res) => {
   const rows = db.restaurants.map(r => {
     const users = db.users.filter(u => u.restaurant_id === r.id);
+    const invoices = collection('billing_invoices')
+      .filter(invoice => invoice.restaurant_id === r.id)
+      .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
     return {
       ...r,
       computed_status: restaurantStatus(r),
       users_count: users.length,
-      checklist_runs_count: db.checklist_runs.filter(x => x.restaurant_id === r.id).length
+      checklist_runs_count: db.checklist_runs.filter(x => x.restaurant_id === r.id).length,
+      billing_invoices_count: invoices.length,
+      pending_transfer_count: invoices.filter(invoice => invoice.status === 'transfer_pending').length,
+      receipt_invoices_count: invoices.filter(invoice => invoice.receipt_url).length,
+      latest_invoice: invoices[0] || null
     };
   });
   res.json(rows);
@@ -3459,6 +3494,12 @@ app.post('/api/billing/transfer-requests', auth, billingAccess, runAsync(async (
   const periodStart = req.body?.period_start ? new Date(req.body.period_start) : new Date();
   if (Number.isNaN(periodStart.getTime())) return res.status(400).json({ error: 'Некорректное начало периода' });
   const amount = Number(plan.monthly_amount || 0) * months;
+  let receipt;
+  try {
+    receipt = saveBillingReceipt(req.body?.receipt || req.body?.receipt_file, rid);
+  } catch (error) {
+    return res.status(400).json({ error: error.message || 'Не удалось сохранить чек оплаты' });
+  }
   const invoice = {
     id: uid('inv'),
     restaurant_id: rid,
@@ -3479,6 +3520,10 @@ app.post('/api/billing/transfer-requests', auth, billingAccess, runAsync(async (
     seller_requisites: { ...transferRequisites, payment_method: 'manual_transfer' },
     issued_at: nowIso(),
     due_at: addDays(3),
+    receipt_url: receipt.url,
+    receipt_name: receipt.name,
+    receipt_mime: receipt.mime_type,
+    receipt_uploaded_at: receipt.uploaded_at,
     paid_at: null,
     created_at: nowIso(),
     updated_at: nowIso()

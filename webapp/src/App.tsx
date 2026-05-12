@@ -1026,25 +1026,69 @@ function SuperAdmin({ user, onLogout }: any) {
     onLogout={onLogout}
   >
     {tab === 'restaurants' && <Card title="Рестораны платформы">
-      <div className="grid cardsGrid">
-        {restaurants.map(r => <div className="miniCard" key={r.id}>
-          <div className="rowBetween"><b>{r.name}</b><span className={`badge ${r.computed_status}`}>{subscriptionLabel(r.computed_status)}</span></div>
-          <p>{r.city || 'Город не указан'} · сотрудников: {r.users_count}</p>
-          <p>Trial до: {fmtDate(r.trial_ends_at)} · осталось {daysLeft(r.trial_ends_at)} дн.</p>
-          <p>Чек-листы: {r.checklist_runs_count}</p>
-          <div className="actions"><Button kind="soft" onClick={() => extend(r.id, 30)}>+30 дней</Button><Button kind="danger" onClick={() => block(r.id)}>Блок</Button></div>
-        </div>)}
+      <div className="compactAccordionList superRestaurantList">
+        {restaurants.length ? restaurants.map((r: any) => {
+          const latestInvoice = r.latest_invoice;
+          return <details className="compactAccordion" key={r.id}>
+            <summary className="compactAccordionSummary superRestaurantSummary">
+              <span>
+                <b>{r.name}</b>
+                <small>{r.city || 'Город не указан'} · {r.owner_name || 'владелец не указан'} · сотрудников: {r.users_count}</small>
+              </span>
+              <span className="supportSummaryBadges">
+                {r.pending_transfer_count > 0 && <em className="badge transfer_pending">{r.pending_transfer_count} оплат</em>}
+                <em className={cx('badge', r.computed_status)}>{subscriptionLabel(r.computed_status)}</em>
+              </span>
+            </summary>
+            <div className="compactAccordionBody superRestaurantDetails">
+              <div className="superRestaurantInfoGrid">
+                <div><span>Контакты</span><b>{r.phone || 'телефон не указан'}</b><small>{r.email || 'email не указан'}</small></div>
+                <div><span>Доступ</span><b>{r.plan || 'trial'}</b><small>до {fmtDate(r.subscription_ends_at || r.trial_ends_at)}</small></div>
+                <div><span>Активность</span><b>{r.checklist_runs_count} чек-листов</b><small>{r.billing_invoices_count || 0} оплат</small></div>
+              </div>
+              {latestInvoice ? <div className="adminRowButton readonly">
+                <span>
+                  <b>Последняя оплата № {latestInvoice.number}</b>
+                  <small>{latestInvoice.plan_title} · {money(latestInvoice.amount)} · {billingStatusLabel(latestInvoice.status)}</small>
+                </span>
+                {latestInvoice.receipt_url
+                  ? <a className="receiptLink" href={latestInvoice.receipt_url} target="_blank" rel="noreferrer">Открыть чек</a>
+                  : <em>чека нет</em>}
+              </div> : <Empty text="Оплат пока нет" />}
+              <div className="actions">
+                <Button kind="soft" onClick={() => extend(r.id, 30)}>+30 дней</Button>
+                <Button kind="danger" onClick={() => block(r.id)}>Блок</Button>
+              </div>
+            </div>
+          </details>;
+        }) : <Empty text="Ресторанов пока нет" />}
       </div>
     </Card>}
     {tab === 'payments' && <Card title="Счета ресторанов">
       <div className="compactAccordionList">
-        {billingInvoices.length ? billingInvoices.map((invoice: any) => <details className="compactAccordion" key={invoice.id}>
-          <summary className="compactAccordionSummary"><span><b>№ {invoice.number} · {invoice.restaurant?.name || 'Ресторан'}</b><small>{invoice.plan_title} · {money(invoice.amount)}</small></span><em>{billingStatusLabel(invoice.status)}</em></summary>
-          <div className="compactAccordionBody">
-            <div className="adminRowButton readonly"><span><b>Период</b><small>{fmtDate(invoice.period_start)} — {fmtDate(invoice.period_end)}</small></span><em>{billingStatusLabel(invoice.status)}</em></div>
-            <div className="actions"><Button type="button" kind="soft" onClick={() => download(`/api/billing/invoices/${invoice.id}/html`, `invoice-${invoice.number}.html`)}>Скачать счёт</Button>{invoice.status !== 'paid' && <Button type="button" onClick={() => markPaid(invoice.id)}>Отметить оплату</Button>}</div>
-          </div>
-        </details>) : <Empty text="Счетов пока нет" />}
+        {billingInvoices.length ? billingInvoices.map((invoice: any) => {
+          const isTransfer = invoice.seller_requisites?.payment_method === 'manual_transfer';
+          return <details className="compactAccordion" key={invoice.id}>
+            <summary className="compactAccordionSummary">
+              <span>
+                <b>№ {invoice.number} · {invoice.restaurant?.name || 'Ресторан'}</b>
+                <small>{invoice.plan_title} · {money(invoice.amount)} · {isTransfer ? 'перевод' : 'счёт'}</small>
+              </span>
+              <span className="supportSummaryBadges">
+                {invoice.receipt_url && <em className="badge active">чек</em>}
+                <em className={cx('badge', invoice.status)}>{billingStatusLabel(invoice.status)}</em>
+              </span>
+            </summary>
+            <div className="compactAccordionBody">
+              <div className="adminRowButton readonly"><span><b>Период</b><small>{fmtDate(invoice.period_start)} — {fmtDate(invoice.period_end)}</small></span><em>{billingStatusLabel(invoice.status)}</em></div>
+              <div className="adminRowButton readonly">
+                <span><b>Чек оплаты</b><small>{invoice.receipt_name || (isTransfer ? 'чек не прикреплён' : 'для счёта не требуется')}</small></span>
+                {invoice.receipt_url ? <a className="receiptLink" href={invoice.receipt_url} target="_blank" rel="noreferrer">Открыть чек</a> : <em>нет</em>}
+              </div>
+              <div className="actions"><Button type="button" kind="soft" onClick={() => download(`/api/billing/invoices/${invoice.id}/html`, `invoice-${invoice.number}.html`)}>Скачать счёт</Button>{invoice.status !== 'paid' && <Button type="button" onClick={() => markPaid(invoice.id)}>Отметить оплату</Button>}</div>
+            </div>
+          </details>;
+        }) : <Empty text="Счетов пока нет" />}
       </div>
     </Card>}
     {tab === 'support' && <SuperSupportAdmin />}
@@ -1278,6 +1322,9 @@ function BillingAdmin({ restaurant, preferredPlan }: { restaurant: any; preferre
   const [data, setData] = useState<any>(null);
   const [form, setForm] = useState<any>({ customer_type: 'ip', legal_name: '', inn: '', kpp: '', ogrn: '', legal_address: '', bank_name: '', bik: '', checking_account: '', correspondent_account: '', edo_operator: '', edo_id: '', email: '', phone: '' });
   const [invoiceForm, setInvoiceForm] = useState<any>({ plan: 'standard', months: 1, period_start: new Date().toISOString().slice(0, 10) });
+  const [transferReceipt, setTransferReceipt] = useState<any>(null);
+  const [transferReceiptName, setTransferReceiptName] = useState('');
+  const transferReceiptInputRef = useRef<HTMLInputElement | null>(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -1328,16 +1375,41 @@ function BillingAdmin({ restaurant, preferredPlan }: { restaurant: any; preferre
 
   async function createTransferRequest(e: FormEvent) {
     e.preventDefault();
-    setBusy(true);
     setMessage('');
+    if (!transferReceipt) {
+      setMessage('Прикрепите чек оплаты');
+      return;
+    }
+    setBusy(true);
     try {
-      const invoice = await api('/api/billing/transfer-requests', { method: 'POST', body: JSON.stringify(invoiceForm) });
+      const invoice = await api('/api/billing/transfer-requests', { method: 'POST', body: JSON.stringify({ ...invoiceForm, receipt: transferReceipt }) });
       setMessage(`Заявка на перевод № ${invoice.number} отправлена`);
+      setTransferReceipt(null);
+      setTransferReceiptName('');
+      if (transferReceiptInputRef.current) transferReceiptInputRef.current.value = '';
       await load();
     } catch (error: any) {
       setMessage(error.message || 'Не удалось отправить заявку на перевод');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleTransferReceiptChange(e: any) {
+    const file: File | undefined = e.target.files?.[0];
+    setMessage('');
+    if (!file) {
+      setTransferReceipt(null);
+      setTransferReceiptName('');
+      return;
+    }
+    try {
+      setTransferReceipt(await uploadPayloadFromFile(file));
+      setTransferReceiptName(file.name);
+    } catch (error: any) {
+      setTransferReceipt(null);
+      setTransferReceiptName('');
+      setMessage(error.message || 'Не удалось прочитать чек оплаты');
     }
   }
 
@@ -1395,6 +1467,11 @@ function BillingAdmin({ restaurant, preferredPlan }: { restaurant: any; preferre
             <div className="transferPaymentRow amount"><span>Сумма</span><b>{money(transferAmount)}</b></div>
             <div className="transferPaymentRow purpose"><span>Назначение</span><b>{transferPurpose}</b></div>
           </div>
+          <label className="receiptUploadBox">
+            <span>Чек оплаты</span>
+            <input ref={transferReceiptInputRef} type="file" accept="image/*,.pdf,application/pdf" onChange={handleTransferReceiptChange} />
+            <b>{transferReceiptName || 'Прикрепите фото или PDF после перевода'}</b>
+          </label>
           {!data.transfer_requisites_ready && <div className="error">Для оплаты переводом владелец приложения должен заполнить телефон или карту в реквизитах оплаты.</div>}
           <div className="actions adminFormActions"><Button disabled={busy || !data.transfer_requisites_ready}>Сообщить о переводе</Button></div>
         </form>
@@ -1454,7 +1531,11 @@ function BillingAdmin({ restaurant, preferredPlan }: { restaurant: any; preferre
           const isTransfer = invoice.seller_requisites?.payment_method === 'manual_transfer';
           return <div className="adminRowButton readonly" key={invoice.id}>
             <span><b>{isTransfer ? 'Перевод' : 'Счёт'} № {invoice.number}</b><small>{invoice.plan_title} · {money(invoice.amount)} · {fmtDate(invoice.issued_at)}</small></span>
-            <span className="rowActions"><em className={cx('badge', invoice.status)}>{billingStatusLabel(invoice.status)}</em><Button type="button" kind="soft" onClick={() => download(`/api/billing/invoices/${invoice.id}/html`, `invoice-${invoice.number}.html`)}>Скачать</Button></span>
+            <span className="rowActions">
+              {invoice.receipt_url && <a className="receiptLink" href={invoice.receipt_url} target="_blank" rel="noreferrer">Чек</a>}
+              <em className={cx('badge', invoice.status)}>{billingStatusLabel(invoice.status)}</em>
+              <Button type="button" kind="soft" onClick={() => download(`/api/billing/invoices/${invoice.id}/html`, `invoice-${invoice.number}.html`)}>Скачать</Button>
+            </span>
           </div>;
         }) : <Empty text="Оплат пока нет" />}
       </div>
@@ -2584,6 +2665,17 @@ function readFileAsDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error || new Error('Не удалось прочитать файл'));
     reader.readAsDataURL(file);
   });
+}
+
+async function uploadPayloadFromFile(file: File) {
+  return {
+    name: file.name,
+    file_name: file.name,
+    type: file.type,
+    mime_type: file.type,
+    size: file.size,
+    data: await readFileAsDataUrl(file)
+  };
 }
 
 function Inventory({ user, admin = false }: any) {

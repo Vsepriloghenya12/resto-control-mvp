@@ -51,7 +51,7 @@ const SNAPSHOT_TABLES = [
   { name: 'integration_events', columns: ['id', 'restaurant_id', 'provider', 'event_type', 'external_id', 'payload', 'status', 'received_at', 'processed_at', 'error'], jsonColumns: ['payload'] },
   { name: 'platform_settings', columns: ['id', 'key', 'value', 'updated_at', 'created_at'], jsonColumns: ['value'] },
   { name: 'billing_profiles', columns: ['id', 'restaurant_id', 'customer_type', 'legal_name', 'inn', 'kpp', 'ogrn', 'legal_address', 'bank_name', 'bik', 'checking_account', 'correspondent_account', 'edo_operator', 'edo_id', 'email', 'phone', 'updated_at', 'created_at'] },
-  { name: 'billing_invoices', columns: ['id', 'restaurant_id', 'number', 'status', 'plan', 'plan_title', 'months', 'period_start', 'period_end', 'amount', 'currency', 'customer_requisites', 'seller_requisites', 'issued_at', 'due_at', 'paid_at', 'created_at', 'updated_at'], jsonColumns: ['customer_requisites', 'seller_requisites'] },
+  { name: 'billing_invoices', columns: ['id', 'restaurant_id', 'number', 'status', 'plan', 'plan_title', 'months', 'period_start', 'period_end', 'amount', 'currency', 'customer_requisites', 'seller_requisites', 'issued_at', 'due_at', 'receipt_url', 'receipt_name', 'receipt_mime', 'receipt_uploaded_at', 'paid_at', 'created_at', 'updated_at'], jsonColumns: ['customer_requisites', 'seller_requisites'] },
   { name: 'payments', columns: ['id', 'restaurant_id', 'invoice_id', 'amount', 'currency', 'method', 'reference', 'comment', 'paid_at', 'created_by', 'created_at'] },
   { name: 'closing_documents', columns: ['id', 'restaurant_id', 'invoice_id', 'type', 'number', 'status', 'period_start', 'period_end', 'amount', 'currency', 'issued_at', 'signed_at', 'created_at'] }
 ];
@@ -127,6 +127,10 @@ async function ensurePostgresSchema() {
   await getPool().query(`alter table if exists platform_settings add column if not exists value jsonb not null default '{}'`);
   await getPool().query(`alter table if exists support_tickets add column if not exists client_read_at timestamptz`);
   await getPool().query(`alter table if exists support_tickets add column if not exists platform_read_at timestamptz`);
+  await getPool().query(`alter table if exists billing_invoices add column if not exists receipt_url text`);
+  await getPool().query(`alter table if exists billing_invoices add column if not exists receipt_name text`);
+  await getPool().query(`alter table if exists billing_invoices add column if not exists receipt_mime text`);
+  await getPool().query(`alter table if exists billing_invoices add column if not exists receipt_uploaded_at timestamptz`);
 }
 
 
