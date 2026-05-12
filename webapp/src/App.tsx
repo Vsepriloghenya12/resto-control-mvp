@@ -86,9 +86,18 @@ const billingStatusLabels: Record<string, string> = {
   transfer_pending: 'ожидает перевода',
   cancelled: 'отменён'
 };
+const supportStatusLabels: Record<string, string> = {
+  open: 'новое',
+  answered: 'отвечено',
+  closed: 'закрыто'
+};
 
 function billingStatusLabel(status: string) {
   return billingStatusLabels[status] || status || 'нет';
+}
+
+function supportStatusLabel(status: string) {
+  return supportStatusLabels[status] || status || 'новое';
 }
 
 function transferValue(value: any) {
@@ -157,7 +166,7 @@ function WorkspaceInfoModal({
       </div>
       {text && <p className="infoModalText">{text}</p>}
       {details}
-      <div className="actions">
+      {actions.length > 0 && <div className="actions">
         {actions.map((action) => <Button
           key={action.label}
           type="button"
@@ -169,9 +178,147 @@ function WorkspaceInfoModal({
         >
           {action.label}
         </Button>)}
-      </div>
+      </div>}
     </div>
   </div>;
+}
+
+function SupportConversationList({ tickets, replyValues, onReplyChange, onReply, onStatusChange, admin = false }: any) {
+  if (!tickets.length) return <Empty text="Обращений пока нет" />;
+  return <div className="supportTicketList">
+    {tickets.map((ticket: any, index: number) => <details className="compactAccordion supportTicket" key={ticket.id} open={index === 0}>
+      <summary className="compactAccordionSummary">
+        <span><b>{ticket.subject}</b><small>{ticket.restaurant?.name || ticket.created_by_user?.name || 'Ресторан'} · {fmtDate(ticket.updated_at || ticket.created_at)}</small></span>
+        <em>{supportStatusLabel(ticket.status)}</em>
+      </summary>
+      <div className="compactAccordionBody supportThread">
+        {(ticket.messages || []).map((message: any) => <article className={cx('supportMessage', message.author_type === 'platform' && 'platform')} key={message.id}>
+          <div className="supportMessageHead"><b>{message.author_type === 'platform' ? 'Техподдержка' : message.user?.name || 'Клиент'}</b><span>{fmtDate(message.created_at)}</span></div>
+          <p>{message.body}</p>
+        </article>)}
+        {ticket.status !== 'closed' && <form className="supportReplyForm" onSubmit={(e) => { e.preventDefault(); onReply(ticket.id); }}>
+          <Textarea label={admin ? 'Ответ клиенту' : 'Сообщение в поддержку'} value={replyValues[ticket.id] || ''} onChange={(e: any) => onReplyChange(ticket.id, e.target.value)} placeholder={admin ? 'Напишите ответ' : 'Дополните обращение'} />
+          <div className="actions adminFormActions"><Button>{admin ? 'Ответить' : 'Отправить'}</Button></div>
+        </form>}
+        {admin && <div className="actions compact">
+          {ticket.status !== 'closed' ? <Button type="button" kind="soft" onClick={() => onStatusChange(ticket.id, 'closed')}>Закрыть</Button> : <Button type="button" kind="soft" onClick={() => onStatusChange(ticket.id, 'open')}>Открыть снова</Button>}
+        </div>}
+      </div>
+    </details>)}
+  </div>;
+}
+
+function ClientSupportPanel() {
+  const [tickets, setTickets] = useState<any[]>([]);
+  const [form, setForm] = useState({ subject: '', body: '' });
+  const [replyValues, setReplyValues] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    setTickets(await api('/api/support/tickets'));
+  }
+
+  useEffect(() => { load().catch(() => setTickets([])); }, []);
+
+  async function createTicket(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setMessage('');
+    try {
+      await api('/api/support/tickets', { method: 'POST', body: JSON.stringify(form) });
+      setForm({ subject: '', body: '' });
+      setMessage('Обращение отправлено');
+      await load();
+    } catch (error: any) {
+      setMessage(error.message || 'Не удалось отправить обращение');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function sendReply(ticketId: string) {
+    const body = String(replyValues[ticketId] || '').trim();
+    if (!body) return;
+    setBusy(true);
+    setMessage('');
+    try {
+      await api(`/api/support/tickets/${ticketId}/messages`, { method: 'POST', body: JSON.stringify({ body }) });
+      setReplyValues((current) => ({ ...current, [ticketId]: '' }));
+      await load();
+    } catch (error: any) {
+      setMessage(error.message || 'Не удалось отправить сообщение');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <div className="supportPanel">
+    <form className="supportCreateForm" onSubmit={createTicket}>
+      <Field label="Тема" value={form.subject} onChange={(e: any) => setForm({ ...form, subject: e.target.value })} placeholder="Что нужно помочь решить" />
+      <Textarea label="Сообщение" value={form.body} onChange={(e: any) => setForm({ ...form, body: e.target.value })} placeholder="Опишите вопрос или проблему" />
+      <div className="actions adminFormActions"><Button disabled={busy}>Написать в поддержку</Button></div>
+    </form>
+    {message && <div className={message.includes('Не удалось') ? 'error' : 'notice'}>{message}</div>}
+    <SupportConversationList tickets={tickets} replyValues={replyValues} onReplyChange={(id: string, value: string) => setReplyValues((current) => ({ ...current, [id]: value }))} onReply={sendReply} />
+  </div>;
+}
+
+function SuperSupportAdmin() {
+  const [tickets, setTickets] = useState<any[]>([]);
+  const [replyValues, setReplyValues] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    setTickets(await api('/api/super/support/tickets'));
+  }
+
+  useEffect(() => { load().catch(() => setTickets([])); }, []);
+
+  async function sendReply(ticketId: string) {
+    const body = String(replyValues[ticketId] || '').trim();
+    if (!body) return;
+    setBusy(true);
+    setMessage('');
+    try {
+      await api(`/api/super/support/tickets/${ticketId}/messages`, { method: 'POST', body: JSON.stringify({ body }) });
+      setReplyValues((current) => ({ ...current, [ticketId]: '' }));
+      setMessage('Ответ отправлен');
+      await load();
+    } catch (error: any) {
+      setMessage(error.message || 'Не удалось отправить ответ');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updateStatus(ticketId: string, status: string) {
+    setBusy(true);
+    setMessage('');
+    try {
+      await api(`/api/super/support/tickets/${ticketId}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+      await load();
+    } catch (error: any) {
+      setMessage(error.message || 'Не удалось обновить обращение');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const openCount = tickets.filter((ticket) => ticket.status !== 'closed').length;
+  return <Card title="Техподдержка" right={<span className="badge active">{openCount} открыто</span>}>
+    {message && <div className={message.includes('Не удалось') ? 'error compactNotice' : 'notice compactNotice'}>{message}</div>}
+    <SupportConversationList
+      tickets={tickets}
+      replyValues={replyValues}
+      onReplyChange={(id: string, value: string) => setReplyValues((current) => ({ ...current, [id]: value }))}
+      onReply={sendReply}
+      onStatusChange={updateStatus}
+      admin
+      busy={busy}
+    />
+  </Card>;
 }
 
 function CameraCapture({ title, onCapture, onClose }: { title: string; onCapture: (photo: string) => void; onClose: () => void }) {
@@ -476,6 +623,7 @@ const navIcons: Record<string, IconName> = {
   inventory: 'inventory',
   tasks: 'tasks',
   knowledge: 'knowledge',
+  support: 'support',
   restaurants: 'overview',
   payments: 'trial',
   billingSettings: 'trial',
@@ -609,12 +757,10 @@ function RestaurantWorkspace({
       }
     : modalKind === 'support'
       ? {
-          title: 'Поддержка и сопровождение',
-          text: 'Если нужно быстро разобраться в процессах, начните с базы знаний или вернитесь к обзору ресторана.',
-          actions: [
-            { label: 'База знаний', kind: 'primary', onClick: () => setActive('knowledge') },
-            { label: 'Открыть обзор', onClick: () => setActive('overview') }
-          ]
+          title: 'Техподдержка',
+          text: 'Напишите владельцу приложения, если нужна помощь с оплатой, доступом или работой сервиса.',
+          details: <ClientSupportPanel />,
+          actions: []
         }
       : modalKind === 'billing'
         ? {
@@ -805,7 +951,7 @@ function SuperAdmin({ user, onLogout }: any) {
   return <BasicWorkspace
     user={user}
     subtitle="Супер-админ создателя"
-    tabs={withIcons([{ id: 'restaurants', title: 'Рестораны' }, { id: 'payments', title: 'Оплаты' }, { id: 'billingSettings', title: 'Реквизиты' }, { id: 'create', title: 'Создать' }])}
+    tabs={withIcons([{ id: 'restaurants', title: 'Рестораны' }, { id: 'payments', title: 'Оплаты' }, { id: 'support', title: 'Техподдержка' }, { id: 'billingSettings', title: 'Реквизиты' }, { id: 'create', title: 'Создать' }])}
     active={tab}
     setActive={setTab}
     onLogout={onLogout}
@@ -832,6 +978,7 @@ function SuperAdmin({ user, onLogout }: any) {
         </details>) : <Empty text="Счетов пока нет" />}
       </div>
     </Card>}
+    {tab === 'support' && <SuperSupportAdmin />}
     {tab === 'billingSettings' && <Card title="Реквизиты оплаты">
       <form className="form two compactAdminForm billingSettingsForm" onSubmit={saveBillingSettings}>
         <div className="billingSettingsGroup">

@@ -1220,6 +1220,26 @@ function collection(name) {
   return db[name];
 }
 
+function supportTicketDetails(ticket) {
+  const messages = collection('support_messages')
+    .filter(message => message.ticket_id === ticket.id)
+    .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')))
+    .map(message => ({
+      ...message,
+      user: publicUser(db.users.find(user => user.id === message.user_id))
+    }));
+  return {
+    ...ticket,
+    restaurant: db.restaurants.find(restaurant => restaurant.id === ticket.restaurant_id) || null,
+    created_by_user: publicUser(db.users.find(user => user.id === ticket.created_by)),
+    messages
+  };
+}
+
+function canUseClientSupport(req) {
+  return Boolean(req.user?.restaurant_id && ['owner', 'manager'].includes(req.user.role));
+}
+
 function actorName(userId) {
   return db.users.find(u => u.id === userId)?.name || 'Система';
 }
@@ -1832,6 +1852,111 @@ app.patch('/api/super/billing/settings', auth, superOnly, runAsync(async (req, r
   savePlatformBillingSettings(settings);
   await persist();
   res.json(publicPlatformBillingSettings());
+}));
+
+app.get('/api/super/support/tickets', auth, superOnly, (req, res) => {
+  const rows = collection('support_tickets')
+    .map(supportTicketDetails)
+    .sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')));
+  res.json(rows);
+});
+
+app.post('/api/super/support/tickets/:id/messages', auth, superOnly, runAsync(async (req, res) => {
+  const ticket = collection('support_tickets').find(item => item.id === req.params.id);
+  if (!ticket) return res.status(404).json({ error: 'Обращение не найдено' });
+  const body = String(req.body?.body || '').trim();
+  if (!body) return res.status(400).json({ error: 'Введите ответ' });
+  const message = {
+    id: uid('supmsg'),
+    restaurant_id: ticket.restaurant_id,
+    ticket_id: ticket.id,
+    user_id: req.user.id,
+    author_type: 'platform',
+    body,
+    created_at: nowIso()
+  };
+  collection('support_messages').push(message);
+  ticket.status = 'answered';
+  ticket.updated_at = message.created_at;
+  ticket.closed_at = null;
+  notifyUsers(ticket.restaurant_id, db.users.filter(user => user.restaurant_id === ticket.restaurant_id && user.role === 'owner'), { title: 'Ответ техподдержки', body: ticket.subject, entity_type: 'support_ticket', entity_id: ticket.id });
+  await persist();
+  res.status(201).json(supportTicketDetails(ticket));
+}));
+
+app.patch('/api/super/support/tickets/:id', auth, superOnly, runAsync(async (req, res) => {
+  const ticket = collection('support_tickets').find(item => item.id === req.params.id);
+  if (!ticket) return res.status(404).json({ error: 'Обращение не найдено' });
+  const status = String(req.body?.status || '').trim();
+  if (!['open', 'answered', 'closed'].includes(status)) return res.status(400).json({ error: 'Некорректный статус обращения' });
+  ticket.status = status;
+  ticket.updated_at = nowIso();
+  ticket.closed_at = status === 'closed' ? nowIso() : null;
+  await persist();
+  res.json(supportTicketDetails(ticket));
+}));
+
+app.get('/api/support/tickets', auth, (req, res) => {
+  if (!canUseClientSupport(req)) return res.status(403).json({ error: 'Поддержка доступна владельцу и менеджеру ресторана' });
+  const rows = sameRestaurant(collection('support_tickets'), req.user.restaurant_id)
+    .map(supportTicketDetails)
+    .sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')));
+  res.json(rows);
+});
+
+app.post('/api/support/tickets', auth, runAsync(async (req, res) => {
+  if (!canUseClientSupport(req)) return res.status(403).json({ error: 'Поддержка доступна владельцу и менеджеру ресторана' });
+  const subject = String(req.body?.subject || '').trim();
+  const body = String(req.body?.body || '').trim();
+  if (!subject || !body) return res.status(400).json({ error: 'Введите тему и сообщение' });
+  const createdAt = nowIso();
+  const ticket = {
+    id: uid('supt'),
+    restaurant_id: req.user.restaurant_id,
+    created_by: req.user.id,
+    subject,
+    status: 'open',
+    created_at: createdAt,
+    updated_at: createdAt,
+    closed_at: null
+  };
+  const message = {
+    id: uid('supmsg'),
+    restaurant_id: req.user.restaurant_id,
+    ticket_id: ticket.id,
+    user_id: req.user.id,
+    author_type: 'client',
+    body,
+    created_at: createdAt
+  };
+  collection('support_tickets').push(ticket);
+  collection('support_messages').push(message);
+  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'support_ticket_created', title: `${req.user.name} написал в техподдержку`, entity_type: 'support_ticket', entity_id: ticket.id, metadata: { subject } });
+  await persist();
+  res.status(201).json(supportTicketDetails(ticket));
+}));
+
+app.post('/api/support/tickets/:id/messages', auth, runAsync(async (req, res) => {
+  if (!canUseClientSupport(req)) return res.status(403).json({ error: 'Поддержка доступна владельцу и менеджеру ресторана' });
+  const ticket = sameRestaurant(collection('support_tickets'), req.user.restaurant_id).find(item => item.id === req.params.id);
+  if (!ticket) return res.status(404).json({ error: 'Обращение не найдено' });
+  const body = String(req.body?.body || '').trim();
+  if (!body) return res.status(400).json({ error: 'Введите сообщение' });
+  const message = {
+    id: uid('supmsg'),
+    restaurant_id: req.user.restaurant_id,
+    ticket_id: ticket.id,
+    user_id: req.user.id,
+    author_type: 'client',
+    body,
+    created_at: nowIso()
+  };
+  collection('support_messages').push(message);
+  ticket.status = 'open';
+  ticket.updated_at = message.created_at;
+  ticket.closed_at = null;
+  await persist();
+  res.status(201).json(supportTicketDetails(ticket));
 }));
 
 // RESTAURANT OVERVIEW

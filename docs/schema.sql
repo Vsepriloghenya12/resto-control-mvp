@@ -317,6 +317,29 @@ create table if not exists comments (
   created_at timestamptz not null default now()
 );
 
+create table if not exists support_tickets (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  created_by text references users(id),
+  subject text not null,
+  status text not null default 'open',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  closed_at timestamptz
+);
+
+create table if not exists support_messages (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  ticket_id text not null references support_tickets(id) on delete cascade,
+  user_id text references users(id),
+  author_type text not null default 'client',
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_support_tickets_restaurant on support_tickets(restaurant_id, status, updated_at);
+create index if not exists idx_support_messages_ticket on support_messages(ticket_id, created_at);
 
 create table if not exists integrations (
   id text primary key,
