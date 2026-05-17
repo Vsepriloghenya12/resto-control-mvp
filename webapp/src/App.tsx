@@ -1258,7 +1258,7 @@ function IntegrationsAdmin() {
   const integration = data.integration || {};
   const mappings = data.mappings || {};
   const events = data.events || [];
-  const autonomous = form.autonomous || integration.status === 'autonomous' || !integration.has_api_login;
+  const autonomous = Boolean(form.autonomous);
 
   return <div className="contentStack integrationsAdmin">
     <Card title="Интеграции">
