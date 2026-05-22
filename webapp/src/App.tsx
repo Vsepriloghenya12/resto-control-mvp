@@ -30,6 +30,7 @@ import { APP_UPDATE_AVAILABLE_EVENT, applyAppUpdateNow, type AppVersionInfo } fr
 import { initialTabFromUrl, requestPwaInstall } from './pwa-install';
 import {
   checklistRunStatuses,
+  checklistRoles,
   checklistTypes,
   checklistRoleMatchesUser,
   departments,
@@ -2268,13 +2269,14 @@ function Checklists({ user, admin = false }: any) {
   const [shiftState, setShiftState] = useState<any>({ current: null, last_closed: null });
   const [templateForm, setTemplateForm] = useState<any>({
     title: '',
-    role: 'manager',
+    role: 'waiter',
     type: 'open',
     items: [{ id: '', text: '', required: true, needs_photo: false, needs_comment: false }]
   });
-  const editableRoleEntries = admin ? executableRoles.filter(([key]) => manageableRolesFor(user).includes(key)) : executableRoles;
-  const editorRoleOptions = editableRoleEntries.length ? editableRoleEntries : executableRoles;
-  const defaultTemplateRole = editorRoleOptions[0]?.[0] || 'manager';
+  const checklistRoleEntries = Object.entries(checklistRoles);
+  const editableRoleEntries = admin ? checklistRoleEntries.filter(([key]) => manageableRolesFor(user).includes(key)) : checklistRoleEntries;
+  const editorRoleOptions = editableRoleEntries.length ? editableRoleEntries : checklistRoleEntries;
+  const defaultTemplateRole = editorRoleOptions[0]?.[0] || 'waiter';
   useEffect(() => {
     if (admin && editorRoleOptions.length && !editorRoleOptions.some(([key]) => key === templateForm.role)) {
       setTemplateForm((current: any) => ({ ...current, role: editorRoleOptions[0][0] }));
@@ -2465,7 +2467,7 @@ function Checklists({ user, admin = false }: any) {
     ? templates
     : templates.filter((template) => checklistRoleMatchesUser(template.role, user.role));
   const adminTemplates = admin
-    ? [...availableTemplates].sort((a, b) => String(roles[a.role] || a.role).localeCompare(String(roles[b.role] || b.role), 'ru') || String(a.title || '').localeCompare(String(b.title || ''), 'ru'))
+    ? [...availableTemplates].sort((a, b) => String(checklistRoles[a.role] || roles[a.role] || a.role).localeCompare(String(checklistRoles[b.role] || roles[b.role] || b.role), 'ru') || String(a.title || '').localeCompare(String(b.title || ''), 'ru'))
     : [];
   const completedRuns = runs.filter((run) => ['completed', 'done'].includes(run.status));
 
@@ -2680,7 +2682,7 @@ function Checklists({ user, admin = false }: any) {
               <div className="checklistTemplateCardHead">
                 <div>
                   <strong>{template.title}</strong>
-                  <span>{roles[template.role] || template.role} · {checklistTypes[template.type] || template.type}</span>
+                  <span>{checklistRoles[template.role] || roles[template.role] || template.role} · {checklistTypes[template.type] || template.type}</span>
                 </div>
                 <em>{template.items?.length || 0} пунктов</em>
               </div>

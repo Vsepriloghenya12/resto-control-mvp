@@ -7,7 +7,8 @@ export const roles: Record<string, string> = {
   hostess: 'Хостес',
   waiter: 'Официант',
   bartender: 'Бармен',
-  cook: 'Повар'
+  cook: 'Повар',
+  cleaning: 'Клининг'
 };
 
 export const seniorRoles = ['senior_waiter', 'senior_bartender', 'senior_cook'];
@@ -16,20 +17,31 @@ export const departmentRoleMap: Record<string, string[]> = {
   hall: ['senior_waiter', 'waiter', 'hostess'],
   bar: ['senior_bartender', 'bartender'],
   kitchen: ['senior_cook', 'cook'],
+  cleaning: ['cleaning'],
   common: ['manager']
+};
+
+export const checklistRoles: Record<string, string> = {
+  cook: 'Повара',
+  bartender: 'Бармены',
+  hostess: 'Хостес',
+  waiter: 'Официанты',
+  cleaning: 'Клининг'
 };
 
 const checklistRoleViewers: Record<string, string[]> = {
   waiter: ['waiter', 'senior_waiter'],
   hostess: ['hostess', 'senior_waiter'],
   bartender: ['bartender', 'senior_bartender'],
-  cook: ['cook', 'senior_cook']
+  cook: ['cook', 'senior_cook'],
+  cleaning: ['cleaning']
 };
 
 export function roleDepartment(role?: string) {
   if (role === 'senior_waiter' || role === 'waiter' || role === 'hostess') return 'hall';
   if (role === 'senior_bartender' || role === 'bartender') return 'bar';
   if (role === 'senior_cook' || role === 'cook') return 'kitchen';
+  if (role === 'cleaning') return 'cleaning';
   return 'common';
 }
 
@@ -59,6 +71,7 @@ export const departments: Record<string, string> = {
   hall: 'Зал',
   bar: 'Бар',
   kitchen: 'Кухня',
+  cleaning: 'Клининг',
   common: 'Общее'
 };
 

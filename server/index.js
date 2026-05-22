@@ -43,10 +43,12 @@ const DEPARTMENT_ROLE_MAP = {
   hall: ['senior_waiter', 'waiter', 'hostess'],
   bar: ['senior_bartender', 'bartender'],
   kitchen: ['senior_cook', 'cook'],
+  cleaning: ['cleaning'],
   common: ['manager']
 };
-const STAFF_ROLES = ['manager', 'senior_waiter', 'senior_bartender', 'senior_cook', 'hostess', 'waiter', 'bartender', 'cook'];
-const departments = { hall: 'Зал', bar: 'Бар', kitchen: 'Кухня', common: 'Общее' };
+const STAFF_ROLES = ['manager', 'senior_waiter', 'senior_bartender', 'senior_cook', 'hostess', 'waiter', 'bartender', 'cook', 'cleaning'];
+const CHECKLIST_ROLES = ['cook', 'bartender', 'hostess', 'waiter', 'cleaning'];
+const departments = { hall: 'Зал', bar: 'Бар', kitchen: 'Кухня', cleaning: 'Клининг', common: 'Общее' };
 const techRequestStatuses = { new: 'новая', in_progress: 'в работе', done: 'выполнена', cancelled: 'отклонена' };
 const problemTypeLabels = { task: 'Задача', tech_request: 'Проблема', checklist_run: 'Чек-лист', inventory_run: 'Инвентаризация', booking: 'Бронь' };
 const bookingStatuses = { booked: 'забронирован', seated: 'гости пришли', completed: 'завершён', cancelled: 'отменён' };
@@ -54,7 +56,8 @@ const CHECKLIST_ROLE_VIEWERS = {
   waiter: ['waiter', 'senior_waiter'],
   hostess: ['hostess', 'senior_waiter'],
   bartender: ['bartender', 'senior_bartender'],
-  cook: ['cook', 'senior_cook']
+  cook: ['cook', 'senior_cook'],
+  cleaning: ['cleaning']
 };
 const tariffEmployeeLimits = {
   trial: 10,
@@ -170,6 +173,7 @@ function roleDepartment(role) {
   if (role === 'hostess' || role === 'waiter' || role === 'senior_waiter') return 'hall';
   if (role === 'bartender' || role === 'senior_bartender') return 'bar';
   if (role === 'cook' || role === 'senior_cook') return 'kitchen';
+  if (role === 'cleaning') return 'cleaning';
   return 'common';
 }
 
@@ -187,6 +191,10 @@ function manageableRolesForUser(user) {
 
 function canManageRole(user, role) {
   return manageableRolesForUser(user).includes(role);
+}
+
+function canManageChecklistRole(user, role) {
+  return CHECKLIST_ROLES.includes(role) && canManageRole(user, role);
 }
 
 function checklistRoleMatchesUser(templateRole, userRole) {
@@ -2402,7 +2410,7 @@ app.delete('/api/admin/users/:id', auth, ensureRestaurantActive, adminOnly, runA
 // CHECKLISTS
 app.get('/api/checklists/templates', auth, ensureRestaurantActive, (req, res) => {
   const rid = req.user.restaurant_id;
-  const manageableRoles = manageableRolesForUser(req.user);
+  const manageableRoles = manageableRolesForUser(req.user).filter(role => CHECKLIST_ROLES.includes(role));
   const role = MANAGER_ROLES.includes(req.user.role) ? req.query.role : req.user.role;
   const templates = sameRestaurant(db.checklist_templates, rid)
     .filter(t => t.active)
@@ -2419,8 +2427,8 @@ app.post('/api/admin/checklists/templates', auth, ensureRestaurantActive, operat
   const rid = req.user.restaurant_id;
   const { title, role, type, items } = req.body;
   if (!title || !role || !type) return res.status(400).json({ error: 'Нужны название, роль и тип' });
-  if (!STAFF_ROLES.includes(String(role))) return res.status(400).json({ error: 'Чек-лист можно назначить только рабочей роли, не владельцу' });
-  if (!canManageRole(req.user, String(role))) return res.status(403).json({ error: 'Можно редактировать чек-листы только своего подразделения' });
+  if (!CHECKLIST_ROLES.includes(String(role))) return res.status(400).json({ error: 'Чек-лист можно назначить только группе: повара, бармены, хостес, официанты или клининг' });
+  if (!canManageChecklistRole(req.user, String(role))) return res.status(403).json({ error: 'Можно редактировать чек-листы только своего подразделения' });
   const normalized = normalizeChecklistTemplateItems(items);
   if (normalized.error) return res.status(400).json({ error: normalized.error });
   const template = { id: uid('cltpl'), restaurant_id: rid, title, role, type, active: true, created_at: nowIso() };
@@ -2441,10 +2449,10 @@ app.patch('/api/admin/checklists/templates/:id', auth, ensureRestaurantActive, o
   if (!nextTitle || !nextRole || !nextType) {
     return res.status(400).json({ error: 'Нужны название, роль и тип' });
   }
-  if (!STAFF_ROLES.includes(nextRole)) {
-    return res.status(400).json({ error: 'Чек-лист можно назначить только рабочей роли, не владельцу' });
+  if (!CHECKLIST_ROLES.includes(nextRole)) {
+    return res.status(400).json({ error: 'Чек-лист можно назначить только группе: повара, бармены, хостес, официанты или клининг' });
   }
-  if (!canManageRole(req.user, template.role) || !canManageRole(req.user, nextRole)) {
+  if (!canManageChecklistRole(req.user, template.role) || !canManageChecklistRole(req.user, nextRole)) {
     return res.status(403).json({ error: 'Можно редактировать чек-листы только своего подразделения' });
   }
 
@@ -2500,7 +2508,7 @@ app.delete('/api/admin/checklists/templates/:id', auth, ensureRestaurantActive, 
   const rid = req.user.restaurant_id;
   const template = db.checklist_templates.find(t => t.id === req.params.id && t.restaurant_id === rid && t.active);
   if (!template) return res.status(404).json({ error: 'Чек-лист не найден' });
-  if (!canManageRole(req.user, template.role)) {
+  if (!canManageChecklistRole(req.user, template.role)) {
     return res.status(403).json({ error: 'Можно удалять чек-листы только своего подразделения' });
   }
 
@@ -2612,7 +2620,7 @@ app.get('/api/admin/checklists/runs', auth, ensureRestaurantActive, operationalE
     template: db.checklist_templates.find(t => t.id === run.template_id),
     answers: db.checklist_answers.filter(a => a.run_id === run.id)
   })).sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const visibleRows = SENIOR_ROLES.includes(req.user.role) ? rows.filter(row => canManageRole(req.user, row.template?.role)) : rows;
+  const visibleRows = SENIOR_ROLES.includes(req.user.role) ? rows.filter(row => canManageChecklistRole(req.user, row.template?.role)) : rows;
   res.json(visibleRows);
 });
 

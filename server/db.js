@@ -317,6 +317,7 @@ export function roleToDepartment(role) {
   if (role === 'hostess' || role === 'waiter' || role === 'senior_waiter') return 'hall';
   if (role === 'bartender' || role === 'senior_bartender') return 'bar';
   if (role === 'cook' || role === 'senior_cook') return 'kitchen';
+  if (role === 'cleaning') return 'cleaning';
   return 'common';
 }
 
