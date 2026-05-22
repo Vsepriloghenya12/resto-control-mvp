@@ -1315,8 +1315,8 @@ function sendCsv(res, filename, rows) {
 }
 
 function billingAccess(req, res, next) {
-  if (req.user?.is_super_admin || req.user?.role === 'owner') return next();
-  return res.status(403).json({ error: 'Доступ к оплате только для владельца' });
+  if (req.user?.is_super_admin || ['owner', 'manager'].includes(req.user?.role)) return next();
+  return res.status(403).json({ error: 'Доступ к оплате только для владельца или менеджера' });
 }
 
 function getBillingProfile(restaurantId) {
@@ -1441,6 +1441,81 @@ function publicPlatformBillingSettings() {
     seller_requisites_ready: sellerRequisitesReady(),
     transfer_requisites: currentTransferRequisites(),
     transfer_requisites_ready: transferRequisitesReady()
+  };
+}
+
+function restaurantBillingUsers(restaurantId) {
+  return db.users.filter(user => user.restaurant_id === restaurantId && user.active && ['owner', 'manager'].includes(user.role));
+}
+
+function notifyPlatformBilling(invoice, title, body) {
+  logActivity({
+    restaurant_id: invoice.restaurant_id,
+    actor_id: null,
+    type: 'platform_billing_notice',
+    title,
+    entity_type: 'billing_invoice',
+    entity_id: invoice.id,
+    metadata: { body }
+  });
+}
+
+function buildBillingInvoice({ restaurantId, planId = 'standard', months = 1, periodStartValue = null }) {
+  const restaurant = db.restaurants.find(r => r.id === restaurantId);
+  if (!restaurant) {
+    const error = new Error('Ресторан не найден');
+    error.status = 404;
+    throw error;
+  }
+  const profile = getBillingProfile(restaurantId);
+  const profileError = validateBillingProfile(publicBillingProfile(profile));
+  if (profileError) {
+    const error = new Error(profileError);
+    error.status = 400;
+    throw error;
+  }
+  if (!sellerRequisitesReady()) {
+    const error = new Error('Заполните реквизиты для счетов у владельца приложения');
+    error.status = 400;
+    throw error;
+  }
+  const plan = billingPlan(String(planId || 'standard'));
+  if (plan.id === 'enterprise') {
+    const error = new Error('Для Enterprise сформируйте индивидуальный счёт');
+    error.status = 400;
+    throw error;
+  }
+  const periodMonths = Math.max(1, Math.min(12, Number(months || 1) || 1));
+  const periodStart = periodStartValue ? new Date(periodStartValue) : new Date();
+  if (Number.isNaN(periodStart.getTime())) {
+    const error = new Error('Некорректное начало периода');
+    error.status = 400;
+    throw error;
+  }
+  const amount = Number(plan.monthly_amount || 0) * periodMonths;
+  return {
+    id: uid('inv'),
+    restaurant_id: restaurantId,
+    number: invoiceNumber(),
+    status: 'issued',
+    plan: plan.id,
+    plan_title: plan.title,
+    months: periodMonths,
+    period_start: periodStart.toISOString(),
+    period_end: addMonthsIso(periodStart, periodMonths),
+    amount,
+    currency: 'RUB',
+    customer_requisites: publicBillingProfile(profile),
+    seller_requisites: currentSellerRequisites(),
+    issued_at: nowIso(),
+    due_at: addDays(7),
+    receipt_url: '',
+    receipt_name: '',
+    receipt_mime: '',
+    receipt_uploaded_at: null,
+    paid_at: null,
+    created_at: nowIso(),
+    updated_at: nowIso()
   };
 }
 
@@ -1887,7 +1962,7 @@ app.get('/api/super/restaurants', auth, superOnly, (req, res) => {
       users_count: users.length,
       checklist_runs_count: db.checklist_runs.filter(x => x.restaurant_id === r.id).length,
       billing_invoices_count: invoices.length,
-      pending_transfer_count: invoices.filter(invoice => invoice.status === 'transfer_pending').length,
+      pending_transfer_count: invoices.filter(invoice => ['transfer_pending', 'payment_reported', 'payment_document_attached'].includes(invoice.status)).length,
       receipt_invoices_count: invoices.filter(invoice => invoice.receipt_url).length,
       latest_invoice: invoices[0] || null
     };
@@ -3480,98 +3555,48 @@ app.patch('/api/billing/requisites', auth, billingAccess, runAsync(async (req, r
 }));
 
 app.post('/api/billing/invoices', auth, billingAccess, runAsync(async (req, res) => {
-  const rid = req.user.restaurant_id;
-  const restaurant = db.restaurants.find(r => r.id === rid);
-  const profile = getBillingProfile(rid);
-  const profileError = validateBillingProfile(publicBillingProfile(profile));
-  if (profileError) return res.status(400).json({ error: profileError });
-  if (!sellerRequisitesReady()) {
-    return res.status(400).json({ error: 'Заполните реквизиты для счетов у владельца приложения' });
-  }
-  const plan = billingPlan(String(req.body?.plan || 'standard'));
-  if (plan.id === 'enterprise') return res.status(400).json({ error: 'Для Enterprise сформируйте индивидуальный счёт' });
-  const months = Math.max(1, Math.min(12, Number(req.body?.months || 1) || 1));
-  const periodStart = req.body?.period_start ? new Date(req.body.period_start) : new Date();
-  if (Number.isNaN(periodStart.getTime())) return res.status(400).json({ error: 'Некорректное начало периода' });
-  const amount = Number(plan.monthly_amount || 0) * months;
-  const invoice = {
-    id: uid('inv'),
-    restaurant_id: rid,
-    number: invoiceNumber(),
-    status: 'issued',
-    plan: plan.id,
-    plan_title: plan.title,
-    months,
-    period_start: periodStart.toISOString(),
-    period_end: addMonthsIso(periodStart, months),
-    amount,
-    currency: 'RUB',
-    customer_requisites: publicBillingProfile(profile),
-    seller_requisites: currentSellerRequisites(),
-    issued_at: nowIso(),
-    due_at: addDays(7),
-    paid_at: null,
-    created_at: nowIso(),
-    updated_at: nowIso()
-  };
-  collection('billing_invoices').push(invoice);
-  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'invoice_created', title: `Сформирован счёт № ${invoice.number}`, entity_type: 'billing_invoice', entity_id: invoice.id, metadata: { amount } });
-  await persist();
-  res.status(201).json(invoice);
+  res.status(403).json({ error: 'Счёт выставляет владелец приложения после заполнения реквизитов ресторана' });
 }));
 
 app.post('/api/billing/transfer-requests', auth, billingAccess, runAsync(async (req, res) => {
-  const rid = req.user.restaurant_id;
-  const restaurant = db.restaurants.find(r => r.id === rid);
-  if (!rid || !restaurant) return res.status(400).json({ error: 'Оплата доступна только из карточки ресторана' });
-  const transferRequisites = currentTransferRequisites();
-  if (!transferRequisitesReady()) {
-    return res.status(400).json({ error: 'Заполните телефон или карту для оплаты переводом у владельца приложения' });
+  res.status(403).json({ error: 'Сначала дождитесь выставленного счёта, затем отметьте его как оплаченный' });
+}));
+
+app.post('/api/billing/invoices/:id/report-paid', auth, billingAccess, runAsync(async (req, res) => {
+  const invoice = collection('billing_invoices').find(item => item.id === req.params.id && item.restaurant_id === req.user.restaurant_id);
+  if (!invoice) return res.status(404).json({ error: 'Счёт не найден' });
+  if (invoice.status === 'paid') return res.json(invoice);
+  if (!['issued', 'payment_rejected', 'payment_document_attached', 'transfer_pending'].includes(invoice.status)) {
+    return res.status(400).json({ error: 'По этому счёту уже отправлено уведомление об оплате' });
   }
-  const plan = billingPlan(String(req.body?.plan || 'standard'));
-  if (plan.id === 'enterprise') return res.status(400).json({ error: 'Для Enterprise согласуйте индивидуальную оплату' });
-  const months = Math.max(1, Math.min(12, Number(req.body?.months || 1) || 1));
-  const periodStart = req.body?.period_start ? new Date(req.body.period_start) : new Date();
-  if (Number.isNaN(periodStart.getTime())) return res.status(400).json({ error: 'Некорректное начало периода' });
-  const amount = Number(plan.monthly_amount || 0) * months;
+  invoice.status = 'payment_reported';
+  invoice.updated_at = nowIso();
+  logActivity({ restaurant_id: invoice.restaurant_id, actor_id: req.user.id, type: 'invoice_payment_reported', title: `${req.user.name} отметил счёт № ${invoice.number} как оплаченный`, entity_type: 'billing_invoice', entity_id: invoice.id, metadata: { amount: invoice.amount } });
+  notifyPlatformBilling(invoice, 'Клиент отметил оплату', `${req.restaurant?.name || 'Ресторан'}: счёт № ${invoice.number}, ${money(invoice.amount)}`);
+  await persist();
+  res.json(invoice);
+}));
+
+app.post('/api/billing/invoices/:id/payment-order', auth, billingAccess, runAsync(async (req, res) => {
+  const invoice = collection('billing_invoices').find(item => item.id === req.params.id && item.restaurant_id === req.user.restaurant_id);
+  if (!invoice) return res.status(404).json({ error: 'Счёт не найден' });
+  if (invoice.status === 'paid') return res.status(400).json({ error: 'Счёт уже оплачен' });
   let receipt;
   try {
-    receipt = saveBillingReceipt(req.body?.receipt || req.body?.receipt_file, rid);
+    receipt = saveBillingReceipt(req.body?.receipt || req.body?.receipt_file, invoice.restaurant_id);
   } catch (error) {
-    return res.status(400).json({ error: error.message || 'Не удалось сохранить чек оплаты' });
+    return res.status(400).json({ error: error.message || 'Не удалось сохранить платёжное поручение' });
   }
-  const invoice = {
-    id: uid('inv'),
-    restaurant_id: rid,
-    number: sequenceNumber('PAY', collection('billing_invoices')),
-    status: 'transfer_pending',
-    plan: plan.id,
-    plan_title: plan.title,
-    months,
-    period_start: periodStart.toISOString(),
-    period_end: addMonthsIso(periodStart, months),
-    amount,
-    currency: 'RUB',
-    customer_requisites: {
-      legal_name: restaurant?.name || 'Ресторан',
-      email: restaurant?.email || '',
-      phone: restaurant?.phone || ''
-    },
-    seller_requisites: { ...transferRequisites, payment_method: 'manual_transfer' },
-    issued_at: nowIso(),
-    due_at: addDays(3),
-    receipt_url: receipt.url,
-    receipt_name: receipt.name,
-    receipt_mime: receipt.mime_type,
-    receipt_uploaded_at: receipt.uploaded_at,
-    paid_at: null,
-    created_at: nowIso(),
-    updated_at: nowIso()
-  };
-  collection('billing_invoices').push(invoice);
-  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'transfer_payment_requested', title: `${req.user.name} отправил заявку на оплату переводом`, entity_type: 'billing_invoice', entity_id: invoice.id, metadata: { amount, plan: plan.id, months } });
+  invoice.status = 'payment_document_attached';
+  invoice.receipt_url = receipt.url;
+  invoice.receipt_name = receipt.name;
+  invoice.receipt_mime = receipt.mime_type;
+  invoice.receipt_uploaded_at = receipt.uploaded_at;
+  invoice.updated_at = nowIso();
+  logActivity({ restaurant_id: invoice.restaurant_id, actor_id: req.user.id, type: 'payment_order_attached', title: `${req.user.name} прикрепил платёжное поручение к счёту № ${invoice.number}`, entity_type: 'billing_invoice', entity_id: invoice.id, metadata: { receipt_name: receipt.name } });
+  notifyPlatformBilling(invoice, 'Платёжное поручение прикреплено', `${req.restaurant?.name || 'Ресторан'}: счёт № ${invoice.number}`);
   await persist();
-  res.status(201).json(invoice);
+  res.json(invoice);
 }));
 
 app.get('/api/billing/invoices/:id/html', auth, billingAccess, (req, res) => {
@@ -3636,26 +3661,59 @@ app.get('/api/super/billing/invoices', auth, superOnly, (req, res) => {
   res.json(rows);
 });
 
+app.post('/api/super/billing/invoices', auth, superOnly, runAsync(async (req, res) => {
+  let invoice;
+  try {
+    invoice = buildBillingInvoice({
+      restaurantId: String(req.body?.restaurant_id || '').trim(),
+      planId: req.body?.plan,
+      months: req.body?.months,
+      periodStartValue: req.body?.period_start
+    });
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message || 'Не удалось выставить счёт' });
+  }
+  collection('billing_invoices').push(invoice);
+  const restaurant = db.restaurants.find(r => r.id === invoice.restaurant_id);
+  logActivity({ restaurant_id: invoice.restaurant_id, actor_id: req.user.id, type: 'invoice_issued_by_platform', title: `Выставлен счёт № ${invoice.number}`, entity_type: 'billing_invoice', entity_id: invoice.id, metadata: { amount: invoice.amount, plan: invoice.plan, months: invoice.months } });
+  notifyUsers(invoice.restaurant_id, restaurantBillingUsers(invoice.restaurant_id), {
+    title: 'Выставлен счёт на оплату',
+    body: `Счёт № ${invoice.number} на ${money(invoice.amount)} доступен в разделе оплаты`,
+    entity_type: 'billing_invoice',
+    entity_id: invoice.id
+  });
+  await persist();
+  res.status(201).json({ ...invoice, restaurant });
+}));
+
 app.post('/api/super/billing/invoices/:id/mark-paid', auth, superOnly, runAsync(async (req, res) => {
   const invoice = collection('billing_invoices').find(item => item.id === req.params.id);
   if (!invoice) return res.status(404).json({ error: 'Счёт не найден' });
+  let payment = collection('payments').find(item => item.invoice_id === invoice.id);
+  if (invoice.status === 'paid' && payment) {
+    const restaurant = db.restaurants.find(r => r.id === invoice.restaurant_id);
+    const document = collection('closing_documents').find(doc => doc.invoice_id === invoice.id) || null;
+    return res.json({ invoice, payment, document, restaurant });
+  }
   invoice.status = 'paid';
   invoice.paid_at = String(req.body?.paid_at || nowIso());
   invoice.updated_at = nowIso();
-  const payment = {
-    id: uid('pay'),
-    restaurant_id: invoice.restaurant_id,
-    invoice_id: invoice.id,
-    amount: invoice.amount,
-    currency: invoice.currency || 'RUB',
-    method: invoice.seller_requisites?.payment_method === 'manual_transfer' ? 'manual_transfer' : 'bank_transfer',
-    reference: String(req.body?.reference || '').trim(),
-    comment: String(req.body?.comment || '').trim(),
-    paid_at: invoice.paid_at,
-    created_by: req.user.id,
-    created_at: nowIso()
-  };
-  collection('payments').push(payment);
+  if (!payment) {
+    payment = {
+      id: uid('pay'),
+      restaurant_id: invoice.restaurant_id,
+      invoice_id: invoice.id,
+      amount: invoice.amount,
+      currency: invoice.currency || 'RUB',
+      method: invoice.seller_requisites?.payment_method === 'manual_transfer' ? 'manual_transfer' : 'bank_transfer',
+      reference: String(req.body?.reference || '').trim(),
+      comment: String(req.body?.comment || '').trim(),
+      paid_at: invoice.paid_at,
+      created_by: req.user.id,
+      created_at: nowIso()
+    };
+    collection('payments').push(payment);
+  }
   let closingDocument = collection('closing_documents').find(doc => doc.invoice_id === invoice.id);
   if (!closingDocument) {
     closingDocument = {
@@ -3682,8 +3740,33 @@ app.post('/api/super/billing/invoices/:id/mark-paid', auth, superOnly, runAsync(
     restaurant.subscription_started_at = invoice.period_start;
     restaurant.subscription_ends_at = invoice.period_end;
   }
+  notifyUsers(invoice.restaurant_id, restaurantBillingUsers(invoice.restaurant_id), {
+    title: 'Оплата подтверждена',
+    body: `Подписка по счёту № ${invoice.number} активирована до ${dateOnly(invoice.period_end)}`,
+    entity_type: 'billing_invoice',
+    entity_id: invoice.id
+  });
   await persist();
   res.json({ invoice, payment, document: closingDocument, restaurant });
+}));
+
+app.post('/api/super/billing/invoices/:id/no-payment', auth, superOnly, runAsync(async (req, res) => {
+  const invoice = collection('billing_invoices').find(item => item.id === req.params.id);
+  if (!invoice) return res.status(404).json({ error: 'Счёт не найден' });
+  if (invoice.status === 'paid') return res.status(400).json({ error: 'Счёт уже оплачен' });
+  invoice.status = 'payment_rejected';
+  invoice.paid_at = null;
+  invoice.updated_at = nowIso();
+  const comment = String(req.body?.comment || '').trim();
+  logActivity({ restaurant_id: invoice.restaurant_id, actor_id: req.user.id, type: 'invoice_payment_rejected', title: `Платёж по счёту № ${invoice.number} не найден`, entity_type: 'billing_invoice', entity_id: invoice.id, metadata: { comment } });
+  notifyUsers(invoice.restaurant_id, restaurantBillingUsers(invoice.restaurant_id), {
+    title: 'Платёж не прошёл',
+    body: `По счёту № ${invoice.number} платёж не найден. Прикрепите платёжное поручение в разделе оплаты.`,
+    entity_type: 'billing_invoice',
+    entity_id: invoice.id
+  });
+  await persist();
+  res.json({ invoice, restaurant: db.restaurants.find(r => r.id === invoice.restaurant_id) || null });
 }));
 
 

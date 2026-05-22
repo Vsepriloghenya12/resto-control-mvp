@@ -59,8 +59,8 @@ const SNAPSHOT_TABLES = [
 let pool;
 let saveQueue = Promise.resolve();
 
-export const ROLES = ['owner', 'manager', 'senior_waiter', 'senior_bartender', 'senior_cook', 'hostess', 'waiter', 'bartender', 'cook'];
-export const DEPARTMENTS = ['hall', 'bar', 'kitchen', 'common'];
+export const ROLES = ['owner', 'manager', 'senior_waiter', 'senior_bartender', 'senior_cook', 'hostess', 'waiter', 'bartender', 'cook', 'cleaning'];
+export const DEPARTMENTS = ['hall', 'bar', 'kitchen', 'cleaning', 'common'];
 
 function hasPostgres() {
   return Boolean(process.env.DATABASE_URL);

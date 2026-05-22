@@ -89,6 +89,9 @@ const billingStatusLabels: Record<string, string> = {
   issued: 'выставлен',
   paid: 'оплачен',
   transfer_pending: 'ожидает перевода',
+  payment_reported: 'клиент оплатил',
+  payment_rejected: 'платёж не найден',
+  payment_document_attached: 'поручение прикреплено',
   cancelled: 'отменён'
 };
 const supportStatusLabels: Record<string, string> = {
@@ -580,6 +583,28 @@ function NotificationCenter({ open, onClose, onChanged }: { open: boolean; onClo
   </MobileSheetModal>;
 }
 
+function WorkspaceNotificationsPanel({ onBilling, onChanged }: { onBilling: () => void; onChanged?: () => void }) {
+  const [items, setItems] = useState<any[]>([]);
+  const unread = items.filter(item => !item.read_at).length;
+  async function load() { setItems(await api('/api/notifications')); }
+  useEffect(() => { load().catch(() => setItems([])); }, []);
+  async function markAllRead() {
+    await api('/api/notifications/read-all', { method: 'POST', body: '{}' });
+    await load();
+    onChanged?.();
+  }
+
+  return <div className="mobileListSurface mobileNotificationList">
+    {items.length === 0 && <Empty text="Уведомлений пока нет" />}
+    {items.map(item => <article key={item.id} className={cx('mobileNotificationItem', !item.read_at && 'unread')}>
+      <div><strong>{item.title}</strong><span>{item.body || 'Новое событие'} · {fmtDate(item.created_at)}</span></div>
+      {item.entity_type === 'billing_invoice' && <Button type="button" kind="soft" onClick={onBilling}>{String(item.title || '').includes('не прош') ? 'Прикрепить' : 'Открыть оплату'}</Button>}
+      {!item.read_at && <span className="mobileNotificationDot" />}
+    </article>)}
+    {items.length > 0 && <div className="actions adminFormActions"><Button type="button" kind="soft" onClick={markAllRead}>{unread > 0 ? 'Отметить прочитанными' : 'Обновить'}</Button></div>}
+  </div>;
+}
+
 function ShiftControl({ user, onChanged }: { user: any; onChanged?: () => void }) {
   const [shiftState, setShiftState] = useState<any>({ current: null, last_closed: null });
   const [msg, setMsg] = useState('');
@@ -808,6 +833,7 @@ function RestaurantWorkspace({
   const [modalKind, setModalKind] = useState<WorkspaceModalKind>(null);
   const [sheet, setSheet] = useState<MobileSheetKind>(null);
   const [supportUnread, setSupportUnread] = useState(0);
+  const [notificationCount, setNotificationCount] = useState(0);
 
   async function loadSupportUnread() {
     if (!['owner', 'manager'].includes(user.role)) {
@@ -828,6 +854,17 @@ function RestaurantWorkspace({
     return () => window.clearInterval(timer);
   }, [user.role, user.restaurant_id]);
 
+  async function refreshNotifications() {
+    try {
+      const notifications = await api('/api/notifications').catch(() => []);
+      setNotificationCount(notifications.filter((item: any) => !item.read_at).length);
+    } catch {
+      setNotificationCount(0);
+    }
+  }
+
+  useEffect(() => { refreshNotifications(); }, [active, user.restaurant_id]);
+
   function openNotifications() {
     setModalKind('notifications');
   }
@@ -847,10 +884,13 @@ function RestaurantWorkspace({
   const modal: { title: string; text?: string; details?: ReactNode; actions: { label: string; kind?: string; onClick: () => void }[] } | null = modalKind === 'notifications'
     ? {
         title: 'Центр действий',
-        text: 'Быстро переходите к ключевым разделам кабинета: задачам, проблемам и чек-листам.',
+        details: <WorkspaceNotificationsPanel onBilling={() => {
+          setActive('billing');
+          closeModal();
+        }} onChanged={refreshNotifications} />,
         actions: [
-          { label: 'Открыть задачи', kind: 'primary', onClick: () => setActive('tasks') },
-          { label: 'Открыть чек-листы', onClick: () => setActive('checklists') }
+          { label: 'Открыть оплату', kind: 'primary', onClick: () => setActive('billing') },
+          { label: 'Открыть задачи', onClick: () => setActive('tasks') }
         ]
       }
     : modalKind === 'support'
@@ -909,6 +949,7 @@ function RestaurantWorkspace({
   const mobileProfileItems: MobileActionItem[] = managerMode
     ? [
       { id: 'support', title: 'База знаний', subtitle: 'Инструкции и документы', icon: 'knowledge', onClick: () => setActive('knowledge') },
+      { id: 'billing', title: 'Оплата и документы', subtitle: 'Счета, реквизиты, акты', icon: 'trial', onClick: () => setActive('billing') },
       { id: 'install-app', title: 'Установить на телефон', subtitle: 'Добавить приложение на главный экран', icon: 'phone', onClick: () => void runPwaInstall('app') },
       { id: 'install-bookings', title: 'Установить план зала', subtitle: 'Ярлык сразу откроет брони и столы', icon: 'bookings', onClick: () => {
         setActive('bookings');
@@ -945,7 +986,7 @@ function RestaurantWorkspace({
           subtitle={active === 'overview' ? `${roles[user.role]} в рабочем кабинете` : restaurant?.name}
           logoSrc={brandLogoSrc}
           userInitials={userInitials(user.name)}
-          notificationCount={0}
+          notificationCount={notificationCount}
           onMenu={() => setSheet('menu')}
           onBack={() => setActive('overview')}
           onNotifications={() => setActive('tasks')}
@@ -959,6 +1000,7 @@ function RestaurantWorkspace({
           roleLabel={`${roles[user.role]} в рабочем кабинете`}
           onLogout={onLogout}
           onNotifications={openNotifications}
+          notificationCount={notificationCount}
         />
         <div className="workspaceSubline">{restaurant?.name}</div>
         <div className="mobileTabsWrap">
@@ -986,6 +1028,7 @@ function SuperAdmin({ user, onLogout }: any) {
   const [restaurants, setRestaurants] = useState<any[]>([]);
   const [billingInvoices, setBillingInvoices] = useState<any[]>([]);
   const [billingSettingsForm, setBillingSettingsForm] = useState<any>({ seller_requisites: {}, transfer_requisites: {} });
+  const [issueInvoiceForm, setIssueInvoiceForm] = useState<any>({ restaurant_id: '', plan: 'standard', months: 1, period_start: new Date().toISOString().slice(0, 10) });
   const [form, setForm] = useState<any>({ name: '', owner_name: '', city: '', phone: '', email: '', login: '', password: '' });
   const [msg, setMsg] = useState('');
   const [settingsMsg, setSettingsMsg] = useState('');
@@ -1004,6 +1047,11 @@ function SuperAdmin({ user, onLogout }: any) {
     });
   }
   useEffect(() => { load(); loadBilling(); loadBillingSettings(); }, []);
+  useEffect(() => {
+    if (!issueInvoiceForm.restaurant_id && restaurants[0]?.id) {
+      setIssueInvoiceForm((current: any) => ({ ...current, restaurant_id: restaurants[0].id }));
+    }
+  }, [restaurants]);
 
   async function createRestaurant(e: FormEvent) {
     e.preventDefault(); setMsg('');
@@ -1031,6 +1079,25 @@ function SuperAdmin({ user, onLogout }: any) {
     loadBilling();
   }
 
+  async function markNoPayment(id: string) {
+    await api(`/api/super/billing/invoices/${id}/no-payment`, { method: 'POST', body: JSON.stringify({}) });
+    load();
+    loadBilling();
+  }
+
+  async function issueInvoice(e: FormEvent) {
+    e.preventDefault();
+    setMsg('');
+    try {
+      const invoice = await api('/api/super/billing/invoices', { method: 'POST', body: JSON.stringify(issueInvoiceForm) });
+      setMsg(`Счёт № ${invoice.number} выставлен`);
+      load();
+      loadBilling();
+    } catch (error: any) {
+      setMsg(error.message || 'Не удалось выставить счёт');
+    }
+  }
+
   async function saveBillingSettings(e: FormEvent) {
     e.preventDefault();
     setSettingsMsg('');
@@ -1056,11 +1123,12 @@ function SuperAdmin({ user, onLogout }: any) {
 
   const sellerSettings = billingSettingsForm.seller_requisites || {};
   const transferSettings = billingSettingsForm.transfer_requisites || {};
+  const paymentActionCount = billingInvoices.filter((invoice: any) => ['payment_reported', 'payment_document_attached', 'transfer_pending'].includes(invoice.status)).length;
 
   return <BasicWorkspace
     user={user}
     subtitle="Супер-админ создателя"
-    tabs={withIcons([{ id: 'restaurants', title: 'Рестораны' }, { id: 'payments', title: 'Оплаты' }, { id: 'support', title: 'Техподдержка' }, { id: 'billingSettings', title: 'Реквизиты' }, { id: 'create', title: 'Создать' }])}
+    tabs={withIcons([{ id: 'restaurants', title: 'Рестораны' }, { id: 'payments', title: paymentActionCount ? `Оплаты (${paymentActionCount})` : 'Оплаты' }, { id: 'support', title: 'Техподдержка' }, { id: 'billingSettings', title: 'Реквизиты' }, { id: 'create', title: 'Создать' }])}
     active={tab}
     setActive={setTab}
     onLogout={onLogout}
@@ -1104,33 +1172,60 @@ function SuperAdmin({ user, onLogout }: any) {
         }) : <Empty text="Ресторанов пока нет" />}
       </div>
     </Card>}
-    {tab === 'payments' && <Card title="Счета ресторанов">
+    {tab === 'payments' && <div className="contentStack">
+      <Card title="Выставить счёт ресторану">
+        <form className="form two compactAdminForm billingInvoiceForm" onSubmit={issueInvoice}>
+          <Select label="Ресторан" value={issueInvoiceForm.restaurant_id} onChange={(e: any) => setIssueInvoiceForm({ ...issueInvoiceForm, restaurant_id: e.target.value })}>
+            <option value="">Выбрать ресторан</option>
+            {restaurants.map((restaurant: any) => <option key={restaurant.id} value={restaurant.id}>{restaurant.name}</option>)}
+          </Select>
+          <Select label="Период" value={issueInvoiceForm.months} onChange={(e: any) => setIssueInvoiceForm({ ...issueInvoiceForm, months: Number(e.target.value) })}>
+            <option value={1}>1 месяц</option>
+            <option value={3}>3 месяца</option>
+            <option value={6}>6 месяцев</option>
+            <option value={12}>12 месяцев</option>
+          </Select>
+          <Field label="Начало доступа" type="date" value={issueInvoiceForm.period_start} onChange={(e: any) => setIssueInvoiceForm({ ...issueInvoiceForm, period_start: e.target.value })} />
+          <div className="billingPlanChooser">
+            <span className="fieldCaption">Тариф</span>
+            <TariffPlans selectedPlan={issueInvoiceForm.plan} showEnterprise={false} onSelect={(planId) => setIssueInvoiceForm({ ...issueInvoiceForm, plan: planId })} />
+          </div>
+          <div className="actions adminFormActions"><Button>Выставить счёт</Button></div>
+        </form>
+        {msg && <div className={msg.includes('Не удалось') ? 'error' : 'notice'}>{msg}</div>}
+      </Card>
+
+      <Card title="Счета ресторанов">
       <div className="compactAccordionList">
         {billingInvoices.length ? billingInvoices.map((invoice: any) => {
-          const isTransfer = invoice.seller_requisites?.payment_method === 'manual_transfer';
           return <details className="compactAccordion" key={invoice.id}>
             <summary className="compactAccordionSummary">
               <span>
                 <b>№ {invoice.number} · {invoice.restaurant?.name || 'Ресторан'}</b>
-                <small>{invoice.plan_title} · {money(invoice.amount)} · {isTransfer ? 'перевод' : 'счёт'}</small>
+                <small>{invoice.plan_title} · {money(invoice.amount)} · счёт</small>
               </span>
               <span className="supportSummaryBadges">
-                {invoice.receipt_url && <em className="badge active">чек</em>}
+                {invoice.receipt_url && <em className="badge active">поручение</em>}
                 <em className={cx('badge', invoice.status)}>{billingStatusLabel(invoice.status)}</em>
               </span>
             </summary>
             <div className="compactAccordionBody">
               <div className="adminRowButton readonly"><span><b>Период</b><small>{fmtDate(invoice.period_start)} — {fmtDate(invoice.period_end)}</small></span><em>{billingStatusLabel(invoice.status)}</em></div>
               <div className="adminRowButton readonly">
-                <span><b>Чек оплаты</b><small>{invoice.receipt_name || (isTransfer ? 'чек не прикреплён' : 'для счёта не требуется')}</small></span>
-                {invoice.receipt_url ? <a className="receiptLink" href={invoice.receipt_url} target="_blank" rel="noreferrer">Открыть чек</a> : <em>нет</em>}
+                <span><b>Платёжное поручение</b><small>{invoice.receipt_name || 'не прикреплено'}</small></span>
+                {invoice.receipt_url ? <a className="receiptLink" href={invoice.receipt_url} target="_blank" rel="noreferrer">Открыть файл</a> : <em>нет</em>}
               </div>
-              <div className="actions"><Button type="button" kind="soft" onClick={() => download(`/api/billing/invoices/${invoice.id}/html`, `invoice-${invoice.number}.html`)}>Скачать счёт</Button>{invoice.status !== 'paid' && <Button type="button" onClick={() => markPaid(invoice.id)}>Отметить оплату</Button>}</div>
+              <div className="actions">
+                <Button type="button" kind="soft" onClick={() => download(`/api/billing/invoices/${invoice.id}/html`, `invoice-${invoice.number}.html`)}>Скачать счёт</Button>
+                {invoice.status !== 'paid' && <Button type="button" onClick={() => markPaid(invoice.id)}>Оплата есть</Button>}
+                {invoice.status !== 'paid' && <Button type="button" kind="danger" onClick={() => markNoPayment(invoice.id)}>Нет платежа</Button>}
+              </div>
             </div>
           </details>;
         }) : <Empty text="Счетов пока нет" />}
       </div>
-    </Card>}
+    </Card>
+    </div>}
     {tab === 'support' && <SuperSupportAdmin />}
     {tab === 'billingSettings' && <Card title="Реквизиты оплаты">
       <form className="form two compactAdminForm billingSettingsForm" onSubmit={saveBillingSettings}>
@@ -1194,7 +1289,8 @@ function RestaurantAdmin({ user, restaurant, onLogout }: any) {
     { id: 'bookings', title: 'Брони / залы' },
     { id: 'tasks', title: 'Проблемы' },
     { id: 'knowledge', title: 'База знаний' },
-    ...(!isManager ? [{ id: 'integrations', title: 'Интеграции' }, { id: 'billing', title: 'Оплата' }] : [])
+    ...(!isManager ? [{ id: 'integrations', title: 'Интеграции' }] : []),
+    { id: 'billing', title: 'Оплата' }
   ]);
   const section = useMemo(() => {
     if (tab === 'overview') return <AdminOverview mode={user.role === 'manager' ? 'manager' : 'owner'} onNavigate={setTab} />;
@@ -1361,10 +1457,9 @@ function IntegrationsAdmin() {
 function BillingAdmin({ restaurant, preferredPlan }: { restaurant: any; preferredPlan?: string }) {
   const [data, setData] = useState<any>(null);
   const [form, setForm] = useState<any>({ customer_type: 'ip', legal_name: '', inn: '', kpp: '', ogrn: '', legal_address: '', bank_name: '', bik: '', checking_account: '', correspondent_account: '', edo_operator: '', edo_id: '', email: '', phone: '' });
-  const [invoiceForm, setInvoiceForm] = useState<any>({ plan: 'standard', months: 1, period_start: new Date().toISOString().slice(0, 10) });
-  const [transferReceipt, setTransferReceipt] = useState<any>(null);
-  const [transferReceiptName, setTransferReceiptName] = useState('');
-  const transferReceiptInputRef = useRef<HTMLInputElement | null>(null);
+  const [paymentOrder, setPaymentOrder] = useState<any>(null);
+  const [paymentOrderName, setPaymentOrderName] = useState('');
+  const [paymentOrderInvoiceId, setPaymentOrderInvoiceId] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -1375,9 +1470,7 @@ function BillingAdmin({ restaurant, preferredPlan }: { restaurant: any; preferre
   }
 
   useEffect(() => { load(); }, []);
-  useEffect(() => {
-    if (preferredPlan) setInvoiceForm((current: any) => ({ ...current, plan: preferredPlan }));
-  }, [preferredPlan]);
+  useEffect(() => { void preferredPlan; }, [preferredPlan]);
 
   function money(value: any) {
     return `${Number(value || 0).toLocaleString('ru-RU')} ₽`;
@@ -1398,58 +1491,59 @@ function BillingAdmin({ restaurant, preferredPlan }: { restaurant: any; preferre
     }
   }
 
-  async function createInvoice(e: FormEvent) {
-    e.preventDefault();
+  async function reportPaid(invoice: any) {
     setBusy(true);
     setMessage('');
     try {
-      const invoice = await api('/api/billing/invoices', { method: 'POST', body: JSON.stringify(invoiceForm) });
-      setMessage(`Счёт № ${invoice.number} сформирован`);
+      await api(`/api/billing/invoices/${invoice.id}/report-paid`, { method: 'POST', body: JSON.stringify({}) });
+      setMessage(`Счёт № ${invoice.number} отправлен на проверку`);
       await load();
     } catch (error: any) {
-      setMessage(error.message || 'Не удалось сформировать счёт');
+      setMessage(error.message || 'Не удалось отправить отметку об оплате');
     } finally {
       setBusy(false);
     }
   }
 
-  async function createTransferRequest(e: FormEvent) {
-    e.preventDefault();
+  async function attachPaymentOrder(invoice: any) {
     setMessage('');
-    if (!transferReceipt) {
-      setMessage('Прикрепите чек оплаты');
+    if (!paymentOrder || paymentOrderInvoiceId !== invoice.id) {
+      setMessage('Прикрепите платёжное поручение');
       return;
     }
     setBusy(true);
     try {
-      const invoice = await api('/api/billing/transfer-requests', { method: 'POST', body: JSON.stringify({ ...invoiceForm, receipt: transferReceipt }) });
-      setMessage(`Заявка на перевод № ${invoice.number} отправлена`);
-      setTransferReceipt(null);
-      setTransferReceiptName('');
-      if (transferReceiptInputRef.current) transferReceiptInputRef.current.value = '';
+      await api(`/api/billing/invoices/${invoice.id}/payment-order`, { method: 'POST', body: JSON.stringify({ receipt: paymentOrder }) });
+      setMessage(`Платёжное поручение по счёту № ${invoice.number} отправлено`);
+      setPaymentOrder(null);
+      setPaymentOrderName('');
+      setPaymentOrderInvoiceId('');
       await load();
     } catch (error: any) {
-      setMessage(error.message || 'Не удалось отправить заявку на перевод');
+      setMessage(error.message || 'Не удалось прикрепить платёжное поручение');
     } finally {
       setBusy(false);
     }
   }
 
-  async function handleTransferReceiptChange(e: any) {
+  async function handlePaymentOrderChange(invoiceId: string, e: any) {
     const file: File | undefined = e.target.files?.[0];
     setMessage('');
     if (!file) {
-      setTransferReceipt(null);
-      setTransferReceiptName('');
+      setPaymentOrder(null);
+      setPaymentOrderName('');
+      setPaymentOrderInvoiceId('');
       return;
     }
     try {
-      setTransferReceipt(await uploadPayloadFromFile(file));
-      setTransferReceiptName(file.name);
+      setPaymentOrder(await uploadPayloadFromFile(file));
+      setPaymentOrderName(file.name);
+      setPaymentOrderInvoiceId(invoiceId);
     } catch (error: any) {
-      setTransferReceipt(null);
-      setTransferReceiptName('');
-      setMessage(error.message || 'Не удалось прочитать чек оплаты');
+      setPaymentOrder(null);
+      setPaymentOrderName('');
+      setPaymentOrderInvoiceId('');
+      setMessage(error.message || 'Не удалось прочитать платёжное поручение');
     }
   }
 
@@ -1458,10 +1552,6 @@ function BillingAdmin({ restaurant, preferredPlan }: { restaurant: any; preferre
   const invoices = data.invoices || [];
   const documents = data.documents || [];
   const currentPlan = plans.find((plan: any) => plan.id === restaurant?.plan) || plans.find((plan: any) => plan.id === 'standard') || {};
-  const selectedPlan = plans.find((plan: any) => plan.id === invoiceForm.plan) || currentPlan;
-  const transferRequisites = data.transfer_requisites || {};
-  const transferAmount = Number(selectedPlan?.monthly_amount || 0) * Number(invoiceForm.months || 1);
-  const transferPurpose = `Resto Control: ${restaurant?.name || 'ресторан'}, ${selectedPlan?.title || 'тариф'}, ${invoiceForm.months} мес.`;
   const latestInvoice = invoices[0];
   const subscriptionDateText = restaurant?.subscription_ends_at
     ? `Оплачено до ${fmtDate(restaurant.subscription_ends_at)}`
@@ -1484,41 +1574,7 @@ function BillingAdmin({ restaurant, preferredPlan }: { restaurant: any; preferre
       {latestInvoice && <Button type="button" kind="soft" onClick={() => download(`/api/billing/invoices/${latestInvoice.id}/html`, `invoice-${latestInvoice.number}.html`)}>Скачать</Button>}
     </div>
 
-    <details className="compactAccordion" open>
-      <summary className="compactAccordionSummary"><span>Оплата переводом</span><em>карта / СБП</em></summary>
-      <div className="compactAccordionBody">
-        <form className="form two compactAdminForm billingInvoiceForm" onSubmit={createTransferRequest}>
-          <div className="billingPlanChooser">
-            <span className="fieldCaption">Тариф</span>
-            <TariffPlans plans={plans} selectedPlan={invoiceForm.plan} showEnterprise={false} onSelect={(planId) => setInvoiceForm({ ...invoiceForm, plan: planId })} />
-          </div>
-          <Select label="Период" value={invoiceForm.months} onChange={(e: any) => setInvoiceForm({ ...invoiceForm, months: Number(e.target.value) })}>
-            <option value={1}>1 месяц</option>
-            <option value={3}>3 месяца</option>
-            <option value={6}>6 месяцев</option>
-            <option value={12}>12 месяцев</option>
-          </Select>
-          <Field label="Начало доступа" type="date" value={invoiceForm.period_start} onChange={(e: any) => setInvoiceForm({ ...invoiceForm, period_start: e.target.value })} />
-          <div className="transferPaymentBox">
-            <div className="transferPaymentRow"><span>Получатель</span><b>{transferValue(transferRequisites.recipient)}</b></div>
-            <div className="transferPaymentRow"><span>Телефон / СБП</span><b>{transferValue(transferRequisites.phone)}</b></div>
-            <div className="transferPaymentRow"><span>Карта</span><b>{transferValue(transferRequisites.card)}</b></div>
-            <div className="transferPaymentRow"><span>Банк</span><b>{transferValue(transferRequisites.bank)}</b></div>
-            <div className="transferPaymentRow amount"><span>Сумма</span><b>{money(transferAmount)}</b></div>
-            <div className="transferPaymentRow purpose"><span>Назначение</span><b>{transferPurpose}</b></div>
-          </div>
-          <label className="receiptUploadBox">
-            <span>Чек оплаты</span>
-            <input ref={transferReceiptInputRef} type="file" accept="image/*,.pdf,application/pdf" onChange={handleTransferReceiptChange} />
-            <b>{transferReceiptName || 'Прикрепите фото или PDF после перевода'}</b>
-          </label>
-          {!data.transfer_requisites_ready && <div className="error">Для оплаты переводом владелец приложения должен заполнить телефон или карту в реквизитах оплаты.</div>}
-          <div className="actions adminFormActions"><Button disabled={busy || !data.transfer_requisites_ready}>Сообщить о переводе</Button></div>
-        </form>
-      </div>
-    </details>
-
-    <details className="compactAccordion">
+    <details className="compactAccordion" open={!data.profile}>
       <summary className="compactAccordionSummary"><span>Реквизиты ресторана</span><em>{form.legal_name || 'не заполнены'}</em></summary>
       <div className="compactAccordionBody">
         <form className="form two compactAdminForm billingRequisitesForm" onSubmit={saveRequisites}>
@@ -1544,38 +1600,26 @@ function BillingAdmin({ restaurant, preferredPlan }: { restaurant: any; preferre
       </div>
     </details>
 
-    <details className="compactAccordion">
-      <summary className="compactAccordionSummary"><span>Сформировать счёт</span><em>оплата с расчётного счёта</em></summary>
-      <div className="compactAccordionBody">
-        <form className="form two compactAdminForm billingInvoiceForm" onSubmit={createInvoice}>
-          <div className="billingPlanChooser">
-            <span className="fieldCaption">Тариф</span>
-            <TariffPlans plans={plans} selectedPlan={invoiceForm.plan} showEnterprise={false} onSelect={(planId) => setInvoiceForm({ ...invoiceForm, plan: planId })} />
-          </div>
-          <Select label="Период" value={invoiceForm.months} onChange={(e: any) => setInvoiceForm({ ...invoiceForm, months: Number(e.target.value) })}>
-            <option value={1}>1 месяц</option>
-            <option value={3}>3 месяца</option>
-            <option value={6}>6 месяцев</option>
-            <option value={12}>12 месяцев</option>
-          </Select>
-          <Field label="Начало доступа" type="date" value={invoiceForm.period_start} onChange={(e: any) => setInvoiceForm({ ...invoiceForm, period_start: e.target.value })} />
-          <div className="actions adminFormActions"><Button disabled={busy}>Сформировать счёт</Button></div>
-        </form>
-      </div>
-    </details>
-
-    <details className="compactAccordion">
-      <summary className="compactAccordionSummary"><span>Счета</span><em>{invoices.length}</em></summary>
+    <details className="compactAccordion" open>
+      <summary className="compactAccordionSummary"><span>Счета к оплате</span><em>{invoices.length}</em></summary>
       <div className="compactAccordionBody">
         {invoices.length ? invoices.map((invoice: any) => {
-          const isTransfer = invoice.seller_requisites?.payment_method === 'manual_transfer';
           return <div className="adminRowButton readonly" key={invoice.id}>
-            <span><b>{isTransfer ? 'Перевод' : 'Счёт'} № {invoice.number}</b><small>{invoice.plan_title} · {money(invoice.amount)} · {fmtDate(invoice.issued_at)}</small></span>
+            <span><b>Счёт № {invoice.number}</b><small>{invoice.plan_title} · {money(invoice.amount)} · {fmtDate(invoice.issued_at)}</small></span>
             <span className="rowActions">
-              {invoice.receipt_url && <a className="receiptLink" href={invoice.receipt_url} target="_blank" rel="noreferrer">Чек</a>}
+              {invoice.receipt_url && <a className="receiptLink" href={invoice.receipt_url} target="_blank" rel="noreferrer">Поручение</a>}
               <em className={cx('badge', invoice.status)}>{billingStatusLabel(invoice.status)}</em>
               <Button type="button" kind="soft" onClick={() => download(`/api/billing/invoices/${invoice.id}/html`, `invoice-${invoice.number}.html`)}>Скачать</Button>
+              {['issued', 'transfer_pending'].includes(invoice.status) && <Button type="button" disabled={busy} onClick={() => reportPaid(invoice)}>Оплатил</Button>}
             </span>
+            {invoice.status === 'payment_rejected' && <div className="billingPaymentOrderInline">
+              <label className="receiptUploadBox">
+                <span>Платёжное поручение</span>
+                <input type="file" accept="image/*,.pdf,application/pdf" onChange={(event) => handlePaymentOrderChange(invoice.id, event)} />
+                <b>{paymentOrderInvoiceId === invoice.id && paymentOrderName ? paymentOrderName : 'Прикрепите фото или PDF'}</b>
+              </label>
+              <Button type="button" disabled={busy} onClick={() => attachPaymentOrder(invoice)}>Прикрепить</Button>
+            </div>}
           </div>;
         }) : <Empty text="Оплат пока нет" />}
       </div>
@@ -1591,8 +1635,7 @@ function BillingAdmin({ restaurant, preferredPlan }: { restaurant: any; preferre
       </div>
     </details>
 
-    {!data.seller_requisites_ready && <div className="notice">Для рабочих счетов заполните переменные BILLING_SELLER_* в окружении сервера.</div>}
-    {message && <div className={message.includes('Не удалось') || message.includes('Заполните') ? 'error' : 'notice'}>{message}</div>}
+    {message && <div className={message.includes('Не удалось') || message.includes('Заполните') || message.includes('Прикрепите') ? 'error' : 'notice'}>{message}</div>}
   </div>;
 }
 

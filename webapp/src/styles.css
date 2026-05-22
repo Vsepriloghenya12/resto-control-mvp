@@ -7956,6 +7956,18 @@ body {
   overflow-wrap: anywhere;
 }
 
+.billingPaymentOrderInline {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.billingPaymentOrderInline .receiptUploadBox {
+  margin: 0;
+}
+
 .receiptLink {
   display: inline-flex;
   align-items: center;
