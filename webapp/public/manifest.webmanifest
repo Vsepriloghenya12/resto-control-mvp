@@ -6,6 +6,21 @@
   "background_color": "#111827",
   "theme_color": "#111827",
   "description": "Чек-листы, заявки, инвентаризация и база знаний для ресторанов",
+  "shortcuts": [
+    {
+      "name": "План зала",
+      "short_name": "План зала",
+      "description": "Открыть брони и занятость столов",
+      "url": "/?tab=bookings&pwa=bookings",
+      "icons": [
+        {
+          "src": "/icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
+  ],
   "icons": [
     {
       "src": "/icon.svg",

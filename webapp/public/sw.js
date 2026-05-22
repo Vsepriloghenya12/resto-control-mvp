@@ -1,6 +1,6 @@
 const CACHE_PREFIX = 'resto-control-';
 const STATIC_CACHE = `${CACHE_PREFIX}static-v1`;
-const NO_STORE_PATHS = new Set(['/app-version.json', '/manifest.webmanifest', '/sw.js']);
+const NO_STORE_PATHS = new Set(['/app-version.json', '/manifest.webmanifest', '/manifest-bookings.webmanifest', '/sw.js']);
 
 self.addEventListener('install', () => {
   self.skipWaiting();

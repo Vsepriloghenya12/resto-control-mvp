@@ -27,6 +27,7 @@ import { Bookings } from './modules/bookings/Bookings';
 import { Tasks } from './modules/tasks/Tasks';
 import { cx } from './lib/cx';
 import { APP_UPDATE_AVAILABLE_EVENT, applyAppUpdateNow, type AppVersionInfo } from './app-updates';
+import { initialTabFromUrl, requestPwaInstall } from './pwa-install';
 import {
   checklistRunStatuses,
   checklistTypes,
@@ -468,6 +469,11 @@ function AppUpdateBanner({ update, onDismiss }: { update: AppVersionInfo | null;
   </div>;
 }
 
+async function runPwaInstall(mode: 'app' | 'bookings') {
+  const result = await requestPwaInstall(mode);
+  if (result.message) window.alert(result.message);
+}
+
 export default function App() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -901,11 +907,21 @@ function RestaurantWorkspace({
   const mobileProfileItems: MobileActionItem[] = managerMode
     ? [
       { id: 'support', title: 'База знаний', subtitle: 'Инструкции и документы', icon: 'knowledge', onClick: () => setActive('knowledge') },
+      { id: 'install-app', title: 'Установить на телефон', subtitle: 'Добавить приложение на главный экран', icon: 'phone', onClick: () => void runPwaInstall('app') },
+      { id: 'install-bookings', title: 'Установить план зала', subtitle: 'Ярлык сразу откроет брони и столы', icon: 'bookings', onClick: () => {
+        setActive('bookings');
+        void runPwaInstall('bookings');
+      } },
       { id: 'logout', title: 'Выйти', subtitle: 'Завершить рабочую сессию', icon: 'logout', onClick: onLogout }
     ]
     : [
       { id: 'support', title: 'База знаний', subtitle: 'Инструкции и документы', icon: 'knowledge', onClick: () => setActive('knowledge') },
       { id: 'billing', title: 'Оплата и документы', subtitle: 'Счета, реквизиты, акты', icon: 'trial', onClick: () => setActive('billing') },
+      { id: 'install-app', title: 'Установить на телефон', subtitle: 'Добавить приложение на главный экран', icon: 'phone', onClick: () => void runPwaInstall('app') },
+      { id: 'install-bookings', title: 'Установить план зала', subtitle: 'Ярлык сразу откроет брони и столы', icon: 'bookings', onClick: () => {
+        setActive('bookings');
+        void runPwaInstall('bookings');
+      } },
       { id: 'logout', title: 'Выйти', subtitle: 'Завершить рабочую сессию', icon: 'logout', onClick: onLogout }
     ];
 
@@ -1165,7 +1181,7 @@ function SuperAdmin({ user, onLogout }: any) {
 }
 
 function RestaurantAdmin({ user, restaurant, onLogout }: any) {
-  const [tab, setTab] = useState<Tab>('overview');
+  const [tab, setTab] = useState<Tab>(() => initialTabFromUrl('overview', ['overview', 'users', 'checklists', 'inventory', 'bookings', 'tasks', 'knowledge', 'integrations', 'billing']));
   const [preferredBillingPlan, setPreferredBillingPlan] = useState('');
   const isManager = user.role === 'manager';
   const tabs = withIcons([
@@ -1993,7 +2009,7 @@ function UsersAdmin({ user }: any) {
 }
 
 function EmployeeApp({ user, restaurant, onLogout }: any) {
-  const [tab, setTab] = useState<Tab>('today');
+  const [tab, setTab] = useState<Tab>(() => initialTabFromUrl('today', ['today', 'checklists', 'bookings', 'inventory', 'tasks', 'knowledge', 'admin-checklists', 'admin-tasks']));
   const [notificationCount, setNotificationCount] = useState(0);
   const [openTechComposer, setOpenTechComposer] = useState(false);
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
@@ -2046,6 +2062,11 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
   const mobileProfileItems: MobileActionItem[] = [
     { id: 'profile', title: `${roles[user.role]} · ${restaurant?.name}`, subtitle: 'Ваш рабочий кабинет', icon: 'user', onClick: () => setTab('today') },
     { id: 'knowledge', title: 'База знаний', subtitle: 'Инструкции и сервис-бук', icon: 'knowledge', onClick: () => setTab('knowledge') },
+    { id: 'install-app', title: 'Установить на телефон', subtitle: 'Добавить приложение на главный экран', icon: 'phone', onClick: () => void runPwaInstall('app') },
+    { id: 'install-bookings', title: 'Установить план зала', subtitle: 'Ярлык сразу откроет брони и столы', icon: 'bookings', onClick: () => {
+      setTab('bookings');
+      void runPwaInstall('bookings');
+    } },
     { id: 'logout', title: 'Выйти из аккаунта', subtitle: 'Завершить сессию', icon: 'logout', onClick: onLogout }
   ];
 

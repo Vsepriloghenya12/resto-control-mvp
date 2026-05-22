@@ -1,0 +1,18 @@
+{
+  "name": "План зала",
+  "short_name": "План зала",
+  "start_url": "/?tab=bookings&pwa=bookings",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#111827",
+  "description": "Быстрый доступ к плану зала и броням Resto Control",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

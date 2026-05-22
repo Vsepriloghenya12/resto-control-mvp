@@ -3671,7 +3671,7 @@ function setStaticCacheHeaders(res, filePath) {
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     return;
   }
-  if (['index.html', 'app-version.json', 'manifest.webmanifest', 'sw.js'].includes(filename)) {
+  if (['index.html', 'app-version.json', 'manifest.webmanifest', 'manifest-bookings.webmanifest', 'sw.js'].includes(filename)) {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
