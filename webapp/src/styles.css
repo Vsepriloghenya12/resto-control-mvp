@@ -213,7 +213,8 @@ select {
   background: rgba(7, 13, 26, 0.72);
   color: var(--text);
   padding: 13px 15px;
-  outline: none;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
   transition: border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
 }
 
@@ -227,12 +228,19 @@ textarea {
   resize: vertical;
 }
 
-input:not([type='checkbox']):focus,
-textarea:focus,
-select:focus {
+input:not([type='checkbox']):focus-visible,
+textarea:focus-visible,
+select:focus-visible {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.12);
   background: rgba(7, 13, 26, 0.9);
+}
+
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible {
+  outline: 2px solid rgba(34, 197, 94, 0.72);
+  outline-offset: 3px;
 }
 
 input[type='checkbox'] {
@@ -5544,7 +5552,8 @@ textarea {
   background:
     radial-gradient(circle at top right, rgba(34, 197, 94, 0.2), transparent 42%),
     rgba(255, 255, 255, 0.055);
-  outline: none;
+  outline: 2px solid rgba(34, 197, 94, 0.72);
+  outline-offset: 3px;
 }
 
 .tariffCard.selected {
@@ -7554,7 +7563,13 @@ body {
   background: transparent;
   color: var(--text);
   font-size: 13px;
-  outline: none;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.inventoryPlainComment:focus-visible {
+  border-top-color: var(--accent);
+  outline-color: rgba(34, 197, 94, 0.72);
 }
 
 .roleAccessPicker {

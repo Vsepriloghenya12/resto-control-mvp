@@ -172,7 +172,7 @@ function WorkspaceInfoModal({
     <div className="modalCard infoModalCard" onClick={(e) => e.stopPropagation()}>
       <div className="rowBetween">
         <h2>{title}</h2>
-        <button className="iconBtn" onClick={onClose}>×</button>
+        <button type="button" className="iconBtn" onClick={onClose} aria-label="Закрыть">×</button>
       </div>
       {text && <p className="infoModalText">{text}</p>}
       {details}
@@ -214,7 +214,7 @@ function SupportConversationList({ tickets, replyValues, onReplyChange, onReply,
         </article>)}
         {ticket.status !== 'closed' && <form className="supportReplyForm" onSubmit={(e) => { e.preventDefault(); onReply(ticket.id); }}>
           <Textarea label={admin ? 'Ответ клиенту' : 'Сообщение в поддержку'} value={replyValues[ticket.id] || ''} onChange={(e: any) => onReplyChange(ticket.id, e.target.value)} placeholder={admin ? 'Напишите ответ' : 'Дополните обращение'} />
-          <div className="actions adminFormActions"><Button>{admin ? 'Ответить' : 'Отправить'}</Button></div>
+          <div className="actions adminFormActions"><Button type="submit">{admin ? 'Ответить' : 'Отправить'}</Button></div>
         </form>}
         {admin && <div className="actions compact">
           {ticket.status !== 'closed' ? <Button type="button" kind="soft" onClick={() => onStatusChange(ticket.id, 'closed')}>Закрыть</Button> : <Button type="button" kind="soft" onClick={() => onStatusChange(ticket.id, 'open')}>Открыть снова</Button>}
@@ -294,7 +294,7 @@ function ClientSupportPanel({ onUnreadChange }: { onUnreadChange?: (count: numbe
     <form className="supportCreateForm" onSubmit={createTicket}>
       <Field label="Тема" value={form.subject} onChange={(e: any) => setForm({ ...form, subject: e.target.value })} placeholder="Что нужно помочь решить" />
       <Textarea label="Сообщение" value={form.body} onChange={(e: any) => setForm({ ...form, body: e.target.value })} placeholder="Опишите вопрос или проблему" />
-      <div className="actions adminFormActions"><Button disabled={busy}>Написать в поддержку</Button></div>
+      <div className="actions adminFormActions"><Button type="submit" disabled={busy}>Написать в поддержку</Button></div>
     </form>
     {message && <div className={message.includes('Не удалось') ? 'error' : 'notice'}>{message}</div>}
     <SupportConversationList tickets={tickets} replyValues={replyValues} onReplyChange={(id: string, value: string) => setReplyValues((current) => ({ ...current, [id]: value }))} onReply={sendReply} onRead={markRead} />
@@ -452,14 +452,14 @@ function CameraCapture({ title, onCapture, onClose }: { title: string; onCapture
     <div className="modalCard" onClick={(e) => e.stopPropagation()}>
       <div className="rowBetween">
         <h2>Фото для: {title}</h2>
-        <button className="iconBtn" onClick={onClose}>×</button>
+        <button type="button" className="iconBtn" onClick={onClose} aria-label="Закрыть">×</button>
       </div>
       {busy && <div className="notice">Подключаем камеру...</div>}
       {error && <div className="error">{error}</div>}
       {!error && <video ref={videoRef} className="cameraVideo" autoPlay playsInline muted />}
       <div className="actions cameraActions">
-        <Button kind="soft" onClick={onClose}>Отмена</Button>
-        <Button disabled={busy || !!error} onClick={takePhoto}>Сделать фото</Button>
+        <Button type="button" kind="soft" onClick={onClose}>Отмена</Button>
+        <Button type="button" disabled={busy || !!error} onClick={takePhoto}>Сделать фото</Button>
       </div>
     </div>
   </div>;
@@ -649,7 +649,7 @@ function AdminProblemDashboard({ onNavigate }: { onNavigate?: (tab: string) => v
     if (problem.type === 'tech_request' || problem.type === 'task') onNavigate?.('tasks');
     else if (problem.type === 'checklist_run') onNavigate?.('checklists');
   }
-  return <><Card title="Пульт контроля" right={<Button kind="soft" onClick={() => download('/api/admin/reports/operations.csv', 'operations-report.csv')}>Экспорт CSV</Button>}>
+  return <><Card title="Пульт контроля" right={<Button type="button" kind="soft" onClick={() => download('/api/admin/reports/operations.csv', 'operations-report.csv')}>Экспорт CSV</Button>}>
     <div className="problemMetrics">
       <button type="button" onClick={() => onNavigate?.('checklists')}><strong>{metrics.open_shifts || 0}</strong><span>смен сейчас</span></button>
       <button type="button" onClick={() => onNavigate?.('tasks')}><strong>{metrics.overdue_tasks || 0}</strong><span>просрочено</span></button>
@@ -698,8 +698,8 @@ function AuthScreen({ onLogin, error, setError }: any) {
       </div>
       <p className="authLead">Чек-листы, инвентаризация, задачи, проблемы и сервис-бук для ресторанов.</p>
       <div className="switcher">
-        <button className={view === 'login' ? 'active' : ''} onClick={() => switchView('login')}>Войти</button>
-        <button className={view === 'register' ? 'active' : ''} onClick={() => switchView('register')}>14 дней бесплатно</button>
+        <button type="button" className={view === 'login' ? 'active' : ''} onClick={() => switchView('login')}>Войти</button>
+        <button type="button" className={view === 'register' ? 'active' : ''} onClick={() => switchView('register')}>14 дней бесплатно</button>
       </div>
       <form onSubmit={submit} className="form">
         {view === 'register' && <>
@@ -712,7 +712,7 @@ function AuthScreen({ onLogin, error, setError }: any) {
         <Field label="Логин" value={form.login} onChange={(e: any) => setForm({ ...form, login: e.target.value })} />
         <Field label="Пароль" type="password" value={form.password} onChange={(e: any) => setForm({ ...form, password: e.target.value })} />
         {error && <div className="error">{error}</div>}
-        <Button disabled={busy}>{busy ? 'Проверяем...' : view === 'login' ? 'Войти' : 'Создать ресторан'}</Button>
+        <Button type="submit" disabled={busy}>{busy ? 'Проверяем...' : view === 'login' ? 'Войти' : 'Создать ресторан'}</Button>
       </form>
     </div>
   </main>;
@@ -739,7 +739,7 @@ function withIcons(tabs: { id: string; title: string }[]): NavTab[] {
 }
 
 function Nav({ tabs, active, setActive }: { tabs: NavTab[]; active: string; setActive: (v: string) => void }) {
-  return <nav className="tabs">{tabs.map(t => <button key={t.id} className={active === t.id ? 'active' : ''} onClick={() => setActive(t.id)}>
+  return <nav className="tabs">{tabs.map(t => <button key={t.id} type="button" className={active === t.id ? 'active' : ''} onClick={() => setActive(t.id)}>
     <AppIcon name={t.icon || 'overview'} className="tabIcon" />
     <span>{t.title}</span>
   </button>)}</nav>;
@@ -1164,8 +1164,8 @@ function SuperAdmin({ user, onLogout }: any) {
                   : <em>чека нет</em>}
               </div> : <Empty text="Оплат пока нет" />}
               <div className="actions">
-                <Button kind="soft" onClick={() => extend(r.id, 30)}>+30 дней</Button>
-                <Button kind="danger" onClick={() => block(r.id)}>Блок</Button>
+                <Button type="button" kind="soft" onClick={() => extend(r.id, 30)}>+30 дней</Button>
+                <Button type="button" kind="danger" onClick={() => block(r.id)}>Блок</Button>
               </div>
             </div>
           </details>;
@@ -1190,7 +1190,7 @@ function SuperAdmin({ user, onLogout }: any) {
             <span className="fieldCaption">Тариф</span>
             <TariffPlans selectedPlan={issueInvoiceForm.plan} showEnterprise={false} onSelect={(planId) => setIssueInvoiceForm({ ...issueInvoiceForm, plan: planId })} />
           </div>
-          <div className="actions adminFormActions"><Button>Выставить счёт</Button></div>
+          <div className="actions adminFormActions"><Button type="submit">Выставить счёт</Button></div>
         </form>
         {msg && <div className={msg.includes('Не удалось') ? 'error' : 'notice'}>{msg}</div>}
       </Card>
@@ -1257,7 +1257,7 @@ function SuperAdmin({ user, onLogout }: any) {
             <Field label="НДС" value={sellerSettings.tax_note || ''} onChange={(e: any) => updateBillingSettings('seller_requisites', 'tax_note', e.target.value)} placeholder="Без НДС" />
           </div>
         </div>
-        <div className="actions adminFormActions"><Button>Сохранить реквизиты</Button></div>
+        <div className="actions adminFormActions"><Button type="submit">Сохранить реквизиты</Button></div>
       </form>
       {settingsMsg && <div className={settingsMsg.includes('Не удалось') ? 'error' : 'notice'}>{settingsMsg}</div>}
     </Card>}
@@ -1270,7 +1270,7 @@ function SuperAdmin({ user, onLogout }: any) {
         <Field label="Эл. почта" value={form.email} onChange={(e: any) => setForm({ ...form, email: e.target.value })} />
         <Field label="Логин владельца" value={form.login} onChange={(e: any) => setForm({ ...form, login: e.target.value })} />
         <Field label="Пароль" value={form.password} onChange={(e: any) => setForm({ ...form, password: e.target.value })} />
-        <Button>Создать ресторан</Button>
+        <Button type="submit">Создать ресторан</Button>
       </form>
       {msg && <div className="notice">{msg}</div>}
     </Card>}
@@ -1410,7 +1410,7 @@ function IntegrationsAdmin() {
         <label className="compactCheck"><input type="checkbox" checked={!autonomous && form.sync_bookings} disabled={autonomous} onChange={(e) => setForm({ ...form, sync_bookings: e.target.checked })} /> Брони</label>
         <label className="compactCheck"><input type="checkbox" checked={!autonomous && form.sync_shifts} disabled={autonomous} onChange={(e) => setForm({ ...form, sync_shifts: e.target.checked })} /> Смены</label>
         <div className="actions adminFormActions">
-          <Button disabled={busy}>Сохранить</Button>
+          <Button type="submit" disabled={busy}>Сохранить</Button>
           <Button type="button" kind="soft" disabled={busy} onClick={testConnection}>Проверить режим</Button>
           <Button type="button" kind="soft" disabled={busy} onClick={syncNow}>Сверить</Button>
         </div>
@@ -1595,7 +1595,7 @@ function BillingAdmin({ restaurant, preferredPlan }: { restaurant: any; preferre
           <Field label="ID в ЭДО" value={form.edo_id} onChange={(e: any) => setForm({ ...form, edo_id: e.target.value })} />
           <Field label="Email для документов" value={form.email} onChange={(e: any) => setForm({ ...form, email: e.target.value })} />
           <Field label="Телефон бухгалтерии" value={form.phone} onChange={(e: any) => setForm({ ...form, phone: e.target.value })} />
-          <div className="actions adminFormActions"><Button disabled={busy}>Сохранить реквизиты</Button></div>
+          <div className="actions adminFormActions"><Button type="submit" disabled={busy}>Сохранить реквизиты</Button></div>
         </form>
       </div>
     </details>
@@ -2039,7 +2039,7 @@ function UsersAdmin({ user }: any) {
         <Field label="Логин" value={form.login} onChange={(e: any) => setForm({ ...form, login: e.target.value })} />
         <Field label="Пароль" value={form.password} onChange={(e: any) => setForm({ ...form, password: e.target.value })} />
         <Select label="Роль" value={form.role} onChange={(e: any) => setForm({ ...form, role: e.target.value })}>{executableRoles.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>
-        <Button>Добавить</Button>
+        <Button type="submit">Добавить</Button>
       </form>
       {msg && <div className={msg.includes('удал') || msg.includes('обнов') || msg.includes('добав') ? 'notice compactNotice' : 'error compactNotice'}>{msg}</div>}
     </Card>
@@ -2054,7 +2054,7 @@ function UsersAdmin({ user }: any) {
             <Field label="Новый пароль" value={editForm.password} onChange={(e: any) => setEditForm({ ...editForm, password: e.target.value })} placeholder="Не менять" />
             <Select label="Роль" value={editForm.role} onChange={(e: any) => setEditForm({ ...editForm, role: e.target.value })}>{executableRoles.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>
             <label className="checkboxRow compactCheckbox"><input type="checkbox" checked={!!editForm.active} onChange={(e) => setEditForm({ ...editForm, active: e.target.checked })} /><span>{editForm.active ? 'Активен' : 'Отключён'}</span></label>
-            <div className="adminInlineActions"><Button kind="soft" type="button" onClick={cancelEdit}>Отмена</Button><Button>Сохранить</Button><Button kind="danger" type="button" onClick={() => removeUser(u)}>Удалить</Button></div>
+            <div className="adminInlineActions"><Button kind="soft" type="button" onClick={cancelEdit}>Отмена</Button><Button type="submit">Сохранить</Button><Button kind="danger" type="button" onClick={() => removeUser(u)}>Удалить</Button></div>
           </form> : <button type="button" className="adminRowButton" onClick={() => startEdit(u)} disabled={u.role === 'owner'}>
             <div className="adminRowMain">
               <b>{u.name}</b>
@@ -2600,7 +2600,7 @@ function Checklists({ user, admin = false }: any) {
         <div className="actions">
           <Button kind="soft" type="button" onClick={addTemplateItem}>Добавить пункт</Button>
           {(editingTemplateId || isTemplateEditorOpen) && <Button kind="soft" type="button" onClick={resetTemplateEditor}>Отмена</Button>}
-          <Button>{editingTemplateId ? 'Сохранить изменения' : 'Создать чек-лист'}</Button>
+          <Button type="submit">{editingTemplateId ? 'Сохранить изменения' : 'Создать чек-лист'}</Button>
         </div>
       </form>
       {editorMsg && <div className={editorMsg.includes('обновл') || editorMsg.includes('создан') ? 'notice' : 'error'}>{editorMsg}</div>}
@@ -3108,7 +3108,7 @@ function Inventory({ user, admin = false }: any) {
               <Field label="Категория" value={productForm.category} onChange={(e: any) => setProductForm({ ...productForm, category: e.target.value })} placeholder="Можно оставить пустым" />
             </div>
             <div className="actions">
-              <Button>Добавить в список</Button>
+              <Button type="submit">Добавить в список</Button>
             </div>
           </form>
           {productMsg && <div className={productMsg.includes('добавлен') || productMsg.includes('обновл') || productMsg.includes('удал') ? 'notice' : 'error'}>{productMsg}</div>}
@@ -3162,7 +3162,7 @@ function Inventory({ user, admin = false }: any) {
                 <span>{run.user?.name} · {roles[run.user?.role] || 'Сотрудник'} · {fmtDate(run.created_at)}</span>
                 <span>Строк в отправке: {run.values?.length || 0}</span>
               </div>
-              <Button kind="soft" onClick={() => download(`/api/admin/inventory/runs/${run.id}/export.xlsx`, `inventory-${run.id}.xlsx`)}>Скачать общий Excel</Button>
+              <Button type="button" kind="soft" onClick={() => download(`/api/admin/inventory/runs/${run.id}/export.xlsx`, `inventory-${run.id}.xlsx`)}>Скачать общий Excel</Button>
             </div>)}
           </div>
         </Card>
@@ -3171,7 +3171,7 @@ function Inventory({ user, admin = false }: any) {
         <div className="grid">{templates.map(t => <div className="miniCard" key={t.id}>
           <div className="rowBetween"><b>{t.title}</b><span className="badge">{departments[t.department]}</span></div>
           <div className="productsGrid">{t.items.map((i: any) => <label className="productQty" key={i.product_id}><span>{i.product?.name}<em>{i.product?.unit}</em></span><input type="number" min="0" value={values[i.product_id] || ''} onChange={(e) => setValues({ ...values, [i.product_id]: e.target.value })} /></label>)}</div>
-          <Button onClick={() => submit(t)}>Сохранить остатки</Button>
+          <Button type="button" onClick={() => submit(t)}>Сохранить остатки</Button>
         </div>)}</div>
         {msg && <div className="notice">{msg}</div>}
       </Card>}
@@ -3179,7 +3179,7 @@ function Inventory({ user, admin = false }: any) {
       <div className="modalCard infoModalCard" onClick={(e) => e.stopPropagation()}>
         <div className="rowBetween">
           <h2>Редактировать товар</h2>
-          <button className="iconBtn" onClick={() => setEditingProduct(null)}>×</button>
+          <button type="button" className="iconBtn" onClick={() => setEditingProduct(null)} aria-label="Закрыть">×</button>
         </div>
         <form className="form inventoryOwnerForm" onSubmit={saveProductEdit}>
           <div className="form two inventoryOwnerFormGrid">
@@ -3194,7 +3194,7 @@ function Inventory({ user, admin = false }: any) {
             <Button kind="danger" type="button" onClick={removeProduct}>Удалить товар</Button>
             <div className="adminInlineActions">
               <Button kind="soft" type="button" onClick={() => setEditingProduct(null)}>Отмена</Button>
-              <Button>Сохранить товар</Button>
+              <Button type="submit">Сохранить товар</Button>
             </div>
           </div>
         </form>
@@ -3319,7 +3319,7 @@ function KnowledgeDocumentModal({ doc, onClose, onAck, plainMobile = false }: { 
 
   if (isPlainText) {
     return <div className="plainTextDocOverlay" onClick={onClose}>
-      <button className="plainTextDocClose" onClick={onClose} aria-label="Закрыть документ">×</button>
+      <button type="button" className="plainTextDocClose" onClick={onClose} aria-label="Закрыть документ">×</button>
       <pre className="plainTextDocumentOnly" onClick={(e) => e.stopPropagation()}>{buildPlainKnowledgeText(doc)}</pre>
       {doc.requires_acknowledgement && !doc.acknowledged && <button className="plainTextAckButton" type="button" onClick={(e) => { e.stopPropagation(); onAck(doc); }}>Ознакомился</button>}
     </div>;
@@ -3329,10 +3329,10 @@ function KnowledgeDocumentModal({ doc, onClose, onAck, plainMobile = false }: { 
     <div className="modalCard mobileDocModal" onClick={(e) => e.stopPropagation()}>
       <div className="rowBetween">
         <h2>{doc.title}</h2>
-        <button className="iconBtn" onClick={onClose}>×</button>
+        <button type="button" className="iconBtn" onClick={onClose} aria-label="Закрыть">×</button>
       </div>
       <KnowledgeDocumentBody doc={doc} />
-      {doc.requires_acknowledgement && !doc.acknowledged && <Button onClick={() => onAck(doc)}>Ознакомился</Button>}
+      {doc.requires_acknowledgement && !doc.acknowledged && <Button type="button" onClick={() => onAck(doc)}>Ознакомился</Button>}
     </div>
   </div>;
 }
@@ -3585,7 +3585,7 @@ function Knowledge({ user, admin = false }: any) {
     <Card title="Добавить документацию">
       <form className="form two" onSubmit={createCat}>
         <Field label="Новая папка" value={catForm.title} onChange={(e: any) => setCatForm({ ...catForm, title: e.target.value })} placeholder="Например: Сервис-бук" />
-        <Button kind="soft">Создать папку</Button>
+        <Button type="submit" kind="soft">Создать папку</Button>
       </form>
       <form className="form" onSubmit={createDoc}>
         <div className="form two">
@@ -3616,7 +3616,7 @@ function Knowledge({ user, admin = false }: any) {
         </div>}
         <RoleAccessPicker value={docForm.allowed_roles} onChange={(allowed_roles) => setDocForm({ ...docForm, allowed_roles })} />
         <label className="checkboxRow compactCheckbox"><input type="checkbox" checked={docForm.requires_acknowledgement !== false} onChange={(e) => setDocForm({ ...docForm, requires_acknowledgement: e.target.checked })} /><span>Требовать ознакомление</span></label>
-        <Button>{docForm.type === 'ttk' ? 'Загрузить и разобрать ТТК' : 'Добавить документ'}</Button>
+        <Button type="submit">{docForm.type === 'ttk' ? 'Загрузить и разобрать ТТК' : 'Добавить документ'}</Button>
       </form>
       {knowledgeMsg && <div className={knowledgeMsg.includes('создан') || knowledgeMsg.includes('сохран') || knowledgeMsg.includes('удал') ? 'notice' : 'error'}>{knowledgeMsg}</div>}
     </Card>

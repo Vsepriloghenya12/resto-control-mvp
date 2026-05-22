@@ -450,7 +450,7 @@ export function Bookings({ admin = false }: any) {
         <Field label="Мест за столом" type="number" min="1" value={bulkForm.seats} onChange={(e: any) => setBulkForm({ ...bulkForm, seats: e.target.value })} />
         <Field label="Зал" value={bulkForm.zone} onChange={(e: any) => setBulkForm({ ...bulkForm, zone: e.target.value })} />
         <Field label="Название столов" value={bulkForm.prefix} onChange={(e: any) => setBulkForm({ ...bulkForm, prefix: e.target.value })} />
-        <Button>Добавить</Button>
+        <Button type="submit">Добавить</Button>
       </form>
       <div className="mobileInlineHint">Новый зал создаётся названием в поле «Зал». Сотрудники сразу увидят столы и смогут ставить брони.</div>
       {hallGroups.length > 0 && <div className="hallSummaryGrid">{hallGroups.map((hall) => <div className="hallSummaryCard" key={hall.name}><strong>{hall.name}</strong><span>{hall.tables.length} столов · {hall.seats} мест</span></div>)}</div>}
@@ -463,7 +463,7 @@ export function Bookings({ admin = false }: any) {
               <input value={tableDrafts[table.id]?.label || ''} onChange={(e) => setTableDrafts({ ...tableDrafts, [table.id]: { ...tableDrafts[table.id], label: e.target.value } })} placeholder="Стол" />
               <input type="number" min="1" value={tableDrafts[table.id]?.seats || ''} onChange={(e) => setTableDrafts({ ...tableDrafts, [table.id]: { ...tableDrafts[table.id], seats: e.target.value } })} placeholder="Мест" />
               <input value={tableDrafts[table.id]?.zone || ''} onChange={(e) => setTableDrafts({ ...tableDrafts, [table.id]: { ...tableDrafts[table.id], zone: e.target.value } })} placeholder="Зал" />
-              <div className="adminInlineActions"><Button kind="soft" type="button" onClick={() => setEditingTableId('')}>Отмена</Button><Button>Сохранить</Button><Button kind="danger" type="button" onClick={() => removeTable(table)}>Удалить</Button></div>
+              <div className="adminInlineActions"><Button kind="soft" type="button" onClick={() => setEditingTableId('')}>Отмена</Button><Button type="submit">Сохранить</Button><Button kind="danger" type="button" onClick={() => removeTable(table)}>Удалить</Button></div>
             </form> : <button type="button" className="tableCompactRow" onClick={() => setEditingTableId(table.id)}>
               <div><b>{table.label}</b><span>{table.zone || 'Основной зал'}</span></div>
               <strong>{table.seats} мест</strong>

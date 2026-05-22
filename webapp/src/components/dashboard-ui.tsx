@@ -125,8 +125,8 @@ export function AppIcon({ name, className }: { name: IconName; className?: strin
   }
 }
 
-export function Button({ children, kind = 'primary', icon, className, ...props }: any) {
-  return <button className={cn('btn', kind, className)} {...props}>
+export function Button({ children, kind = 'primary', icon, className, type = 'button', ...props }: any) {
+  return <button type={type} className={cn('btn', kind, className)} {...props}>
     {icon && <AppIcon name={icon} className="btnIcon" />}
     <span>{children}</span>
   </button>;
