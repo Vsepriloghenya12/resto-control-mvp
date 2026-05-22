@@ -29,6 +29,7 @@ import { cx } from './lib/cx';
 import {
   checklistRunStatuses,
   checklistTypes,
+  checklistRoleMatchesUser,
   departments,
   executableRoles,
   inventorySections,
@@ -2402,7 +2403,7 @@ function Checklists({ user, admin = false }: any) {
 
   const availableTemplates = admin
     ? templates
-    : templates.filter((template) => !template.role || template.role === user.role);
+    : templates.filter((template) => checklistRoleMatchesUser(template.role, user.role));
   const adminTemplates = admin
     ? [...availableTemplates].sort((a, b) => String(roles[a.role] || a.role).localeCompare(String(roles[b.role] || b.role), 'ru') || String(a.title || '').localeCompare(String(b.title || ''), 'ru'))
     : [];

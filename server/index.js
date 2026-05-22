@@ -50,6 +50,12 @@ const departments = { hall: 'Зал', bar: 'Бар', kitchen: 'Кухня', comm
 const techRequestStatuses = { new: 'новая', in_progress: 'в работе', done: 'выполнена', cancelled: 'отклонена' };
 const problemTypeLabels = { task: 'Задача', tech_request: 'Проблема', checklist_run: 'Чек-лист', inventory_run: 'Инвентаризация', booking: 'Бронь' };
 const bookingStatuses = { booked: 'забронирован', seated: 'гости пришли', completed: 'завершён', cancelled: 'отменён' };
+const CHECKLIST_ROLE_VIEWERS = {
+  waiter: ['waiter', 'senior_waiter'],
+  hostess: ['hostess', 'senior_waiter'],
+  bartender: ['bartender', 'senior_bartender'],
+  cook: ['cook', 'senior_cook']
+};
 const tariffEmployeeLimits = {
   trial: 10,
   start: 10,
@@ -181,6 +187,11 @@ function manageableRolesForUser(user) {
 
 function canManageRole(user, role) {
   return manageableRolesForUser(user).includes(role);
+}
+
+function checklistRoleMatchesUser(templateRole, userRole) {
+  if (!templateRole || templateRole === userRole) return true;
+  return (CHECKLIST_ROLE_VIEWERS[templateRole] || [templateRole]).includes(userRole);
 }
 
 function taskRecipientRolesForUser(user) {
@@ -2054,7 +2065,7 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
   const expectedChecklistKeys = new Set();
   activeStaffUsers.forEach(user => {
     activeChecklistTemplates
-      .filter(template => template.role === user.role)
+      .filter(template => checklistRoleMatchesUser(template.role, user.role))
       .forEach(template => expectedChecklistKeys.add(`${user.id}:${template.id}`));
   });
   const completedChecklistKeys = new Set(
@@ -2125,7 +2136,7 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
   const taskById = new Map(activeTasks.map(task => [task.id, task]));
   const employeeMetrics = activeStaffUsers
     .map(user => {
-      const userChecklistTemplates = activeChecklistTemplates.filter(template => template.role === user.role);
+      const userChecklistTemplates = activeChecklistTemplates.filter(template => checklistRoleMatchesUser(template.role, user.role));
       const completedChecklistRuns = checklistRunsToday
         .filter(run => run.user_id === user.id && ['completed', 'done'].includes(run.status));
       const latestChecklistRunByTemplate = new Map();
@@ -2377,7 +2388,7 @@ app.get('/api/checklists/templates', auth, ensureRestaurantActive, (req, res) =>
     .filter(t => {
       if (MANAGER_ROLES.includes(req.user.role)) return !role || t.role === role || role === req.user.role;
       if (SENIOR_ROLES.includes(req.user.role)) return manageableRoles.includes(t.role);
-      return t.role === req.user.role;
+      return checklistRoleMatchesUser(t.role, req.user.role);
     })
     .map(t => ({ ...t, items: db.checklist_items.filter(i => i.template_id === t.id).sort((a, b) => a.sort_order - b.sort_order) }));
   res.json(templates);
@@ -2498,7 +2509,7 @@ app.post('/api/checklists/runs', auth, ensureRestaurantActive, runAsync(async (r
   const template = db.checklist_templates.find(t => t.id === template_id && t.restaurant_id === rid);
   if (!template) return res.status(404).json({ error: 'Чек-лист не найден' });
   if (req.user.role === 'owner') return res.status(403).json({ error: 'Владелец редактирует чек-листы, но не выполняет их' });
-  if (!['manager', template.role].includes(req.user.role)) return res.status(403).json({ error: 'Этот чек-лист не для вашей роли' });
+  if (req.user.role !== 'manager' && !checklistRoleMatchesUser(template.role, req.user.role)) return res.status(403).json({ error: 'Этот чек-лист не для вашей роли' });
   const currentShift = currentOpenShiftFor(req.user);
   if (!currentShift) return res.status(400).json({ error: 'Сначала начните смену' });
   const templateItems = db.checklist_items.filter(i => i.template_id === template.id);

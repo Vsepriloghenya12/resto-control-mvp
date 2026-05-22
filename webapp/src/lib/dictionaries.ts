@@ -19,6 +19,13 @@ export const departmentRoleMap: Record<string, string[]> = {
   common: ['manager']
 };
 
+const checklistRoleViewers: Record<string, string[]> = {
+  waiter: ['waiter', 'senior_waiter'],
+  hostess: ['hostess', 'senior_waiter'],
+  bartender: ['bartender', 'senior_bartender'],
+  cook: ['cook', 'senior_cook']
+};
+
 export function roleDepartment(role?: string) {
   if (role === 'senior_waiter' || role === 'waiter' || role === 'hostess') return 'hall';
   if (role === 'senior_bartender' || role === 'bartender') return 'bar';
@@ -33,6 +40,10 @@ export function manageableRolesFor(user: any) {
   return [];
 }
 
+export function checklistRoleMatchesUser(templateRole?: string, userRole?: string) {
+  if (!templateRole || templateRole === userRole) return true;
+  return (checklistRoleViewers[templateRole] || [templateRole]).includes(String(userRole || ''));
+}
 
 export function taskRecipientRolesFor(user: any) {
   if (!user) return [];
