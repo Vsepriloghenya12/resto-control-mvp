@@ -38,6 +38,7 @@ import {
   problemTypeLabels,
   roles,
   seniorRoles,
+  techRequestCategories,
   manageableRolesFor,
   type InventorySectionId
 } from './lib/dictionaries';
@@ -1737,6 +1738,21 @@ function EmployeeChecklistAuditCard({ checklist }: { checklist: any }) {
   </article>;
 }
 
+function employeeTaskDescription(task: any) {
+  if (task.source === 'tech_request') {
+    const category = techRequestCategories[task.category] || 'Проблема';
+    return `${category}${task.description ? ` · ${task.description}` : ''}`;
+  }
+  return `${task.description || 'Без описания'}${task.due_at ? ` · срок: ${fmtDate(task.due_at)}` : ''}`;
+}
+
+function employeeDoneTaskDescription(task: any) {
+  if (task.source === 'tech_request') {
+    return task.comment || task.description || 'Проблема решена менеджером';
+  }
+  return task.comment || (task.completed_at ? fmtDate(task.completed_at) : 'Задача закрыта');
+}
+
 function EmployeeMetricsExpanded({ row }: { row: any }) {
   const checklistDetails = row.checklists?.details || [];
   const doneChecklists = checklistDetails.filter((item: any) => item.status === 'done');
@@ -1794,12 +1810,12 @@ function EmployeeMetricsExpanded({ row }: { row: any }) {
 
       <EmployeeDetailList title="Задачи" count={taskDetails.length} empty="Задач для сотрудника нет">
         {openTasks.map((task: any) => <article className="employeeDetailCard" key={task.id}>
-          <div className="employeeDetailCardHead"><strong>{task.title}</strong><span className={cx('badge', task.overdue ? 'cancelled' : 'warning')}>{task.overdue ? 'просрочено' : 'в работе'}</span></div>
-          <p>{task.description || 'Без описания'}{task.due_at ? ` · срок: ${fmtDate(task.due_at)}` : ''}</p>
+          <div className="employeeDetailCardHead"><strong>{task.title}</strong><span className={cx('badge', task.overdue ? 'cancelled' : 'warning')}>{task.overdue ? 'просрочено' : task.source === 'tech_request' ? 'проблема' : 'в работе'}</span></div>
+          <p>{employeeTaskDescription(task)}</p>
         </article>)}
         {doneTasks.map((task: any) => <article className="employeeDetailCard compact" key={task.id}>
           <div className="employeeDetailCardHead"><strong>{task.title}</strong><span className="badge active">выполнено</span></div>
-          <p>{task.completed_at ? fmtDate(task.completed_at) : task.comment || 'Задача закрыта'}</p>
+          <p>{employeeDoneTaskDescription(task)}{task.completed_at && task.source === 'tech_request' ? ` · ${fmtDate(task.completed_at)}` : ''}</p>
         </article>)}
       </EmployeeDetailList>
 
@@ -1857,14 +1873,14 @@ function OpenShiftEmployees({ shifts, rows }: { shifts: any[]; rows: any[] }) {
             </EmployeeDetailList>
             <EmployeeDetailList title="Невыполненные задачи" count={openTasks.length} empty="Невыполненных задач нет">
               {openTasks.map((task: any) => <article className="employeeDetailCard compact" key={task.id}>
-                <div className="employeeDetailCardHead"><strong>{task.title}</strong><span className={cx('badge', task.overdue ? 'cancelled' : 'warning')}>{task.overdue ? 'просрочено' : 'в работе'}</span></div>
-                <p>{task.description || 'Без описания'}{task.due_at ? ` · срок: ${fmtDate(task.due_at)}` : ''}</p>
+                <div className="employeeDetailCardHead"><strong>{task.title}</strong><span className={cx('badge', task.overdue ? 'cancelled' : 'warning')}>{task.overdue ? 'просрочено' : task.source === 'tech_request' ? 'проблема' : 'в работе'}</span></div>
+                <p>{employeeTaskDescription(task)}</p>
               </article>)}
             </EmployeeDetailList>
             <EmployeeDetailList title="Выполненные задачи" count={doneTasks.length} empty="Выполненных задач пока нет">
               {doneTasks.map((task: any) => <article className="employeeDetailCard compact" key={task.id}>
                 <div className="employeeDetailCardHead"><strong>{task.title}</strong><span className="badge active">выполнено</span></div>
-                <p>{task.completed_at ? fmtDate(task.completed_at) : task.comment || 'Задача закрыта'}</p>
+                <p>{employeeDoneTaskDescription(task)}{task.completed_at && task.source === 'tech_request' ? ` · ${fmtDate(task.completed_at)}` : ''}</p>
               </article>)}
             </EmployeeDetailList>
           </div>}

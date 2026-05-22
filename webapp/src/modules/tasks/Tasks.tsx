@@ -126,6 +126,10 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
     const activeTasks = tasks.filter((task) => !task.assignment?.done);
     const completedTasks = tasks.filter((task) => task.assignment?.done);
     const openTechRequests = techRequests.filter((request) => !['done', 'cancelled'].includes(request.status));
+    const resolvedTechRequests = techRequests
+      .filter((request) => request.status === 'done')
+      .sort((a, b) => String(b.resolved_at || b.updated_at || b.created_at || '').localeCompare(String(a.resolved_at || a.updated_at || a.created_at || '')));
+    const completedCount = completedTasks.length + resolvedTechRequests.length;
 
     return <>
       <div className="mobileSectionStack mobileTasksScreen">
@@ -163,10 +167,15 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
         </details>
 
         <details className="mobileSection mobileAccordionSection">
-          <summary className="mobileListSectionHead compactAccordionSummary"><h3>Выполнено</h3><span className="mobileSectionCount">{completedTasks.length}</span></summary>
+          <summary className="mobileListSectionHead compactAccordionSummary"><h3>Выполнено</h3><span className="mobileSectionCount">{completedCount}</span></summary>
           <div className="mobileTaskList compactAccordionBody">
-            {completedTasks.length === 0 && <Empty text="Пока нет завершённых задач" />}
+            {completedCount === 0 && <Empty text="Пока нет завершённых задач" />}
             {completedTasks.map((task) => <div key={task.id} className="mobileTaskRow static done"><span className="mobileTaskStatus done" /><div className="mobileTaskCopy"><strong>{task.title}</strong><span>{task.description || 'Задача выполнена'}</span></div><span className="badge active">Готово</span></div>)}
+            {resolvedTechRequests.map((request) => <div key={request.id} className="mobileTaskRow static done techRequestEmployeeView">
+              <span className="mobileTaskStatus done" />
+              <div className="mobileTaskCopy"><strong>{request.title}</strong><span>{request.manager_comment || request.description || 'Проблема решена менеджером'}</span></div>
+              <span className="badge active">Готово</span>
+            </div>)}
           </div>
         </details>
         {taskMsg && <div className="notice mobileInlineNotice">{taskMsg}</div>}
@@ -205,11 +214,16 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
     </>;
   }
 
+  const activeTechRequests = techRequests.filter((request) => !['done', 'cancelled'].includes(request.status));
+  const closedTechRequests = techRequests
+    .filter((request) => ['done', 'cancelled'].includes(request.status))
+    .sort((a, b) => String(b.resolved_at || b.updated_at || b.created_at || '').localeCompare(String(a.resolved_at || a.updated_at || a.created_at || '')));
+
   return <>
-    {canManageTechRequests && <Card title="Проблемы сотрудников" right={<span className="badge warning">{techRequests.filter((request) => !['done', 'cancelled'].includes(request.status)).length} открыто</span>}>
-      {techRequests.length === 0 && <Empty text="Проблем пока нет" />}
+    {canManageTechRequests && <Card title="Проблемы сотрудников" right={<span className="badge warning">{activeTechRequests.length} открыто</span>}>
+      {activeTechRequests.length === 0 && <Empty text="Открытых проблем пока нет" />}
       <div className="compactAccordionList">
-        {techRequests.map((request) => {
+        {activeTechRequests.map((request) => {
           const draft = techDrafts[request.id] || { status: request.status, manager_comment: request.manager_comment || '' };
           return <details className="compactAccordion techRequestCard" key={request.id}>
             <summary className="compactAccordionSummary">
@@ -238,6 +252,26 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
         })}
       </div>
       {techMsg && <div className={techMsg.includes('обновлена') ? 'notice' : 'error'}>{techMsg}</div>}
+    </Card>}
+
+    {canManageTechRequests && <Card title="История проблем">
+      {closedTechRequests.length === 0 && <Empty text="Закрытых проблем пока нет" />}
+      <div className="compactAccordionList">
+        {closedTechRequests.map((request) => <details className="compactAccordion techRequestCard" key={request.id}>
+          <summary className="compactAccordionSummary">
+            <div>
+              <b>{request.title}</b>
+              <span>{request.created_by_user?.name || 'Сотрудник'} · {techRequestCategories[request.category] || 'Другое'} · {fmtDate(request.resolved_at || request.updated_at || request.created_at)}</span>
+            </div>
+            <span className={`badge ${request.status === 'done' ? 'active' : 'cancelled'}`}>{techRequestStatuses[request.status] || request.status}</span>
+          </summary>
+          <div className="compactAccordionBody">
+            {request.description && <p>{request.description}</p>}
+            {request.manager_comment && <p>{request.manager_comment}</p>}
+            <CommentsPanel entityType="tech_request" entityId={request.id} />
+          </div>
+        </details>)}
+      </div>
     </Card>}
 
     <Card title="Задачи команды">

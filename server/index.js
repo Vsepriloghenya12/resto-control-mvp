@@ -2095,6 +2095,9 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
   }, 0);
   const activeTasks = sameRestaurant(db.tasks, rid).filter(task => task.active !== false);
   const taskAssignments = sameRestaurant(db.task_assignments, rid);
+  const techRequests = sameRestaurant(db.tech_requests, rid);
+  const openTechRequests = techRequests.filter(request => !['done', 'cancelled'].includes(request.status));
+  const doneTechRequests = techRequests.filter(request => request.status === 'done');
   const tasksWithAssignments = activeTasks.map(task => {
     const assignments = taskAssignments.filter(assignment => assignment.task_id === task.id);
     const hasOpenAssignments = assignments.some(assignment => !assignment.done);
@@ -2109,11 +2112,11 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
     };
   });
   const taskSummary = {
-    new: tasksWithAssignments.filter(item => item.created_today).length,
-    done: tasksWithAssignments.filter(item => item.done).length,
-    not_done: tasksWithAssignments.filter(item => item.open).length,
+    new: tasksWithAssignments.filter(item => item.created_today).length + openTechRequests.filter(request => request.status === 'new').length,
+    done: tasksWithAssignments.filter(item => item.done).length + doneTechRequests.length,
+    not_done: tasksWithAssignments.filter(item => item.open).length + openTechRequests.length,
     overdue: tasksWithAssignments.filter(item => item.overdue).length,
-    open: tasksWithAssignments.filter(item => item.open).length
+    open: tasksWithAssignments.filter(item => item.open).length + openTechRequests.length
   };
   const checklistSummary = {
     done: completedChecklistKeys.size,
@@ -2194,6 +2197,24 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
           overdue: !assignment.done && task?.due_at && new Date(task.due_at).getTime() < now
         };
       });
+      const userTechRequests = techRequests.filter(request => request.created_by === user.id && request.status !== 'cancelled');
+      const userTechTaskDetails = userTechRequests.map(request => ({
+        id: request.id,
+        source: 'tech_request',
+        title: request.title || 'Проблема',
+        description: request.description || '',
+        due_at: null,
+        created_at: request.created_at || null,
+        done: request.status === 'done',
+        completed_at: request.resolved_at || null,
+        comment: request.manager_comment || '',
+        overdue: false,
+        status: request.status,
+        category: request.category || 'other'
+      }));
+      const combinedTaskDetails = [...userTaskDetails, ...userTechTaskDetails]
+        .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+      const openUserTechRequests = userTechRequests.filter(request => !['done', 'cancelled'].includes(request.status));
       const userInventoryTemplates = activeInventoryTemplates.filter(template => template.department === user.department);
       const latestInventoryRunByTemplate = new Map();
       inventoryRunsToday
@@ -2241,10 +2262,10 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
           details: checklistDetails
         },
         tasks: {
-          new: userTaskAssignments.filter(assignment => String(taskById.get(assignment.task_id)?.created_at || '').slice(0, 10) === today).length,
-          done: userTaskAssignments.filter(assignment => assignment.done).length,
-          not_done: userTaskAssignments.filter(assignment => !assignment.done).length,
-          details: userTaskDetails
+          new: userTaskAssignments.filter(assignment => String(taskById.get(assignment.task_id)?.created_at || '').slice(0, 10) === today).length + openUserTechRequests.filter(request => request.status === 'new').length,
+          done: userTaskAssignments.filter(assignment => assignment.done).length + userTechRequests.filter(request => request.status === 'done').length,
+          not_done: userTaskAssignments.filter(assignment => !assignment.done).length + openUserTechRequests.length,
+          details: combinedTaskDetails
         },
         documents: {
           pending: Math.max(0, userRequiredDocuments.length - acknowledgedDocuments.length),
