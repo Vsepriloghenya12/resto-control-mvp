@@ -1,0 +1,59 @@
+const CACHE_PREFIX = 'resto-control-';
+const STATIC_CACHE = `${CACHE_PREFIX}static-v1`;
+const NO_STORE_PATHS = new Set(['/app-version.json', '/manifest.webmanifest', '/sw.js']);
+
+self.addEventListener('install', () => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((key) => key.startsWith(CACHE_PREFIX) && key !== STATIC_CACHE).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+
+  if (event.data?.type === 'CLEAR_CACHES') {
+    event.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith(CACHE_PREFIX)).map((key) => caches.delete(key)))));
+  }
+});
+
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return;
+
+  if (request.mode === 'navigate') {
+    event.respondWith(fetch(request, { cache: 'no-store' }));
+    return;
+  }
+
+  if (NO_STORE_PATHS.has(url.pathname)) {
+    event.respondWith(fetch(request, { cache: 'no-store' }));
+    return;
+  }
+
+  if (url.pathname.startsWith('/assets/') || url.pathname === '/icon.svg' || url.pathname === '/resto-control-logo.png') {
+    event.respondWith(
+      caches.open(STATIC_CACHE).then(async (cache) => {
+        try {
+          const response = await fetch(request);
+          if (response.ok) cache.put(request, response.clone());
+          return response;
+        } catch {
+          const cached = await cache.match(request);
+          if (cached) return cached;
+          throw new Error('Нет сети и файл не найден в кеше');
+        }
+      })
+    );
+  }
+});

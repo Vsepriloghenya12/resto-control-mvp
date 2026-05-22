@@ -3664,9 +3664,28 @@ app.use((error, req, res, next) => {
   res.status(500).json({ error: 'Внутренняя ошибка сервера' });
 });
 
+function setStaticCacheHeaders(res, filePath) {
+  const filename = path.basename(filePath);
+  const normalized = filePath.replace(/\\/g, '/');
+  if (normalized.includes('/assets/')) {
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    return;
+  }
+  if (['index.html', 'app-version.json', 'manifest.webmanifest', 'sw.js'].includes(filename)) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    return;
+  }
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+}
+
 app.use('/uploads', express.static(uploadsDir));
-app.use(express.static(webDist));
+app.use(express.static(webDist, { setHeaders: setStaticCacheHeaders }));
 app.get('*', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   res.sendFile(path.join(webDist, 'index.html'), err => {
     if (err) res.status(200).send('Resto Control API is running. Build webapp to serve UI.');
   });

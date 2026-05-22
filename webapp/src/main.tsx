@@ -1,6 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { registerAppUpdateFlow } from './app-updates';
 import './styles.css';
 
 function lockMobileZoom() {
@@ -15,6 +16,7 @@ function lockMobileZoom() {
 }
 
 lockMobileZoom();
+registerAppUpdateFlow();
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

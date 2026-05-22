@@ -26,6 +26,7 @@ import { MobileSheetModal } from './components/mobile-sheet-modal';
 import { Bookings } from './modules/bookings/Bookings';
 import { Tasks } from './modules/tasks/Tasks';
 import { cx } from './lib/cx';
+import { APP_UPDATE_AVAILABLE_EVENT, applyAppUpdateNow, type AppVersionInfo } from './app-updates';
 import {
   checklistRunStatuses,
   checklistTypes,
@@ -458,10 +459,20 @@ function CameraCapture({ title, onCapture, onClose }: { title: string; onCapture
   </div>;
 }
 
+function AppUpdateBanner({ update, onDismiss }: { update: AppVersionInfo | null; onDismiss: () => void }) {
+  if (!update) return null;
+  return <div className="appUpdateBanner" role="status">
+    <span><b>Доступно обновление</b><small>Новая версия программы готова к установке</small></span>
+    <button type="button" className="appUpdateButton" onClick={() => void applyAppUpdateNow(update)}>Обновить</button>
+    <button type="button" className="appUpdateDismiss" onClick={onDismiss} aria-label="Скрыть обновление">×</button>
+  </div>;
+}
+
 export default function App() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [availableUpdate, setAvailableUpdate] = useState<AppVersionInfo | null>(null);
 
   async function loadMe() {
     try {
@@ -476,18 +487,29 @@ export default function App() {
   }
 
   useEffect(() => { loadMe(); }, []);
+  useEffect(() => {
+    const onUpdate = (event: Event) => setAvailableUpdate((event as CustomEvent<AppVersionInfo>).detail || {});
+    window.addEventListener(APP_UPDATE_AVAILABLE_EVENT, onUpdate);
+    return () => window.removeEventListener(APP_UPDATE_AVAILABLE_EVENT, onUpdate);
+  }, []);
 
   function onLogout() {
     clearToken();
     setSession(null);
   }
 
-  if (loading) return <div className="splash">
-    <img className="splashLogo" src={brandLogoSrc} alt="Resto Control" />
-    <b>Загружаем Resto Control</b>
-    <span>Подготавливаем рабочее пространство</span>
-  </div>;
-  if (!session) return <AuthScreen onLogin={(data: any) => { setToken(data.token); setSession(data); }} error={error} setError={setError} />;
+  if (loading) return <>
+    <div className="splash">
+      <img className="splashLogo" src={brandLogoSrc} alt="Resto Control" />
+      <b>Загружаем Resto Control</b>
+      <span>Подготавливаем рабочее пространство</span>
+    </div>
+    <AppUpdateBanner update={availableUpdate} onDismiss={() => setAvailableUpdate(null)} />
+  </>;
+  if (!session) return <>
+    <AuthScreen onLogin={(data: any) => { setToken(data.token); setSession(data); }} error={error} setError={setError} />
+    <AppUpdateBanner update={availableUpdate} onDismiss={() => setAvailableUpdate(null)} />
+  </>;
 
   const user = session.user;
   return <div className="appShell">
@@ -496,6 +518,7 @@ export default function App() {
       : ['owner', 'manager'].includes(user.role)
         ? <RestaurantAdmin user={user} restaurant={session.restaurant} onLogout={onLogout} />
         : <EmployeeApp user={user} restaurant={session.restaurant} onLogout={onLogout} />}
+    <AppUpdateBanner update={availableUpdate} onDismiss={() => setAvailableUpdate(null)} />
   </div>;
 }
 
