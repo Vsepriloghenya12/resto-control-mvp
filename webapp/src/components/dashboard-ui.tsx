@@ -289,8 +289,6 @@ export function StatCard({
       aria-pressed={Boolean(active)}
     >
       {content}
-      <span className="statActionHint">{active ? 'Список открыт' : 'Показать список'}</span>
-      <span className="statCardArrow" aria-hidden="true"><AppIcon name="chevron" className="navIcon" /></span>
     </button>;
   }
 

@@ -1672,13 +1672,12 @@ function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager'; onNavig
   const employeeLimit = data.employee_limit === null ? '∞' : data.employee_limit;
   const employeesValue = employeeLimit ? `${data.users} из ${employeeLimit}` : data.users;
   const summary = data.summary || {};
-  const usersSummary = summary.users || {};
   const checklistSummary = summary.checklists || {};
   const taskSummary = summary.tasks || {};
   const documentSummary = summary.documents || {};
   const inventorySummary = summary.inventories || {};
   const employeeMetrics = data.employee_metrics || [];
-  const employees = data.employees || employeeMetrics.map((row: any) => row.user).filter(Boolean);
+  const employees = (data.employees || employeeMetrics.map((row: any) => row.user).filter(Boolean)).filter((employee: any) => employee && employee.active !== false);
   const openShiftsToday = data.open_shifts_today || (data.open_shifts || []).filter((shift: any) => String(shift.opened_at || '').slice(0, 10) === todayKey);
   const openTasksCount = taskSummary.not_done ?? taskSummary.open ?? data.tasks_open;
   const statNumber = (value: any, tone: 'done' | 'todo' | 'neutral' = 'neutral') => {
@@ -1695,12 +1694,12 @@ function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager'; onNavig
   );
   return <>
     <div className={cx('statsGrid', managerMode && 'managerStatsGrid')}>
-      <StatCard icon="users" title="Сотрудники" value={employeesValue} caption={Number(usersSummary.inactive || 0) > 0 ? `${usersSummary.inactive} выкл.` : 'все сотрудники'} active={activePanel === 'employees'} onClick={() => setActivePanel('employees')} />
-      <StatCard icon="users" title="Сотрудники на смене" value={statNumber(openShiftsToday.length, openShiftsToday.length ? 'done' : 'neutral')} caption="открыта смена сегодня" active={activePanel === 'shifts'} onClick={() => setActivePanel('shifts')} />
-      <StatCard icon="checklists" title="Чек-листы сегодня" value={statNumbers({ value: checklistSummary.done ?? data.checklists_today, tone: 'done' }, { value: checklistSummary.not_done, tone: 'todo' })} caption="выполнено / не выполнено" active={activePanel === 'checklists'} onClick={() => setActivePanel('checklists')} />
-      <StatCard icon="tasks" title="Задачи" value={statNumbers({ value: openTasksCount, tone: 'todo' }, { value: taskSummary.done, tone: 'done' })} caption="не выполнено / выполнено" active={activePanel === 'tasks'} onClick={() => setActivePanel('tasks')} />
-      <StatCard icon="document" title="Документы" value={statNumber(documentSummary.total ?? data.docs, 'neutral')} caption={Number(documentSummary.pending || 0) > 0 ? `${documentSummary.pending} ждут` : 'активные документы'} active={activePanel === 'documents'} onClick={() => setActivePanel('documents')} />
-      <StatCard icon="inventory" title="Инвентаризации" value={statNumbers({ value: inventorySummary.ready, tone: 'done' }, { value: inventorySummary.not_ready, tone: 'todo' })} caption="готово / не готово" active={activePanel === 'inventory'} onClick={() => setActivePanel('inventory')} />
+      <StatCard icon="users" title="Сотрудники" value={employeesValue} active={activePanel === 'employees'} onClick={() => setActivePanel('employees')} />
+      <StatCard icon="users" title="Сотрудники на смене" value={statNumber(openShiftsToday.length, openShiftsToday.length ? 'done' : 'neutral')} active={activePanel === 'shifts'} onClick={() => setActivePanel('shifts')} />
+      <StatCard icon="checklists" title="Чек-листы сегодня" value={statNumbers({ value: checklistSummary.done ?? data.checklists_today, tone: 'done' }, { value: checklistSummary.not_done, tone: 'todo' })} active={activePanel === 'checklists'} onClick={() => setActivePanel('checklists')} />
+      <StatCard icon="tasks" title="Задачи" value={statNumbers({ value: openTasksCount, tone: 'todo' }, { value: taskSummary.done, tone: 'done' })} active={activePanel === 'tasks'} onClick={() => setActivePanel('tasks')} />
+      <StatCard icon="document" title="Документы" value={statNumber(documentSummary.total ?? data.docs, 'neutral')} active={activePanel === 'documents'} onClick={() => setActivePanel('documents')} />
+      <StatCard icon="inventory" title="Инвентаризации" value={statNumbers({ value: inventorySummary.ready, tone: 'done' }, { value: inventorySummary.not_ready, tone: 'todo' })} active={activePanel === 'inventory'} onClick={() => setActivePanel('inventory')} />
     </div>
 
     <AdminOverviewDetailPanel activePanel={activePanel} employees={employees} rows={employeeMetrics} shifts={openShiftsToday} />

@@ -2377,7 +2377,7 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
     restaurant,
     users: activeStaffUsers.length,
     users_total: staffUsers.length,
-    employees: staffUsers
+    employees: activeStaffUsers
       .map(publicUser)
       .sort((a, b) => (a?.name || '').localeCompare(b?.name || '', 'ru')),
     employee_limit: employeeLimitForRestaurant(restaurant),
