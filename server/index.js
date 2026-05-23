@@ -2372,7 +2372,7 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
       user: publicUser(activeStaffUsers.find(user => user.id === shift.user_id))
     }))
     .sort((a, b) => String(a.opened_at || '').localeCompare(String(b.opened_at || '')));
-  const openShiftsToday = openShifts.filter(shift => String(shift.opened_at || '').slice(0, 10) === today);
+  const openShiftsToday = openShifts;
   res.json({
     restaurant,
     users: activeStaffUsers.length,

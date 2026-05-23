@@ -1668,7 +1668,6 @@ function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager'; onNavig
   useEffect(() => { api('/api/admin/overview').then(setData); }, []);
   if (!data) return <Card><Empty text="Загружаем обзор" /></Card>;
   const managerMode = mode === 'manager';
-  const todayKey = new Date().toISOString().slice(0, 10);
   const employeeLimit = data.employee_limit === null ? '∞' : data.employee_limit;
   const employeesValue = employeeLimit ? `${data.users} из ${employeeLimit}` : data.users;
   const summary = data.summary || {};
@@ -1678,7 +1677,9 @@ function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager'; onNavig
   const inventorySummary = summary.inventories || {};
   const employeeMetrics = data.employee_metrics || [];
   const employees = (data.employees || employeeMetrics.map((row: any) => row.user).filter(Boolean)).filter((employee: any) => employee && employee.active !== false);
-  const openShiftsToday = data.open_shifts_today || (data.open_shifts || []).filter((shift: any) => String(shift.opened_at || '').slice(0, 10) === todayKey);
+  const openShifts = Array.isArray(data.open_shifts) ? data.open_shifts : [];
+  const openShiftsFromToday = Array.isArray(data.open_shifts_today) ? data.open_shifts_today : [];
+  const openShiftsToday = openShiftsFromToday.length > 0 ? openShiftsFromToday : openShifts;
   const openTasksCount = taskSummary.not_done ?? taskSummary.open ?? data.tasks_open;
   const statNumber = (value: any, tone: 'done' | 'todo' | 'neutral' = 'neutral') => {
     const count = Number(value || 0);

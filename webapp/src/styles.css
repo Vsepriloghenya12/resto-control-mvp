@@ -8653,3 +8653,92 @@ body {
     justify-content: space-between;
   }
 }
+
+/* Owner overview cards: compact layout after removing captions and open hints */
+.statsGrid {
+  gap: 12px;
+}
+
+@media (min-width: 1180px) {
+  .statsGrid:not(.managerStatsGrid) {
+    grid-template-columns: repeat(6, minmax(118px, 1fr));
+  }
+}
+
+.statCard {
+  min-height: 96px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  align-content: start;
+  padding: 14px;
+  border-radius: 18px;
+}
+
+.statCardButton {
+  padding-right: 14px;
+}
+
+.statBadge {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+}
+
+.statCopy {
+  gap: 6px;
+}
+
+.statLabel {
+  display: block;
+  min-height: 28px;
+  overflow: visible;
+  font-size: 0.68rem;
+  line-height: 1.18;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.statValue {
+  min-height: 0;
+  font-size: clamp(1.28rem, 1.55vw, 1.78rem);
+  line-height: 1.05;
+}
+
+.statValue.compact {
+  font-size: clamp(1.08rem, 1.28vw, 1.42rem);
+  white-space: normal;
+}
+
+.statNumberSet,
+.statNumberGroup {
+  gap: 6px;
+}
+
+@media (max-width: 980px) {
+  .statCard {
+    min-height: 92px;
+    padding: 14px;
+  }
+
+  .statCardButton {
+    padding-right: 14px;
+  }
+}
+
+@media (max-width: 560px) {
+  .statCard {
+    min-height: 86px;
+    grid-template-columns: 32px minmax(0, 1fr);
+    padding: 12px;
+  }
+
+  .statBadge {
+    width: 32px;
+    height: 32px;
+  }
+
+  .statLabel {
+    min-height: 0;
+  }
+}
