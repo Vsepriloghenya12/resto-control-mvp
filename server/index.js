@@ -194,6 +194,7 @@ function canManageRole(user, role) {
 }
 
 function canManageChecklistRole(user, role) {
+  if (user?.is_super_admin || MANAGER_ROLES.includes(user?.role)) return true;
   return CHECKLIST_ROLES.includes(role) && canManageRole(user, role);
 }
 
