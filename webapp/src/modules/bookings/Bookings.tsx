@@ -172,7 +172,7 @@ export function Bookings({ admin = false }: any) {
         setViewingReservation(null);
         return;
       }
-      setMsg('Гости посажены за стол');
+      setMsg('Гости пришли по брони');
       setViewingReservation(updated);
       load();
     });
@@ -394,7 +394,7 @@ export function Bookings({ admin = false }: any) {
       subtitle={`${fmtDate(viewingReservation.reserved_for)} · ${bookingStatuses[viewingReservation.status] || viewingReservation.status}`}
       onClose={() => setViewingReservation(null)}
       className="mobileFormSheet bookingDetailsSheet"
-      footer={<div className="bookingSheetActions">{viewingReservation.status === 'seated' ? <Button type="button" disabled={isBookingActionBusy} onClick={() => freeOccupiedTable(viewingReservation)}>{bookingAction === viewingReservationAction ? 'Освобождаем...' : 'Освободить стол'}</Button> : <Button type="button" disabled={isBookingActionBusy} onClick={() => seatReservation(viewingReservation)}>{bookingAction === viewingReservationAction ? 'Сажаем...' : 'Гости сели'}</Button>}<Button kind="soft" type="button" disabled={isBookingActionBusy} onClick={() => startEditReservation(viewingReservation)}>Редактировать</Button>{viewingReservation.status !== 'cancelled' && <Button kind="danger" type="button" disabled={isBookingActionBusy} onClick={() => cancelReservation(viewingReservation)}>Отменить</Button>}</div>}
+      footer={<div className="bookingSheetActions">{viewingReservation.status === 'seated' ? <Button type="button" disabled={isBookingActionBusy} onClick={() => freeOccupiedTable(viewingReservation)}>{bookingAction === viewingReservationAction ? 'Освобождаем...' : 'Освободить стол'}</Button> : <Button type="button" disabled={isBookingActionBusy} onClick={() => seatReservation(viewingReservation)}>{bookingAction === viewingReservationAction ? 'Отмечаем...' : 'Пришли по брони'}</Button>}<Button kind="soft" type="button" disabled={isBookingActionBusy} onClick={() => startEditReservation(viewingReservation)}>Редактировать</Button>{viewingReservation.status !== 'cancelled' && <Button kind="danger" type="button" disabled={isBookingActionBusy} onClick={() => cancelReservation(viewingReservation)}>Отменить</Button>}</div>}
     >
       <div className="bookingDetailsList">
         <div><span>Столы</span><strong>{tablesSummary(viewingReservation) || 'Не выбраны'}</strong></div>
