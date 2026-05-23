@@ -57,7 +57,10 @@
   --text-soft: color-mix(in oklch, var(--foreground) 74%, var(--muted-foreground) 26%);
   --warning: oklch(0.72 0.17 65);
   --danger: var(--destructive);
-  --success: var(--chart-3);
+  --success: oklch(0.72 0.19 149);
+  --status-done: #22c55e;
+  --status-error: #ef4444;
+  --status-neutral: var(--foreground);
   --shadow-soft: 0 24px 72px color-mix(in oklch, var(--foreground) 10%, transparent);
   --shadow-card: 0 14px 38px color-mix(in oklch, var(--foreground) 8%, transparent);
   --radius-xl: calc(var(--radius) + 0.875rem);
@@ -424,15 +427,15 @@ input[type='checkbox'] {
 }
 
 .error {
-  color: var(--destructive);
-  background: color-mix(in oklch, var(--destructive) 10%, transparent);
-  border-color: color-mix(in oklch, var(--destructive) 18%, transparent);
+  color: color-mix(in srgb, var(--status-error) 82%, white);
+  background: color-mix(in srgb, var(--status-error) 12%, transparent);
+  border-color: color-mix(in srgb, var(--status-error) 24%, transparent);
 }
 
 .notice {
-  color: var(--primary-foreground);
-  background: color-mix(in oklch, var(--primary) 8%, transparent);
-  border-color: color-mix(in oklch, var(--primary) 18%, transparent);
+  color: color-mix(in srgb, var(--status-done) 82%, white);
+  background: color-mix(in srgb, var(--status-done) 10%, transparent);
+  border-color: color-mix(in srgb, var(--status-done) 22%, transparent);
 }
 
 .appShell {
@@ -1230,19 +1233,19 @@ input[type='checkbox'] {
 }
 
 .statNumberPart {
-  color: var(--text-primary);
+  color: var(--status-neutral);
 }
 
 .statNumberPart.done {
-  color: var(--primary);
+  color: var(--status-done);
 }
 
 .statNumberPart.todo {
-  color: var(--destructive);
+  color: var(--status-error);
 }
 
 .statNumberPart.zero {
-  color: var(--card);
+  color: var(--status-neutral);
 }
 
 .statCaption {
@@ -1370,11 +1373,11 @@ input[type='checkbox'] {
 }
 
 .openShiftTaskNumbers b.done {
-  color: var(--primary);
+  color: var(--status-done);
 }
 
 .openShiftTaskNumbers b.todo {
-  color: var(--destructive);
+  color: var(--status-error);
 }
 
 .openShiftTaskNumbers b.zero,
@@ -1605,9 +1608,9 @@ input[type='checkbox'] {
 .badge.received,
 .badge.done,
 .badge.in_progress {
-  color: var(--primary);
-  background: color-mix(in oklch, var(--primary) 12%, transparent);
-  border-color: color-mix(in oklch, var(--primary) 20%, transparent);
+  color: var(--status-done);
+  background: color-mix(in srgb, var(--status-done) 12%, transparent);
+  border-color: color-mix(in srgb, var(--status-done) 22%, transparent);
 }
 
 .badge.trial,
@@ -5752,8 +5755,8 @@ body {
 }
 
 .mobileChecklistLine.done {
-  border-color: color-mix(in oklch, var(--primary) 32%, transparent);
-  background: color-mix(in oklch, var(--primary) 10.5%, transparent);
+  border-color: color-mix(in srgb, var(--status-done) 32%, transparent);
+  background: color-mix(in srgb, var(--status-done) 10%, transparent);
 }
 
 .mobileChecklistToggle {
@@ -5766,7 +5769,7 @@ body {
 }
 
 .mobileChecklistToggle.done {
-  background: var(--primary);
+  background: var(--status-done);
   color: var(--primary-foreground);
 }
 
@@ -6164,9 +6167,9 @@ body {
 }
 
 .mobileChecklistSmartTags b.done {
-  color: var(--primary);
-  border-color: color-mix(in oklch, var(--primary) 28%, transparent);
-  background: color-mix(in oklch, var(--primary) 12%, transparent);
+  color: var(--status-done);
+  border-color: color-mix(in srgb, var(--status-done) 28%, transparent);
+  background: color-mix(in srgb, var(--status-done) 12%, transparent);
 }
 
 .mobileChecklistLineMeta {
@@ -6397,15 +6400,15 @@ body {
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: color-mix(in oklch, var(--destructive) 12%, transparent);
-  color: var(--destructive);
+  background: color-mix(in srgb, var(--status-error) 12%, transparent);
+  color: var(--status-error);
   font-size: 0.72rem;
   font-weight: 900;
 }
 
 .employeeChecklistAuditItem.done .employeeChecklistAuditItemHead span {
-  background: color-mix(in oklch, var(--primary) 12%, transparent);
-  color: var(--primary);
+  background: color-mix(in srgb, var(--status-done) 12%, transparent);
+  color: var(--status-done);
 }
 
 .employeeChecklistAuditItemHead strong {
@@ -6416,7 +6419,7 @@ body {
 }
 
 .employeeChecklistAuditItemHead em {
-  color: var(--destructive);
+  color: var(--status-error);
   font-size: 0.72rem;
   font-style: normal;
   font-weight: 850;
@@ -6424,7 +6427,7 @@ body {
 }
 
 .employeeChecklistAuditItem.done .employeeChecklistAuditItemHead em {
-  color: var(--primary);
+  color: var(--status-done);
 }
 
 .employeeChecklistAuditComment {
@@ -7566,14 +7569,14 @@ body {
 }
 
 .checklistStatusButtons button.active {
-  border-color: color-mix(in oklch, var(--primary) 55%, transparent);
-  background: color-mix(in oklch, var(--primary) 12%, transparent);
+  border-color: color-mix(in srgb, var(--status-done) 55%, transparent);
+  background: color-mix(in srgb, var(--status-done) 12%, transparent);
 }
 
 .checklistStatusButtons button.problem,
 .checklistStatusButtons button.active.problem {
-  border-color: color-mix(in oklch, var(--destructive) 55%, transparent);
-  background: color-mix(in oklch, var(--destructive) 12%, transparent);
+  border-color: color-mix(in srgb, var(--status-error) 55%, transparent);
+  background: color-mix(in srgb, var(--status-error) 12%, transparent);
 }
 
 .checklistStatusButtons button.active.muted {
