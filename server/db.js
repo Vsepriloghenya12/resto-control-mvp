@@ -29,7 +29,8 @@ const SNAPSHOT_TABLES = [
   { name: 'request_items', columns: ['id', 'restaurant_id', 'request_id', 'product_id', 'qty_ordered', 'qty_received', 'status', 'comment'] },
   { name: 'inventory_templates', columns: ['id', 'restaurant_id', 'department', 'title', 'active', 'created_at'] },
   { name: 'inventory_template_items', columns: ['id', 'restaurant_id', 'template_id', 'product_id', 'sort_order'] },
-  { name: 'inventory_runs', columns: ['id', 'restaurant_id', 'template_id', 'user_id', 'department', 'comment', 'status', 'created_at'] },
+  { name: 'inventory_assignments', columns: ['id', 'restaurant_id', 'template_id', 'department', 'assigned_by', 'due_date', 'status', 'created_at', 'completed_at'] },
+  { name: 'inventory_runs', columns: ['id', 'restaurant_id', 'template_id', 'user_id', 'department', 'comment', 'status', 'created_at', 'assignment_id'] },
   { name: 'inventory_values', columns: ['id', 'restaurant_id', 'inventory_run_id', 'product_id', 'qty', 'comment'] },
   { name: 'floor_tables', columns: ['id', 'restaurant_id', 'label', 'seats', 'zone', 'sort_order', 'active', 'created_at'] },
   { name: 'table_reservations', columns: ['id', 'restaurant_id', 'created_by', 'table_ids', 'reserved_for', 'duration_minutes', 'guests_count', 'guest_name', 'guest_phone', 'comment', 'status', 'created_at', 'updated_at'], jsonColumns: ['table_ids'] },
@@ -131,6 +132,18 @@ async function ensurePostgresSchema() {
   await getPool().query(`alter table if exists billing_invoices add column if not exists receipt_name text`);
   await getPool().query(`alter table if exists billing_invoices add column if not exists receipt_mime text`);
   await getPool().query(`alter table if exists billing_invoices add column if not exists receipt_uploaded_at timestamptz`);
+  await getPool().query(`alter table if exists inventory_runs add column if not exists assignment_id text`);
+  await getPool().query(`create table if not exists inventory_assignments (
+    id text primary key,
+    restaurant_id text not null references restaurants(id) on delete cascade,
+    template_id text not null references inventory_templates(id),
+    department text not null,
+    assigned_by text references users(id),
+    due_date date not null,
+    status text not null default 'open',
+    created_at timestamptz not null default now(),
+    completed_at timestamptz
+  )`);
 }
 
 
@@ -211,6 +224,7 @@ function emptyDb() {
     request_items: [],
     inventory_templates: [],
     inventory_template_items: [],
+    inventory_assignments: [],
     inventory_runs: [],
     inventory_values: [],
     floor_tables: [],

@@ -128,6 +128,18 @@ create table if not exists inventory_template_items (
   sort_order int not null default 0
 );
 
+create table if not exists inventory_assignments (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  template_id text not null references inventory_templates(id),
+  department text not null,
+  assigned_by text references users(id),
+  due_date date not null,
+  status text not null default 'open',
+  created_at timestamptz not null default now(),
+  completed_at timestamptz
+);
+
 create table if not exists inventory_runs (
   id text primary key,
   restaurant_id text not null references restaurants(id) on delete cascade,
@@ -136,7 +148,8 @@ create table if not exists inventory_runs (
   department text not null,
   comment text,
   status text not null,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  assignment_id text references inventory_assignments(id)
 );
 
 create table if not exists inventory_values (
@@ -262,6 +275,8 @@ create table if not exists knowledge_views (
 
 create index if not exists idx_users_restaurant on users(restaurant_id);
 create index if not exists idx_requests_restaurant on product_requests(restaurant_id);
+create index if not exists idx_inventory_assignments_restaurant on inventory_assignments(restaurant_id);
+create index if not exists idx_inventory_assignments_due_date on inventory_assignments(due_date);
 create index if not exists idx_inventory_runs_restaurant on inventory_runs(restaurant_id);
 create index if not exists idx_floor_tables_restaurant on floor_tables(restaurant_id);
 create index if not exists idx_table_reservations_restaurant on table_reservations(restaurant_id);

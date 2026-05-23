@@ -82,6 +82,65 @@ const tariffEmployeeLimits = {
   сеть: 100,
   enterprise: null
 };
+
+function isoDateKey(value) {
+  return String(value || '').slice(0, 10);
+}
+
+function isDateKey(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
+}
+
+function todayKey() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDaysToDateKey(dateKey, days) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function normalizeDateRange(query, fromKey = 'from', toKey = 'to') {
+  const today = todayKey();
+  const from = isDateKey(query?.[fromKey]) ? String(query[fromKey]) : today;
+  const to = isDateKey(query?.[toKey]) ? String(query[toKey]) : from;
+  return from <= to ? { from, to } : { from: to, to: from };
+}
+
+function dateKeyInRange(value, range) {
+  const key = isoDateKey(value);
+  return isDateKey(key) && key >= range.from && key <= range.to;
+}
+
+function taskWorkDate(task) {
+  return task?.due_at || task?.created_at || '';
+}
+
+function taskTouchesRange(task, assignment, range) {
+  if (assignment?.done) return dateKeyInRange(assignment.completed_at || taskWorkDate(task), range);
+  return dateKeyInRange(taskWorkDate(task), range);
+}
+
+function inventoryAssignmentDetails(assignment) {
+  const template = db.inventory_templates.find(t => t.id === assignment.template_id);
+  const runs = sameRestaurant(db.inventory_runs, assignment.restaurant_id)
+    .filter(run => run.template_id === assignment.template_id)
+    .filter(run => run.assignment_id === assignment.id || isoDateKey(run.created_at) === assignment.due_date)
+    .filter(run => run.status === 'completed');
+  const latestRun = runs.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0] || null;
+  const completed = Boolean(latestRun);
+  return {
+    ...assignment,
+    status: completed ? 'completed' : assignment.status,
+    completed_at: latestRun?.completed_at || latestRun?.created_at || assignment.completed_at || null,
+    template,
+    completed_by: latestRun ? publicUser(db.users.find(user => user.id === latestRun.user_id)) : null,
+    assigned_by_user: publicUser(db.users.find(user => user.id === assignment.assigned_by)),
+    runs_count: runs.length
+  };
+}
+
 const billingPlans = [
   { id: 'start', title: 'Старт', employees: 10, monthly_amount: 1490 },
   { id: 'team20', title: 'Команда 20', employees: 20, monthly_amount: 1990 },
@@ -2139,7 +2198,8 @@ app.post('/api/support/tickets/:id/read', auth, runAsync(async (req, res) => {
 // RESTAURANT OVERVIEW
 app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, res) => {
   const rid = req.user.is_super_admin ? req.query.restaurant_id : req.user.restaurant_id;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayKey();
+  const taskRange = normalizeDateRange(req.query, 'task_from', 'task_to');
   const now = Date.now();
   const restaurant = db.restaurants.find(r => r.id === rid);
   const staffUsers = sameRestaurant(db.users, rid).filter(u => !u.is_super_admin && u.role !== 'owner');
@@ -2159,14 +2219,16 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
       .filter(key => expectedChecklistKeys.has(key))
   );
   const inventoryRuns = sameRestaurant(db.inventory_runs, rid);
-  const inventoryRunsToday = inventoryRuns.filter(r => r.created_at?.slice(0, 10) === today);
+  const inventoryRunsToday = inventoryRuns.filter(r => isoDateKey(r.created_at) === today);
   const activeInventoryTemplates = sameRestaurant(db.inventory_templates, rid).filter(t => t.active !== false);
-  const readyInventoryTemplateIds = new Set(
-    inventoryRunsToday
-      .filter(run => run.status === 'completed')
-      .map(run => run.template_id)
-      .filter(templateId => activeInventoryTemplates.some(template => template.id === templateId))
-  );
+  const activeInventoryTemplateIds = new Set(activeInventoryTemplates.map(template => template.id));
+  const inventoryAssignments = sameRestaurant(collection('inventory_assignments'), rid);
+  const inventoryAssignmentsToday = inventoryAssignments
+    .filter(assignment => assignment.status !== 'cancelled')
+    .filter(assignment => assignment.due_date === today)
+    .filter(assignment => activeInventoryTemplateIds.has(assignment.template_id));
+  const inventoryAssignmentRowsToday = inventoryAssignmentsToday.map(inventoryAssignmentDetails);
+  const readyInventoryAssignmentRows = inventoryAssignmentRowsToday.filter(assignment => assignment.status === 'completed');
   const activeDocuments = sameRestaurant(db.knowledge_documents, rid).filter(d => d.is_active);
   const requiredDocuments = activeDocuments.filter(d => d.requires_acknowledgement);
   const pendingAcknowledgements = requiredDocuments.reduce((total, doc) => {
@@ -2182,26 +2244,26 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
   const techRequests = sameRestaurant(db.tech_requests, rid);
   const openTechRequests = techRequests.filter(request => !['done', 'cancelled'].includes(request.status));
   const doneTechRequests = techRequests.filter(request => request.status === 'done');
-  const tasksWithAssignments = activeTasks.map(task => {
-    const assignments = taskAssignments.filter(assignment => assignment.task_id === task.id);
-    const hasOpenAssignments = assignments.some(assignment => !assignment.done);
-    const dueTime = task.due_at ? new Date(task.due_at).getTime() : NaN;
-    return {
-      task,
-      assignments,
-      done: assignments.length > 0 && assignments.every(assignment => assignment.done),
-      overdue: hasOpenAssignments && Number.isFinite(dueTime) && dueTime < now,
-      open: hasOpenAssignments,
-      created_today: String(task.created_at || '').slice(0, 10) === today
-    };
-  });
-  const taskSummary = {
-    new: tasksWithAssignments.filter(item => item.created_today && item.open).length + openTechRequests.filter(request => request.status === 'new').length,
-    done: tasksWithAssignments.filter(item => item.done).length + doneTechRequests.length,
-    not_done: tasksWithAssignments.filter(item => item.open).length + openTechRequests.length,
-    overdue: tasksWithAssignments.filter(item => item.overdue).length,
-    open: tasksWithAssignments.filter(item => item.open).length + openTechRequests.length
+  const taskById = new Map(activeTasks.map(task => [task.id, task]));
+  const periodTaskAssignments = taskAssignments
+    .filter(assignment => taskById.has(assignment.task_id))
+    .filter(assignment => taskTouchesRange(taskById.get(assignment.task_id), assignment, taskRange));
+  const isPeriodAssignmentOverdue = (assignment) => {
+    const task = taskById.get(assignment.task_id);
+    const dueTime = task?.due_at ? new Date(task.due_at).getTime() : NaN;
+    return !assignment.done && dateKeyInRange(task?.due_at, taskRange) && Number.isFinite(dueTime) && dueTime < now;
   };
+  const openPeriodTaskAssignments = periodTaskAssignments.filter(assignment => !assignment.done && !isPeriodAssignmentOverdue(assignment));
+  const overduePeriodTaskAssignments = periodTaskAssignments.filter(isPeriodAssignmentOverdue);
+  const taskSummary = {
+    new: openPeriodTaskAssignments.length,
+    done: periodTaskAssignments.filter(assignment => assignment.done).length,
+    not_done: openPeriodTaskAssignments.length,
+    overdue: overduePeriodTaskAssignments.length,
+    open: openPeriodTaskAssignments.length
+  };
+  void openTechRequests;
+  void doneTechRequests;
   const checklistSummary = {
     done: completedChecklistKeys.size,
     not_done: Math.max(0, expectedChecklistKeys.size - completedChecklistKeys.size),
@@ -2213,14 +2275,13 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
     pending: pendingAcknowledgements
   };
   const inventorySummary = {
-    ready: readyInventoryTemplateIds.size,
-    not_ready: Math.max(0, activeInventoryTemplates.length - readyInventoryTemplateIds.size),
-    today: inventoryRunsToday.length,
-    total: inventoryRuns.length,
+    ready: readyInventoryAssignmentRows.length,
+    not_ready: Math.max(0, inventoryAssignmentRowsToday.length - readyInventoryAssignmentRows.length),
+    today: inventoryAssignmentsToday.length,
+    total: inventoryAssignments.length,
     active_templates: activeInventoryTemplates.length
   };
   const activeTaskIds = new Set(activeTasks.map(task => task.id));
-  const taskById = new Map(activeTasks.map(task => [task.id, task]));
   const employeeMetrics = activeStaffUsers
     .map(user => {
       const userChecklistTemplates = activeChecklistTemplates.filter(template => checklistRoleMatchesUser(template.role, user.role));
@@ -2266,7 +2327,7 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
           not_done_items: checklistItems.filter(item => !item.done)
         };
       });
-      const userTaskAssignments = taskAssignments.filter(assignment => assignment.user_id === user.id && activeTaskIds.has(assignment.task_id));
+      const userTaskAssignments = periodTaskAssignments.filter(assignment => assignment.user_id === user.id && activeTaskIds.has(assignment.task_id));
       const userTaskDetails = userTaskAssignments.map(assignment => {
         const task = taskById.get(assignment.task_id);
         return {
@@ -2281,48 +2342,22 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
           overdue: !assignment.done && task?.due_at && new Date(task.due_at).getTime() < now
         };
       });
-      const userTechRequests = techRequests.filter(request => request.created_by === user.id && request.status !== 'cancelled');
-      const userTechTaskDetails = userTechRequests.map(request => ({
-        id: request.id,
-        source: 'tech_request',
-        title: request.title || 'Проблема',
-        description: request.description || '',
-        due_at: null,
-        created_at: request.created_at || null,
-        done: request.status === 'done',
-        completed_at: request.resolved_at || null,
-        comment: request.manager_comment || '',
-        overdue: false,
-        status: request.status,
-        category: request.category || 'other'
-      }));
-      const combinedTaskDetails = [...userTaskDetails, ...userTechTaskDetails]
+      const combinedTaskDetails = userTaskDetails
         .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
-      const openUserTechRequests = userTechRequests.filter(request => !['done', 'cancelled'].includes(request.status));
-      const userInventoryTemplates = activeInventoryTemplates.filter(template => template.department === user.department);
-      const latestInventoryRunByTemplate = new Map();
-      inventoryRunsToday
-        .filter(run => run.user_id === user.id && run.status === 'completed')
-        .forEach(run => {
-          const current = latestInventoryRunByTemplate.get(run.template_id);
-          if (!current || String(run.created_at || '').localeCompare(String(current.created_at || '')) > 0) {
-            latestInventoryRunByTemplate.set(run.template_id, run);
-          }
-        });
-      const userReadyInventoryTemplateIds = new Set(
-        Array.from(latestInventoryRunByTemplate.keys())
-          .filter(templateId => userInventoryTemplates.some(template => template.id === templateId))
-      );
-      const inventoryDetails = userInventoryTemplates.map(template => {
-        const run = latestInventoryRunByTemplate.get(template.id);
-        return {
-          id: template.id,
-          title: template.title,
-          department: template.department,
-          status: run ? 'ready' : 'not_ready',
-          completed_at: run?.completed_at || run?.created_at || null
-        };
-      });
+      const openUserTechRequests = [];
+      const userInventoryAssignments = inventoryAssignmentRowsToday.filter(assignment => assignment.department === user.department);
+      const inventoryDetails = userInventoryAssignments.map(assignment => ({
+        id: assignment.id,
+        template_id: assignment.template_id,
+        title: assignment.template?.title || 'Инвентаризация',
+        department: assignment.department,
+        due_date: assignment.due_date,
+        status: assignment.status === 'completed' ? 'ready' : 'not_ready',
+        completed_at: assignment.completed_at || null,
+        completed_by: assignment.completed_by || null
+      }));
+      const userReadyInventoryTemplateIds = new Set(inventoryDetails.filter(item => item.status === 'ready').map(item => item.id));
+      const userInventoryTemplates = inventoryDetails;
       const userRequiredDocuments = requiredDocuments.filter(doc => hasRoleAccess(user, doc.allowed_roles));
       const documentDetails = userRequiredDocuments.map(doc => {
         const acknowledgement = db.knowledge_acknowledgements.find(a => (
@@ -2346,9 +2381,9 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
           details: checklistDetails
         },
         tasks: {
-          new: userTaskAssignments.filter(assignment => !assignment.done && String(taskById.get(assignment.task_id)?.created_at || '').slice(0, 10) === today).length + openUserTechRequests.filter(request => request.status === 'new').length,
-          done: userTaskAssignments.filter(assignment => assignment.done).length + userTechRequests.filter(request => request.status === 'done').length,
-          not_done: userTaskAssignments.filter(assignment => !assignment.done).length + openUserTechRequests.length,
+          new: userTaskAssignments.filter(assignment => !assignment.done && !isPeriodAssignmentOverdue(assignment)).length,
+          done: userTaskAssignments.filter(assignment => assignment.done).length,
+          not_done: userTaskAssignments.filter(assignment => !assignment.done && !isPeriodAssignmentOverdue(assignment)).length,
           details: combinedTaskDetails
         },
         documents: {
@@ -2398,6 +2433,8 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
       inventories: inventorySummary
     },
     employee_metrics: employeeMetrics,
+    task_period: taskRange,
+    inventory_assignments_today: inventoryAssignmentRowsToday,
     open_shifts: openShifts,
     open_shifts_today: openShiftsToday
   });
@@ -2818,19 +2855,107 @@ app.post('/api/admin/inventory/import-template', auth, ensureRestaurantActive, a
 
 app.get('/api/inventory/templates', auth, ensureRestaurantActive, (req, res) => {
   const rid = req.user.restaurant_id;
-  const department = req.query.department || (['owner', 'manager'].includes(req.user.role) ? null : req.user.department);
-  const rows = sameRestaurant(db.inventory_templates, rid)
-    .filter(t => t.active && (!department || t.department === department))
-    .map(t => ({ ...t, items: db.inventory_template_items.filter(i => i.template_id === t.id).map(i => ({ ...i, product: db.products.find(p => p.id === i.product_id) })) }));
+  const assignable = String(req.query.assignable || '') === '1';
+  const today = isDateKey(req.query.date) ? String(req.query.date) : todayKey();
+  const isManager = MANAGER_ROLES.includes(req.user.role) || req.user.is_super_admin;
+  const seniorDepartment = manageableDepartment(req.user);
+  const department = req.query.department || (isManager ? null : req.user.department);
+  let templates = sameRestaurant(db.inventory_templates, rid)
+    .filter(t => t.active !== false)
+    .filter(t => !department || t.department === department);
+
+  if (assignable) {
+    if (!isManager && !seniorDepartment) return res.status(403).json({ error: 'Назначать инвентаризацию может менеджер или старший подразделения' });
+    templates = templates.filter(t => isManager || t.department === seniorDepartment);
+  } else if (!isManager) {
+    const openAssignments = sameRestaurant(collection('inventory_assignments'), rid)
+      .filter(assignment => assignment.status === 'open')
+      .filter(assignment => assignment.department === req.user.department)
+      .filter(assignment => assignment.due_date === today);
+    const assignedTemplateIds = new Set(openAssignments.map(assignment => assignment.template_id));
+    templates = templates.filter(t => assignedTemplateIds.has(t.id));
+  }
+
+  const assignmentByTemplateId = new Map(
+    sameRestaurant(collection('inventory_assignments'), rid)
+      .filter(assignment => assignment.due_date === today && assignment.status !== 'cancelled')
+      .map(assignment => [assignment.template_id, inventoryAssignmentDetails(assignment)])
+  );
+  const rows = templates
+    .map(t => ({
+      ...t,
+      assignment: assignmentByTemplateId.get(t.id) || null,
+      items: db.inventory_template_items
+        .filter(i => i.template_id === t.id)
+        .map(i => ({ ...i, product: db.products.find(p => p.id === i.product_id) }))
+    }));
   res.json(rows);
 });
+
+app.get('/api/admin/inventory/assignments', auth, ensureRestaurantActive, operationalEditorOnly, (req, res) => {
+  const rid = req.user.restaurant_id;
+  const range = normalizeDateRange(req.query, 'from', 'to');
+  const department = SENIOR_ROLES.includes(req.user.role) ? manageableDepartment(req.user) : String(req.query.department || '');
+  const rows = sameRestaurant(collection('inventory_assignments'), rid)
+    .filter(assignment => assignment.status !== 'cancelled')
+    .filter(assignment => assignment.due_date >= range.from && assignment.due_date <= range.to)
+    .filter(assignment => !department || assignment.department === department)
+    .map(inventoryAssignmentDetails)
+    .sort((a, b) => String(b.due_date || '').localeCompare(String(a.due_date || '')) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
+  res.json(rows);
+});
+
+app.post('/api/admin/inventory/assignments', auth, ensureRestaurantActive, operationalEditorOnly, runAsync(async (req, res) => {
+  const rid = req.user.restaurant_id;
+  const template = db.inventory_templates.find(t => t.id === req.body?.template_id && t.restaurant_id === rid && t.active !== false);
+  if (!template) return res.status(404).json({ error: 'Бланк инвентаризации не найден' });
+  const seniorDepartment = manageableDepartment(req.user);
+  if (seniorDepartment && template.department !== seniorDepartment) {
+    return res.status(403).json({ error: 'Старший может назначать инвентаризацию только своему подразделению' });
+  }
+  const dueDate = isDateKey(req.body?.due_date) ? String(req.body.due_date) : todayKey();
+  const assignments = collection('inventory_assignments');
+  let assignment = assignments.find(item => (
+    item.restaurant_id === rid
+    && item.template_id === template.id
+    && item.department === template.department
+    && item.due_date === dueDate
+    && item.status !== 'cancelled'
+  ));
+  if (!assignment) {
+    assignment = {
+      id: uid('invass'),
+      restaurant_id: rid,
+      template_id: template.id,
+      department: template.department,
+      assigned_by: req.user.id,
+      due_date: dueDate,
+      status: 'open',
+      created_at: nowIso(),
+      completed_at: null
+    };
+    assignments.push(assignment);
+  } else if (assignment.status === 'completed') {
+    assignment.status = 'open';
+    assignment.completed_at = null;
+  }
+  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'inventory_assigned', title: `${req.user.name} назначил инвентаризацию "${template.title}"`, entity_type: 'inventory_assignment', entity_id: assignment.id, metadata: { template_id: template.id, department: template.department, due_date: dueDate } });
+  notifyUsers(rid, db.users.filter(user => user.active && user.department === template.department && !MANAGER_ROLES.includes(user.role)), { title: 'Назначена инвентаризация', body: `${template.title} · ${departments[template.department] || template.department}`, entity_type: 'inventory_assignment', entity_id: assignment.id });
+  await persist();
+  res.status(201).json(inventoryAssignmentDetails(assignment));
+}));
 
 app.post('/api/inventory/runs', auth, ensureRestaurantActive, runAsync(async (req, res) => {
   const rid = req.user.restaurant_id;
   const { template_id, values, comment } = req.body;
   const template = db.inventory_templates.find(t => t.id === template_id && t.restaurant_id === rid);
   if (!template) return res.status(404).json({ error: 'Бланк инвентаризации не найден' });
-  if (!['owner', 'manager'].includes(req.user.role) && template.department !== req.user.department) return res.status(403).json({ error: 'Нет доступа к этой инвентаризации' });
+  const isManager = ['owner', 'manager'].includes(req.user.role);
+  if (!isManager && template.department !== req.user.department) return res.status(403).json({ error: 'Нет доступа к этой инвентаризации' });
+  const today = todayKey();
+  const assignment = sameRestaurant(collection('inventory_assignments'), rid)
+    .find(item => item.template_id === template.id && item.department === template.department && item.due_date === today && item.status === 'open');
+  if (!isManager && !assignment) return res.status(403).json({ error: 'Инвентаризация не назначена на сегодня' });
 
   const parsedValues = [];
   for (const [product_id, value] of Object.entries(values || {})) {
@@ -2842,13 +2967,17 @@ app.post('/api/inventory/runs', auth, ensureRestaurantActive, runAsync(async (re
     parsedValues.push({ product_id, qty: parsed.qty, expression: parsed.expression, comment: typeof value === 'object' && value !== null ? value.comment || '' : '' });
   }
 
-  const run = { id: uid('invrun'), restaurant_id: rid, template_id, user_id: req.user.id, department: template.department, comment: comment || '', status: 'completed', created_at: nowIso() };
+  const run = { id: uid('invrun'), restaurant_id: rid, template_id, user_id: req.user.id, department: template.department, comment: comment || '', status: 'completed', created_at: nowIso(), assignment_id: assignment?.id || null };
   db.inventory_runs.push(run);
   parsedValues.forEach(value => {
     const savedComment = [value.expression, value.comment].filter(Boolean).join(' · ');
     db.inventory_values.push({ id: uid('invv'), restaurant_id: rid, inventory_run_id: run.id, product_id: value.product_id, qty: value.qty, comment: savedComment });
   });
-  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'inventory_completed', title: `${req.user.name} отправил инвентаризацию "${template.title}"`, entity_type: 'inventory_run', entity_id: run.id, metadata: { template_id, department: template.department } });
+  if (assignment) {
+    assignment.status = 'completed';
+    assignment.completed_at = run.created_at;
+  }
+  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'inventory_completed', title: `${req.user.name} отправил инвентаризацию "${template.title}"`, entity_type: 'inventory_run', entity_id: run.id, metadata: { template_id, department: template.department, assignment_id: assignment?.id || null } });
   notifyManagers(rid, { title: 'Инвентаризация отправлена', body: `${req.user.name}: ${template.title}`, entity_type: 'inventory_run', entity_id: run.id });
   await persist();
   res.status(201).json(run);

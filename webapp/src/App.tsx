@@ -75,6 +75,19 @@ type MobileWorkspaceConfig = {
 
 type AdminOverviewPanelKey = 'employees' | 'shifts' | 'checklists' | 'tasks' | 'documents' | 'inventory';
 
+
+function inputDateKey(value?: string | Date) {
+  const date = value instanceof Date ? value : value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10);
+  return date.toISOString().slice(0, 10);
+}
+
+function shiftInputDate(dateKey: string, days: number) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 const brandLogoSrc = '/resto-control-logo.png';
 
 const subscriptionTariffs = [
@@ -1663,9 +1676,14 @@ function SubscriptionBanner({ restaurant, openBilling }: any) {
 }
 
 function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager'; onNavigate?: (tab: string) => void }) {
+  const today = inputDateKey();
   const [data, setData] = useState<any>(null);
   const [activePanel, setActivePanel] = useState<AdminOverviewPanelKey>('employees');
-  useEffect(() => { api('/api/admin/overview').then(setData); }, []);
+  const [taskRange, setTaskRange] = useState({ from: today, to: today });
+  useEffect(() => {
+    const query = new URLSearchParams({ task_from: taskRange.from, task_to: taskRange.to });
+    api(`/api/admin/overview?${query.toString()}`).then(setData);
+  }, [taskRange.from, taskRange.to]);
   if (!data) return <Card><Empty text="Загружаем обзор" /></Card>;
   const managerMode = mode === 'manager';
   const employeeLimit = data.employee_limit === null ? '∞' : data.employee_limit;
@@ -1698,22 +1716,22 @@ function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager'; onNavig
       <StatCard icon="users" title="Сотрудники" value={employeesValue} active={activePanel === 'employees'} onClick={() => setActivePanel('employees')} />
       <StatCard icon="users" title="Сотрудники на смене" value={statNumber(openShiftsToday.length, openShiftsToday.length ? 'done' : 'neutral')} active={activePanel === 'shifts'} onClick={() => setActivePanel('shifts')} />
       <StatCard icon="checklists" title="Чек-листы сегодня" value={statNumbers({ value: checklistSummary.done ?? data.checklists_today, tone: 'done' }, { value: checklistSummary.not_done, tone: 'todo' })} active={activePanel === 'checklists'} onClick={() => setActivePanel('checklists')} />
-      <StatCard icon="tasks" title="Задачи" value={statNumbers({ value: openTasksCount, tone: 'todo' }, { value: taskSummary.done, tone: 'done' })} active={activePanel === 'tasks'} onClick={() => setActivePanel('tasks')} />
+      <StatCard icon="tasks" title="Задачи" value={statNumbers({ value: openTasksCount, tone: 'todo' }, { value: taskSummary.overdue, tone: 'todo' }, { value: taskSummary.done, tone: 'done' })} active={activePanel === 'tasks'} onClick={() => setActivePanel('tasks')} />
       <StatCard icon="document" title="Документы" value={statNumber(documentSummary.total ?? data.docs, 'neutral')} active={activePanel === 'documents'} onClick={() => setActivePanel('documents')} />
       <StatCard icon="inventory" title="Инвентаризации" value={statNumbers({ value: inventorySummary.ready, tone: 'done' }, { value: inventorySummary.not_ready, tone: 'todo' })} active={activePanel === 'inventory'} onClick={() => setActivePanel('inventory')} />
     </div>
 
-    <AdminOverviewDetailPanel activePanel={activePanel} employees={employees} rows={employeeMetrics} shifts={openShiftsToday} />
+    <AdminOverviewDetailPanel activePanel={activePanel} employees={employees} rows={employeeMetrics} shifts={openShiftsToday} taskRange={taskRange} onTaskRangeChange={setTaskRange} inventoryAssignments={data.inventory_assignments_today || []} />
   </>;
 }
 
-function AdminOverviewDetailPanel({ activePanel, employees, rows, shifts }: { activePanel: AdminOverviewPanelKey; employees: any[]; rows: any[]; shifts: any[] }) {
+function AdminOverviewDetailPanel({ activePanel, employees, rows, shifts, taskRange, onTaskRangeChange, inventoryAssignments }: { activePanel: AdminOverviewPanelKey; employees: any[]; rows: any[]; shifts: any[]; taskRange: any; onTaskRangeChange: (range: any) => void; inventoryAssignments: any[] }) {
   if (activePanel === 'employees') return <OverviewEmployeesList employees={employees} rows={rows} />;
   if (activePanel === 'shifts') return <OpenShiftEmployees shifts={shifts} rows={rows} />;
   if (activePanel === 'checklists') return <OverviewChecklistLists rows={rows} />;
-  if (activePanel === 'tasks') return <OverviewTaskLists rows={rows} />;
+  if (activePanel === 'tasks') return <OverviewTaskLists rows={rows} taskRange={taskRange} onTaskRangeChange={onTaskRangeChange} />;
   if (activePanel === 'documents') return <OverviewDocumentLists rows={rows} />;
-  return <OverviewInventoryLists rows={rows} />;
+  return <OverviewInventoryLists assignments={inventoryAssignments} rows={rows} />;
 }
 
 function OverviewEmployeesList({ employees, rows }: { employees: any[]; rows: any[] }) {
@@ -1759,9 +1777,30 @@ function OverviewChecklistCard({ item }: { item: any }) {
   return <article className="employeeDetailCard overviewDetailCard"><div className="employeeDetailCardHead"><strong>{checklist.title || 'Чек-лист'}</strong><span className={cx('badge', completed ? 'active' : 'warning')}>{completed ? 'выполнено' : 'не выполнено'}</span></div><p>{item.user?.name || 'Сотрудник'} · {roles[item.user?.role] || item.user?.role || 'роль не указана'}{checklist.completed_at ? ` · ${fmtDate(checklist.completed_at)}` : ''}</p>{notDoneItems.length > 0 && <EmployeeDetailBullets items={notDoneItems} />}{completed && doneItems.length > 0 && <EmployeeDetailBullets items={doneItems} done />}</article>;
 }
 
-function OverviewTaskLists({ rows }: { rows: any[] }) {
-  const items = overviewTasks(rows); const openItems = items.filter((item: any) => !item.task.done); const doneItems = items.filter((item: any) => item.task.done);
-  return <section className="overviewListPanel employeeMetricsPlain"><h3>Задачи</h3><div className="employeeDetailColumns overviewDetailColumns"><EmployeeDetailList title="Не выполнено" count={openItems.length} empty="Невыполненных задач нет" defaultOpen>{openItems.map((item: any) => <OverviewTaskCard item={item} key={item.id} />)}</EmployeeDetailList><EmployeeDetailList title="Выполнено" count={doneItems.length} empty="Выполненных задач пока нет" defaultOpen>{doneItems.map((item: any) => <OverviewTaskCard item={item} key={item.id} />)}</EmployeeDetailList></div></section>;
+function OverviewTaskLists({ rows, taskRange, onTaskRangeChange }: { rows: any[]; taskRange: any; onTaskRangeChange: (range: any) => void }) {
+  const items = overviewTasks(rows);
+  const overdueItems = items.filter((item: any) => !item.task.done && item.task.overdue);
+  const openItems = items.filter((item: any) => !item.task.done && !item.task.overdue);
+  const doneItems = items.filter((item: any) => item.task.done);
+  const today = inputDateKey();
+  const setQuickRange = (from: string, to = from) => onTaskRangeChange({ from, to });
+  return <section className="overviewListPanel employeeMetricsPlain">
+    <div className="overviewPanelHead overviewTaskPanelHead">
+      <div><h3>Задачи</h3><p>Показаны задачи только за выбранный день или период</p></div>
+      <div className="overviewDateTools">
+        <Button type="button" kind="soft" onClick={() => setQuickRange(today)}>Сегодня</Button>
+        <Button type="button" kind="soft" onClick={() => setQuickRange(shiftInputDate(today, -1))}>Вчера</Button>
+        <Button type="button" kind="soft" onClick={() => setQuickRange(shiftInputDate(today, -6), today)}>7 дней</Button>
+        <label><span>с</span><input type="date" value={taskRange.from} onChange={(e: any) => onTaskRangeChange({ ...taskRange, from: e.target.value || today })} /></label>
+        <label><span>по</span><input type="date" value={taskRange.to} onChange={(e: any) => onTaskRangeChange({ ...taskRange, to: e.target.value || taskRange.from })} /></label>
+      </div>
+    </div>
+    <div className="employeeDetailColumns overviewDetailColumns">
+      <EmployeeDetailList title="Не выполнено" count={openItems.length} empty="Невыполненных задач за период нет" defaultOpen>{openItems.map((item: any) => <OverviewTaskCard item={item} key={item.id} />)}</EmployeeDetailList>
+      <EmployeeDetailList title="Просрочено" count={overdueItems.length} empty="Просроченных задач за период нет" defaultOpen>{overdueItems.map((item: any) => <OverviewTaskCard item={item} key={`overdue-${item.id}`} />)}</EmployeeDetailList>
+      <EmployeeDetailList title="Выполнено" count={doneItems.length} empty="Выполненных задач за период нет" defaultOpen>{doneItems.map((item: any) => <OverviewTaskCard item={item} key={item.id} />)}</EmployeeDetailList>
+    </div>
+  </section>;
 }
 
 function OverviewTaskCard({ item }: { item: any }) {
@@ -1779,14 +1818,19 @@ function OverviewDocumentCard({ item }: { item: any }) {
   return <article className="employeeDetailCard compact overviewDetailCard"><div className="employeeDetailCardHead"><strong>{document.title || 'Документ'}</strong><span className={cx('badge', acknowledged ? 'active' : 'warning')}>{acknowledged ? 'ознакомлен' : 'ждёт'}</span></div><p>{item.user?.name || 'Сотрудник'} · {acknowledged && document.acknowledged_at ? fmtDate(document.acknowledged_at) : `версия ${document.version || 1}`}</p></article>;
 }
 
-function OverviewInventoryLists({ rows }: { rows: any[] }) {
-  const items = overviewInventories(rows); const readyItems = items.filter((item: any) => item.inventory.status === 'ready'); const notReadyItems = items.filter((item: any) => item.inventory.status !== 'ready');
-  return <section className="overviewListPanel employeeMetricsPlain"><h3>Инвентаризации</h3><div className="employeeDetailColumns overviewDetailColumns"><EmployeeDetailList title="Не готово" count={notReadyItems.length} empty="Нет невыполненных инвентаризаций" defaultOpen>{notReadyItems.map((item: any) => <OverviewInventoryCard item={item} key={item.id} />)}</EmployeeDetailList><EmployeeDetailList title="Готово" count={readyItems.length} empty="Готовых инвентаризаций сегодня нет" defaultOpen>{readyItems.map((item: any) => <OverviewInventoryCard item={item} key={item.id} />)}</EmployeeDetailList></div></section>;
+function OverviewInventoryLists({ assignments, rows }: { assignments: any[]; rows: any[] }) {
+  const sourceItems = assignments.length
+    ? assignments.map((assignment: any) => ({ id: assignment.id, inventory: { ...assignment, title: assignment.template?.title || assignment.title, status: assignment.status === 'completed' ? 'ready' : 'not_ready' }, user: assignment.completed_by }))
+    : overviewInventories(rows);
+  const readyItems = sourceItems.filter((item: any) => item.inventory.status === 'ready');
+  const notReadyItems = sourceItems.filter((item: any) => item.inventory.status !== 'ready');
+  return <section className="overviewListPanel employeeMetricsPlain"><h3>Инвентаризации</h3><div className="employeeDetailColumns overviewDetailColumns"><EmployeeDetailList title="Назначены" count={notReadyItems.length} empty="На сегодня инвентаризации не назначены" defaultOpen>{notReadyItems.map((item: any) => <OverviewInventoryCard item={item} key={item.id} />)}</EmployeeDetailList><EmployeeDetailList title="Готово" count={readyItems.length} empty="Готовых инвентаризаций сегодня нет" defaultOpen>{readyItems.map((item: any) => <OverviewInventoryCard item={item} key={item.id} />)}</EmployeeDetailList></div></section>;
 }
 
 function OverviewInventoryCard({ item }: { item: any }) {
   const inventory = item.inventory || {}; const ready = inventory.status === 'ready';
-  return <article className="employeeDetailCard compact overviewDetailCard"><div className="employeeDetailCardHead"><strong>{inventory.title || 'Инвентаризация'}</strong><span className={cx('badge', ready ? 'active' : 'warning')}>{ready ? 'готово' : 'не готово'}</span></div><p>{item.user?.name || 'Сотрудник'} · {departments[inventory.department] || inventory.department || 'Подразделение'}{ready && inventory.completed_at ? ` · ${fmtDate(inventory.completed_at)}` : ''}</p></article>;
+  const performer = ready ? (inventory.completed_by?.name || item.user?.name || 'Сотрудник') : 'ожидает сотрудника подразделения';
+  return <article className="employeeDetailCard compact overviewDetailCard"><div className="employeeDetailCardHead"><strong>{inventory.title || 'Инвентаризация'}</strong><span className={cx('badge', ready ? 'active' : 'warning')}>{ready ? 'готово' : 'назначено'}</span></div><p>{departments[inventory.department] || inventory.department || 'Подразделение'} · {performer}{ready && inventory.completed_at ? ` · ${fmtDate(inventory.completed_at)}` : ''}</p></article>;
 }
 
 function EmployeeDetailList({ title, count, empty, children, defaultOpen = false }: { title: string; count?: number; empty: string; children: ReactNode; defaultOpen?: boolean }) {
@@ -2839,6 +2883,10 @@ async function uploadPayloadFromFile(file: File) {
 
 function Inventory({ user, admin = false }: any) {
   const [templates, setTemplates] = useState<any[]>([]);
+  const [assignableTemplates, setAssignableTemplates] = useState<any[]>([]);
+  const [inventoryAssignments, setInventoryAssignments] = useState<any[]>([]);
+  const [assignmentForm, setAssignmentForm] = useState<any>({ template_id: '', due_date: inputDateKey() });
+  const [assignmentMsg, setAssignmentMsg] = useState('');
   const [runs, setRuns] = useState<any[]>([]);
   const [employeeRuns, setEmployeeRuns] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
@@ -2862,12 +2910,19 @@ function Inventory({ user, admin = false }: any) {
   });
 
   async function load() {
-    const [templateRows, productRows, runRows] = await Promise.all([
+    const canAssignInventory = admin || seniorRoles.includes(user.role);
+    const today = inputDateKey();
+    const [templateRows, productRows, runRows, assignableRows, assignmentRows] = await Promise.all([
       api('/api/inventory/templates'),
       admin ? api('/api/products') : Promise.resolve([]),
-      admin ? api('/api/admin/inventory/runs') : api('/api/inventory/runs')
+      admin ? api('/api/admin/inventory/runs') : api('/api/inventory/runs'),
+      canAssignInventory ? api('/api/inventory/templates?assignable=1') : Promise.resolve([]),
+      canAssignInventory ? api(`/api/admin/inventory/assignments?from=${today}&to=${today}`) : Promise.resolve([])
     ]);
     setTemplates(templateRows);
+    setAssignableTemplates(assignableRows);
+    setInventoryAssignments(assignmentRows);
+    setAssignmentForm((current: any) => ({ ...current, template_id: current.template_id || assignableRows[0]?.id || '', due_date: current.due_date || today }));
     if (admin) {
       setProducts(productRows);
       setRuns(runRows);
@@ -3010,6 +3065,22 @@ function Inventory({ user, admin = false }: any) {
     return String(Math.round(total * 1000) / 1000).replace('.', ',');
   }
 
+  async function assignInventory(e?: FormEvent) {
+    e?.preventDefault();
+    setAssignmentMsg('');
+    if (!assignmentForm.template_id) {
+      setAssignmentMsg('Выберите бланк инвентаризации');
+      return;
+    }
+    try {
+      const result = await api('/api/admin/inventory/assignments', { method: 'POST', body: JSON.stringify(assignmentForm) });
+      setAssignmentMsg(`Инвентаризация назначена: ${result.template?.title || 'бланк'}`);
+      await load();
+    } catch (error: any) {
+      setAssignmentMsg(error.message || 'Не удалось назначить инвентаризацию');
+    }
+  }
+
   async function submit(t: any) {
     const payload: any = {};
     t.items.forEach((i: any) => { payload[i.product_id] = { qty: values[i.product_id] || '', comment: valueComments[i.product_id] || '' }; });
@@ -3032,6 +3103,24 @@ function Inventory({ user, admin = false }: any) {
     }
   }, [admin, templates, selectedTemplateId]);
 
+  const canAssignInventory = admin || seniorRoles.includes(user.role);
+  const assignmentPanel = canAssignInventory ? <Card title="Назначить инвентаризацию" right={<span className="badge active">только после назначения</span>}>
+    <form className="form two compactAdminForm inventoryAssignForm" onSubmit={assignInventory}>
+      <Select label="Бланк" value={assignmentForm.template_id} onChange={(e: any) => setAssignmentForm({ ...assignmentForm, template_id: e.target.value })}>
+        {assignableTemplates.map((template: any) => <option key={template.id} value={template.id}>{template.title} · {departments[template.department] || template.department}</option>)}
+      </Select>
+      <Field label="Дата" type="date" value={assignmentForm.due_date} onChange={(e: any) => setAssignmentForm({ ...assignmentForm, due_date: e.target.value || inputDateKey() })} />
+      <div className="actions adminFormActions"><Button type="submit">Назначить</Button></div>
+    </form>
+    {assignmentMsg && <div className={assignmentMsg.includes('назначена') ? 'notice' : 'error'}>{assignmentMsg}</div>}
+    <div className="compactAccordionList inventoryAssignmentList">
+      {inventoryAssignments.length === 0 ? <Empty text="На сегодня инвентаризации не назначены" /> : inventoryAssignments.map((assignment: any) => <div className="adminRowButton readonly" key={assignment.id}>
+        <span><b>{assignment.template?.title || 'Инвентаризация'}</b><small>{departments[assignment.department] || assignment.department} · {assignment.due_date}</small></span>
+        <em className={cx('badge', assignment.status === 'completed' ? 'active' : 'warning')}>{assignment.status === 'completed' ? 'готово' : 'назначено'}</em>
+      </div>)}
+    </div>
+  </Card> : null;
+
   if (!admin) {
     const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) || templates[0];
     const filteredItems = selectedTemplate?.items.filter((item: any) => {
@@ -3042,6 +3131,7 @@ function Inventory({ user, admin = false }: any) {
     const selectedTemplateCompleted = Boolean(selectedCompletedRun && !repeatingInventory[selectedTemplate?.id || '']);
 
     return <div className="mobileSectionStack mobileInventoryScreen">
+      {assignmentPanel}
       <div className="mobileInventoryToolbar">
         <Field
           label="Поиск товара"
@@ -3106,6 +3196,7 @@ function Inventory({ user, admin = false }: any) {
   return <>
     {admin
       ? <>
+        {assignmentPanel}
         <Card title="Списки товаров для инвентаризации" right={<span className="badge active">Бар · Кухня · Хозтовары · Посуда</span>}>
           <form className="form inventoryImportForm" onSubmit={importInventoryBlank}>
             <div className="form two inventoryOwnerFormGrid">
