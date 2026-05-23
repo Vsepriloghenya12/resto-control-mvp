@@ -1672,6 +1672,7 @@ function AdminOverview({ mode = 'owner', onNavigate }: { mode?: 'owner' | 'manag
   const taskSummary = summary.tasks || {};
   const documentSummary = summary.documents || {};
   const inventorySummary = summary.inventories || {};
+  const openShifts = data.open_shifts || [];
   const statNumber = (value: any, tone: 'done' | 'todo' | 'neutral' = 'neutral') => {
     const count = Number(value || 0);
     return <span className={cx('statNumberPart', count === 0 ? 'zero' : tone)}>{count}</span>;
@@ -1691,6 +1692,13 @@ function AdminOverview({ mode = 'owner', onNavigate }: { mode?: 'owner' | 'manag
         title="Сотрудники"
         value={employeesValue}
         onClick={() => onNavigate?.('users')}
+      />
+      <StatCard
+        icon="users"
+        title="Сотрудники на смене"
+        value={statNumber(openShifts.length, openShifts.length ? 'done' : 'neutral')}
+        caption="сейчас работают"
+        onClick={() => onNavigate?.('checklists')}
       />
       <StatCard
         icon="checklists"
@@ -1728,7 +1736,7 @@ function AdminOverview({ mode = 'owner', onNavigate }: { mode?: 'owner' | 'manag
       />
     </div>
 
-    {managerMode && <OpenShiftEmployees shifts={data.open_shifts || []} rows={data.employee_metrics || []} />}
+    <OpenShiftEmployees shifts={openShifts} rows={data.employee_metrics || []} />
     <OverviewEmployeeMetrics rows={data.employee_metrics || []} />
 
   </>;
@@ -1883,7 +1891,7 @@ function OpenShiftEmployees({ shifts, rows }: { shifts: any[]; rows: any[] }) {
   const metricsByUserId = useMemo(() => new Map(rows.map((row: any) => [String(row.user?.id || ''), row])), [rows]);
 
   return <section className="openShiftPanel">
-    <h3>Открытая смена</h3>
+    <h3>Сотрудники на смене</h3>
     {shifts.length === 0 && <Empty text="Сейчас нет сотрудников на смене" />}
     {shifts.length > 0 && <div className="openShiftList">
       {shifts.map((shift) => {

@@ -2196,7 +2196,7 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
     };
   });
   const taskSummary = {
-    new: tasksWithAssignments.filter(item => item.created_today).length + openTechRequests.filter(request => request.status === 'new').length,
+    new: tasksWithAssignments.filter(item => item.created_today && item.open).length + openTechRequests.filter(request => request.status === 'new').length,
     done: tasksWithAssignments.filter(item => item.done).length + doneTechRequests.length,
     not_done: tasksWithAssignments.filter(item => item.open).length + openTechRequests.length,
     overdue: tasksWithAssignments.filter(item => item.overdue).length,
@@ -2346,7 +2346,7 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
           details: checklistDetails
         },
         tasks: {
-          new: userTaskAssignments.filter(assignment => String(taskById.get(assignment.task_id)?.created_at || '').slice(0, 10) === today).length + openUserTechRequests.filter(request => request.status === 'new').length,
+          new: userTaskAssignments.filter(assignment => !assignment.done && String(taskById.get(assignment.task_id)?.created_at || '').slice(0, 10) === today).length + openUserTechRequests.filter(request => request.status === 'new').length,
           done: userTaskAssignments.filter(assignment => assignment.done).length + userTechRequests.filter(request => request.status === 'done').length,
           not_done: userTaskAssignments.filter(assignment => !assignment.done).length + openUserTechRequests.length,
           details: combinedTaskDetails
