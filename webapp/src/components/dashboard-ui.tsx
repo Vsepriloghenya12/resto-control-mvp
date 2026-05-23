@@ -281,7 +281,17 @@ export function StatCard({
   </>;
 
   if (onClick) {
-    return <button type="button" className={cn('statCard statCardButton', active && 'active')} data-icon={icon} onClick={onClick}>{content}</button>;
+    return <button
+      type="button"
+      className={cn('statCard statCardButton', active && 'active')}
+      data-icon={icon}
+      onClick={onClick}
+      aria-pressed={Boolean(active)}
+    >
+      {content}
+      <span className="statActionHint">{active ? 'Список открыт' : 'Показать список'}</span>
+      <span className="statCardArrow" aria-hidden="true"><AppIcon name="chevron" className="navIcon" /></span>
+    </button>;
   }
 
   return <article className={cn('statCard', active && 'active')} data-icon={icon}>{content}</article>;
