@@ -56,7 +56,7 @@ export function CircularProgress({ value, max }: { value: number; max: number })
   const percent = Math.max(0, Math.min(100, Math.round((value / safeMax) * 100)));
   return <div
     className="circularProgress"
-    style={{ background: `conic-gradient(#22C55E ${percent * 3.6}deg, rgba(255,255,255,0.08) 0deg)` }}
+    style={{ background: `conic-gradient(var(--primary) ${percent * 3.6}deg, color-mix(in oklch, var(--border) 80%, transparent) 0deg)` }}
     aria-hidden="true"
   >
     <div className="circularProgressInner">{percent}%</div>

@@ -4,8 +4,8 @@
   "start_url": "/?tab=bookings&pwa=bookings",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#111827",
-  "theme_color": "#111827",
+  "background_color": "#ffffff",
+  "theme_color": "#c6005c",
   "description": "Быстрый доступ к плану зала и броням Resto Control",
   "icons": [
     {
