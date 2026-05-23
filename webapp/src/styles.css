@@ -8242,3 +8242,45 @@ body {
     grid-row: 1 / 3;
   }
 }
+
+/* Clickable owner overview detail lists */
+.statCardButton.active,
+.statCard.active {
+  border-color: color-mix(in oklch, var(--primary) 38%, transparent);
+  background: color-mix(in oklch, var(--primary) 8%, var(--card));
+}
+
+.overviewListPanel {
+  margin: 0 0 20px;
+  padding: 18px;
+  border: 1px solid color-mix(in oklch, var(--muted-foreground) 12%, transparent);
+  border-radius: 22px;
+  background: color-mix(in oklch, var(--foreground) 2.5%, transparent);
+}
+
+.overviewEmployeeRow {
+  grid-template-columns: minmax(220px, 1fr) auto repeat(2, minmax(120px, max-content));
+}
+
+.employeeMetricsEntry.inactive .employeeMetricsPerson strong {
+  color: var(--text-secondary);
+}
+
+.overviewDetailColumns {
+  align-items: start;
+}
+
+.overviewDetailCard {
+  background: color-mix(in oklch, var(--card) 84%, transparent);
+}
+
+@media (max-width: 980px) {
+  .overviewListPanel {
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .overviewEmployeeRow {
+    grid-template-columns: 1fr;
+  }
+}

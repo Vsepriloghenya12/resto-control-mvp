@@ -251,7 +251,8 @@ export function StatCard({
   value,
   caption,
   details,
-  onClick
+  onClick,
+  active
 }: {
   icon: IconName;
   title: string;
@@ -259,6 +260,7 @@ export function StatCard({
   caption?: ReactNode;
   details?: Array<{ label: string; value: string | number }>;
   onClick?: () => void;
+  active?: boolean;
 }) {
   const compactValue = (typeof value === 'string' || typeof value === 'number') && String(value).length > 5;
   const content = <>
@@ -279,8 +281,8 @@ export function StatCard({
   </>;
 
   if (onClick) {
-    return <button type="button" className="statCard statCardButton" data-icon={icon} onClick={onClick}>{content}</button>;
+    return <button type="button" className={cn('statCard statCardButton', active && 'active')} data-icon={icon} onClick={onClick}>{content}</button>;
   }
 
-  return <article className="statCard" data-icon={icon}>{content}</article>;
+  return <article className={cn('statCard', active && 'active')} data-icon={icon}>{content}</article>;
 }

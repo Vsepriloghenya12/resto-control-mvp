@@ -73,6 +73,8 @@ type MobileWorkspaceConfig = {
   onAction?: () => void;
 };
 
+type AdminOverviewPanelKey = 'employees' | 'shifts' | 'checklists' | 'tasks' | 'documents' | 'inventory';
+
 const brandLogoSrc = '/resto-control-logo.png';
 
 const subscriptionTariffs = [
@@ -1660,19 +1662,25 @@ function SubscriptionBanner({ restaurant, openBilling }: any) {
   return <TrialBanner headline={headline} subline={subline} onAction={openBilling} />;
 }
 
-function AdminOverview({ mode = 'owner', onNavigate }: { mode?: 'owner' | 'manager'; onNavigate?: (tab: string) => void }) {
+function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager'; onNavigate?: (tab: string) => void }) {
   const [data, setData] = useState<any>(null);
+  const [activePanel, setActivePanel] = useState<AdminOverviewPanelKey>('employees');
   useEffect(() => { api('/api/admin/overview').then(setData); }, []);
   if (!data) return <Card><Empty text="Загружаем обзор" /></Card>;
   const managerMode = mode === 'manager';
+  const todayKey = new Date().toISOString().slice(0, 10);
   const employeeLimit = data.employee_limit === null ? '∞' : data.employee_limit;
   const employeesValue = employeeLimit ? `${data.users} из ${employeeLimit}` : data.users;
   const summary = data.summary || {};
+  const usersSummary = summary.users || {};
   const checklistSummary = summary.checklists || {};
   const taskSummary = summary.tasks || {};
   const documentSummary = summary.documents || {};
   const inventorySummary = summary.inventories || {};
-  const openShifts = data.open_shifts || [];
+  const employeeMetrics = data.employee_metrics || [];
+  const employees = data.employees || employeeMetrics.map((row: any) => row.user).filter(Boolean);
+  const openShiftsToday = data.open_shifts_today || (data.open_shifts || []).filter((shift: any) => String(shift.opened_at || '').slice(0, 10) === todayKey);
+  const openTasksCount = taskSummary.not_done ?? taskSummary.open ?? data.tasks_open;
   const statNumber = (value: any, tone: 'done' | 'todo' | 'neutral' = 'neutral') => {
     const count = Number(value || 0);
     return <span className={cx('statNumberPart', count === 0 ? 'zero' : tone)}>{count}</span>;
@@ -1687,63 +1695,102 @@ function AdminOverview({ mode = 'owner', onNavigate }: { mode?: 'owner' | 'manag
   );
   return <>
     <div className={cx('statsGrid', managerMode && 'managerStatsGrid')}>
-      <StatCard
-        icon="users"
-        title="Сотрудники"
-        value={employeesValue}
-        onClick={() => onNavigate?.('users')}
-      />
-      <StatCard
-        icon="users"
-        title="Сотрудники на смене"
-        value={statNumber(openShifts.length, openShifts.length ? 'done' : 'neutral')}
-        caption="сейчас работают"
-        onClick={() => onNavigate?.('checklists')}
-      />
-      <StatCard
-        icon="checklists"
-        title="Чек-листы сегодня"
-        value={statNumbers(
-          { value: checklistSummary.done ?? data.checklists_today, tone: 'done' },
-          { value: checklistSummary.not_done, tone: 'todo' }
-        )}
-        onClick={() => onNavigate?.('checklists')}
-      />
-      <StatCard
-        icon="tasks"
-        title="Задачи"
-        value={statNumbers(
-          { value: taskSummary.new, tone: 'todo' },
-          { value: taskSummary.done, tone: 'done' },
-          { value: taskSummary.not_done ?? data.tasks_open, tone: 'todo' }
-        )}
-        onClick={() => onNavigate?.('tasks')}
-      />
-      <StatCard
-        icon="document"
-        title="Документы"
-        value={statNumber(documentSummary.total ?? data.docs, 'neutral')}
-        onClick={() => onNavigate?.('knowledge')}
-      />
-      <StatCard
-        icon="inventory"
-        title="Инвентаризации"
-        value={statNumbers(
-          { value: inventorySummary.ready, tone: 'done' },
-          { value: inventorySummary.not_ready, tone: 'todo' }
-        )}
-        onClick={() => onNavigate?.('inventory')}
-      />
+      <StatCard icon="users" title="Сотрудники" value={employeesValue} caption={Number(usersSummary.inactive || 0) > 0 ? `${usersSummary.inactive} выкл.` : 'все сотрудники'} active={activePanel === 'employees'} onClick={() => setActivePanel('employees')} />
+      <StatCard icon="users" title="Сотрудники на смене" value={statNumber(openShiftsToday.length, openShiftsToday.length ? 'done' : 'neutral')} caption="открыта смена сегодня" active={activePanel === 'shifts'} onClick={() => setActivePanel('shifts')} />
+      <StatCard icon="checklists" title="Чек-листы сегодня" value={statNumbers({ value: checklistSummary.done ?? data.checklists_today, tone: 'done' }, { value: checklistSummary.not_done, tone: 'todo' })} caption="выполнено / не выполнено" active={activePanel === 'checklists'} onClick={() => setActivePanel('checklists')} />
+      <StatCard icon="tasks" title="Задачи" value={statNumbers({ value: openTasksCount, tone: 'todo' }, { value: taskSummary.done, tone: 'done' })} caption="не выполнено / выполнено" active={activePanel === 'tasks'} onClick={() => setActivePanel('tasks')} />
+      <StatCard icon="document" title="Документы" value={statNumber(documentSummary.total ?? data.docs, 'neutral')} caption={Number(documentSummary.pending || 0) > 0 ? `${documentSummary.pending} ждут` : 'активные документы'} active={activePanel === 'documents'} onClick={() => setActivePanel('documents')} />
+      <StatCard icon="inventory" title="Инвентаризации" value={statNumbers({ value: inventorySummary.ready, tone: 'done' }, { value: inventorySummary.not_ready, tone: 'todo' })} caption="готово / не готово" active={activePanel === 'inventory'} onClick={() => setActivePanel('inventory')} />
     </div>
 
-    <OpenShiftEmployees shifts={openShifts} rows={data.employee_metrics || []} />
-    <OverviewEmployeeMetrics rows={data.employee_metrics || []} />
-
+    <AdminOverviewDetailPanel activePanel={activePanel} employees={employees} rows={employeeMetrics} shifts={openShiftsToday} />
   </>;
 }
 
-function EmployeeDetailList({ title, count, empty, children }: { title: string; count?: number; empty: string; children: ReactNode }) {
-  return <details className="employeeDetailSection compactAccordion">
+function AdminOverviewDetailPanel({ activePanel, employees, rows, shifts }: { activePanel: AdminOverviewPanelKey; employees: any[]; rows: any[]; shifts: any[] }) {
+  if (activePanel === 'employees') return <OverviewEmployeesList employees={employees} rows={rows} />;
+  if (activePanel === 'shifts') return <OpenShiftEmployees shifts={shifts} rows={rows} />;
+  if (activePanel === 'checklists') return <OverviewChecklistLists rows={rows} />;
+  if (activePanel === 'tasks') return <OverviewTaskLists rows={rows} />;
+  if (activePanel === 'documents') return <OverviewDocumentLists rows={rows} />;
+  return <OverviewInventoryLists rows={rows} />;
+}
+
+function OverviewEmployeesList({ employees, rows }: { employees: any[]; rows: any[] }) {
+  const [expandedEmployeeId, setExpandedEmployeeId] = useState('');
+  const metricsByUserId = useMemo(() => new Map(rows.map((row: any) => [String(row.user?.id || ''), row])), [rows]);
+  return <section className="overviewListPanel employeeMetricsPlain">
+    <h3>Сотрудники</h3>
+    {employees.length === 0 && <Empty text="Сотрудники пока не добавлены" />}
+    <div className="employeeMetricsList">
+      {employees.map((employee) => {
+        const employeeId = String(employee.id || employee.login || employee.name || 'employee');
+        const metrics = metricsByUserId.get(employeeId);
+        const expanded = expandedEmployeeId === employeeId;
+        const inactive = employee.active === false;
+        return <div className={cx('employeeMetricsEntry', expanded && 'open', inactive && 'inactive')} key={employeeId}>
+          <button type="button" className="employeeMetricsRow overviewEmployeeRow" aria-expanded={expanded} onClick={() => setExpandedEmployeeId(expanded ? '' : employeeId)}>
+            <div className="employeeMetricsPerson"><strong>{employee.name || 'Сотрудник'}</strong><span>{roles[employee.role] || employee.role || 'Роль не указана'} · {departments[employee.department] || employee.department || 'Подразделение не указано'}</span></div>
+            <span className={cx('badge', inactive ? 'cancelled' : 'active')}>{inactive ? 'выкл' : 'активен'}</span>
+            <span className="employeeMetricValue" data-label="Чек-листы"><span className="employeeMetricNumbers"><span className={cx('statNumberPart', Number(metrics?.checklists?.done || 0) ? 'done' : 'zero')}>{metrics?.checklists?.done || 0}</span><span className="statNumberSep">/</span><span className={cx('statNumberPart', Number(metrics?.checklists?.not_done || 0) ? 'todo' : 'zero')}>{metrics?.checklists?.not_done || 0}</span></span></span>
+            <span className="employeeMetricValue" data-label="Задачи"><span className="employeeMetricNumbers"><span className={cx('statNumberPart', Number(metrics?.tasks?.not_done || 0) ? 'todo' : 'zero')}>{metrics?.tasks?.not_done || 0}</span><span className="statNumberSep">/</span><span className={cx('statNumberPart', Number(metrics?.tasks?.done || 0) ? 'done' : 'zero')}>{metrics?.tasks?.done || 0}</span></span></span>
+          </button>
+          {expanded && (metrics ? <EmployeeMetricsExpanded row={metrics} /> : <div className="employeeMetricsDetails"><p className="employeeDetailEmpty">Для отключённого сотрудника нет показателей за сегодня.</p></div>)}
+        </div>;
+      })}
+    </div>
+  </section>;
+}
+
+function overviewChecklists(rows: any[]) { return rows.flatMap((row: any) => (row.checklists?.details || []).map((checklist: any) => ({ id: `${row.user?.id || 'employee'}-${checklist.id}`, user: row.user, checklist }))); }
+function overviewTasks(rows: any[]) { return rows.flatMap((row: any) => (row.tasks?.details || []).map((task: any) => ({ id: `${row.user?.id || 'employee'}-${task.id}`, user: row.user, task }))); }
+function overviewDocuments(rows: any[]) { return rows.flatMap((row: any) => (row.documents?.details || []).map((document: any) => ({ id: `${row.user?.id || 'employee'}-${document.id}`, user: row.user, document }))); }
+function overviewInventories(rows: any[]) { return rows.flatMap((row: any) => (row.inventories?.details || []).map((inventory: any) => ({ id: `${row.user?.id || 'employee'}-${inventory.id}`, user: row.user, inventory }))); }
+
+function OverviewChecklistLists({ rows }: { rows: any[] }) {
+  const items = overviewChecklists(rows);
+  const doneItems = items.filter((item: any) => item.checklist.status === 'done');
+  const notDoneItems = items.filter((item: any) => item.checklist.status !== 'done');
+  return <section className="overviewListPanel employeeMetricsPlain"><h3>Чек-листы сегодня</h3><div className="employeeDetailColumns overviewDetailColumns"><EmployeeDetailList title="Не выполнено" count={notDoneItems.length} empty="Нет невыполненных чек-листов" defaultOpen>{notDoneItems.map((item: any) => <OverviewChecklistCard item={item} key={item.id} />)}</EmployeeDetailList><EmployeeDetailList title="Выполнено" count={doneItems.length} empty="Выполненных чек-листов сегодня нет" defaultOpen>{doneItems.map((item: any) => <OverviewChecklistCard item={item} key={item.id} />)}</EmployeeDetailList></div></section>;
+}
+
+function OverviewChecklistCard({ item }: { item: any }) {
+  const checklist = item.checklist || {}; const completed = checklist.status === 'done'; const doneItems = checklist.done_items || []; const notDoneItems = checklist.not_done_items || [];
+  return <article className="employeeDetailCard overviewDetailCard"><div className="employeeDetailCardHead"><strong>{checklist.title || 'Чек-лист'}</strong><span className={cx('badge', completed ? 'active' : 'warning')}>{completed ? 'выполнено' : 'не выполнено'}</span></div><p>{item.user?.name || 'Сотрудник'} · {roles[item.user?.role] || item.user?.role || 'роль не указана'}{checklist.completed_at ? ` · ${fmtDate(checklist.completed_at)}` : ''}</p>{notDoneItems.length > 0 && <EmployeeDetailBullets items={notDoneItems} />}{completed && doneItems.length > 0 && <EmployeeDetailBullets items={doneItems} done />}</article>;
+}
+
+function OverviewTaskLists({ rows }: { rows: any[] }) {
+  const items = overviewTasks(rows); const openItems = items.filter((item: any) => !item.task.done); const doneItems = items.filter((item: any) => item.task.done);
+  return <section className="overviewListPanel employeeMetricsPlain"><h3>Задачи</h3><div className="employeeDetailColumns overviewDetailColumns"><EmployeeDetailList title="Не выполнено" count={openItems.length} empty="Невыполненных задач нет" defaultOpen>{openItems.map((item: any) => <OverviewTaskCard item={item} key={item.id} />)}</EmployeeDetailList><EmployeeDetailList title="Выполнено" count={doneItems.length} empty="Выполненных задач пока нет" defaultOpen>{doneItems.map((item: any) => <OverviewTaskCard item={item} key={item.id} />)}</EmployeeDetailList></div></section>;
+}
+
+function OverviewTaskCard({ item }: { item: any }) {
+  const task = item.task || {}; const done = Boolean(task.done);
+  return <article className="employeeDetailCard overviewDetailCard"><div className="employeeDetailCardHead"><strong>{task.title || 'Задача'}</strong><span className={cx('badge', done ? 'active' : task.overdue ? 'cancelled' : 'warning')}>{done ? 'выполнено' : task.overdue ? 'просрочено' : task.source === 'tech_request' ? 'проблема' : 'в работе'}</span></div><p>{item.user?.name || 'Сотрудник'} · {done ? employeeDoneTaskDescription(task) : employeeTaskDescription(task)}</p></article>;
+}
+
+function OverviewDocumentLists({ rows }: { rows: any[] }) {
+  const items = overviewDocuments(rows); const pendingItems = items.filter((item: any) => item.document.status === 'pending'); const acknowledgedItems = items.filter((item: any) => item.document.status === 'acknowledged');
+  return <section className="overviewListPanel employeeMetricsPlain"><h3>Документы</h3><div className="employeeDetailColumns overviewDetailColumns"><EmployeeDetailList title="Ждут ознакомления" count={pendingItems.length} empty="Нет документов, ожидающих ознакомления" defaultOpen>{pendingItems.map((item: any) => <OverviewDocumentCard item={item} key={item.id} />)}</EmployeeDetailList><EmployeeDetailList title="Ознакомлены" count={acknowledgedItems.length} empty="Ознакомленных документов пока нет" defaultOpen>{acknowledgedItems.map((item: any) => <OverviewDocumentCard item={item} key={item.id} />)}</EmployeeDetailList></div></section>;
+}
+
+function OverviewDocumentCard({ item }: { item: any }) {
+  const document = item.document || {}; const acknowledged = document.status === 'acknowledged';
+  return <article className="employeeDetailCard compact overviewDetailCard"><div className="employeeDetailCardHead"><strong>{document.title || 'Документ'}</strong><span className={cx('badge', acknowledged ? 'active' : 'warning')}>{acknowledged ? 'ознакомлен' : 'ждёт'}</span></div><p>{item.user?.name || 'Сотрудник'} · {acknowledged && document.acknowledged_at ? fmtDate(document.acknowledged_at) : `версия ${document.version || 1}`}</p></article>;
+}
+
+function OverviewInventoryLists({ rows }: { rows: any[] }) {
+  const items = overviewInventories(rows); const readyItems = items.filter((item: any) => item.inventory.status === 'ready'); const notReadyItems = items.filter((item: any) => item.inventory.status !== 'ready');
+  return <section className="overviewListPanel employeeMetricsPlain"><h3>Инвентаризации</h3><div className="employeeDetailColumns overviewDetailColumns"><EmployeeDetailList title="Не готово" count={notReadyItems.length} empty="Нет невыполненных инвентаризаций" defaultOpen>{notReadyItems.map((item: any) => <OverviewInventoryCard item={item} key={item.id} />)}</EmployeeDetailList><EmployeeDetailList title="Готово" count={readyItems.length} empty="Готовых инвентаризаций сегодня нет" defaultOpen>{readyItems.map((item: any) => <OverviewInventoryCard item={item} key={item.id} />)}</EmployeeDetailList></div></section>;
+}
+
+function OverviewInventoryCard({ item }: { item: any }) {
+  const inventory = item.inventory || {}; const ready = inventory.status === 'ready';
+  return <article className="employeeDetailCard compact overviewDetailCard"><div className="employeeDetailCardHead"><strong>{inventory.title || 'Инвентаризация'}</strong><span className={cx('badge', ready ? 'active' : 'warning')}>{ready ? 'готово' : 'не готово'}</span></div><p>{item.user?.name || 'Сотрудник'} · {departments[inventory.department] || inventory.department || 'Подразделение'}{ready && inventory.completed_at ? ` · ${fmtDate(inventory.completed_at)}` : ''}</p></article>;
+}
+
+function EmployeeDetailList({ title, count, empty, children, defaultOpen = false }: { title: string; count?: number; empty: string; children: ReactNode; defaultOpen?: boolean }) {
+  return <details className="employeeDetailSection compactAccordion" open={defaultOpen}>
     <summary className="employeeDetailSectionHead compactAccordionSummary"><strong>{title}</strong>{count !== undefined && <span>{count}</span>}</summary>
     <div className="employeeDetailSectionBody compactAccordionBody">
       {count === 0 ? <p className="employeeDetailEmpty">{empty}</p> : children}

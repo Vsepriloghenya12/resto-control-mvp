@@ -2372,10 +2372,14 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
       user: publicUser(activeStaffUsers.find(user => user.id === shift.user_id))
     }))
     .sort((a, b) => String(a.opened_at || '').localeCompare(String(b.opened_at || '')));
+  const openShiftsToday = openShifts.filter(shift => String(shift.opened_at || '').slice(0, 10) === today);
   res.json({
     restaurant,
     users: activeStaffUsers.length,
     users_total: staffUsers.length,
+    employees: staffUsers
+      .map(publicUser)
+      .sort((a, b) => (a?.name || '').localeCompare(b?.name || '', 'ru')),
     employee_limit: employeeLimitForRestaurant(restaurant),
     checklists_today: checklistSummary.done,
     inventories: inventoryRuns.length,
@@ -2394,7 +2398,8 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
       inventories: inventorySummary
     },
     employee_metrics: employeeMetrics,
-    open_shifts: openShifts
+    open_shifts: openShifts,
+    open_shifts_today: openShiftsToday
   });
 });
 
