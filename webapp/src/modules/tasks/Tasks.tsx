@@ -6,7 +6,9 @@ import { MobileSheetModal } from '../../components/mobile-sheet-modal';
 import { CommentsPanel } from '../../components/comments-panel';
 import { cx } from '../../lib/cx';
 import {
+  departments,
   executableRoles,
+  roles,
   seniorRoles,
   targetTypeLabels,
   taskRecipientRolesFor,
@@ -15,15 +17,26 @@ import {
 } from '../../lib/dictionaries';
 import { fmtDate } from '../../lib/format';
 
+
+function taskPhotoFromFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('Не удалось прочитать фото'));
+    reader.readAsDataURL(file);
+  });
+}
+
 export function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer }: any) {
   const [tasks, setTasks] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [techRequests, setTechRequests] = useState<any[]>([]);
   const [techDrafts, setTechDrafts] = useState<any>({});
-  const [form, setForm] = useState<any>({ title: '', description: '', target_type: 'all', target_role: 'waiter', target_user_id: '', due_at: '' });
+  const [form, setForm] = useState<any>({ title: '', description: '', target_type: 'all', target_role: 'waiter', target_user_id: '', due_at: '', require_photo: false });
   const [taskMsg, setTaskMsg] = useState('');
   const [techMsg, setTechMsg] = useState('');
   const [showTaskForm, setShowTaskForm] = useState(false);
+  const [taskPhotos, setTaskPhotos] = useState<Record<string, string>>({});
   const [showTechForm, setShowTechForm] = useState(false);
   const [techForm, setTechForm] = useState<any>({ title: '', description: '', category: 'equipment', urgency: 'normal' });
   const isSenior = seniorRoles.includes(user?.role);
@@ -63,16 +76,38 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
     e.preventDefault();
     setTaskMsg('');
     const result = await api('/api/tasks', { method: 'POST', body: JSON.stringify(form) });
-    setForm({ ...form, title: '', description: '', due_at: '' });
+    setForm({ ...form, title: '', description: '', due_at: '', target_user_id: '', require_photo: false });
     setTaskMsg(result?.offline ? 'Задача сохранена офлайн' : 'Задача создана');
     setShowTaskForm(false);
     load().catch(() => undefined);
   }
 
-  async function done(id: string) {
-    const result = await api(`/api/tasks/${id}/done`, { method: 'PATCH', body: JSON.stringify({ comment: '' }) });
+  async function done(task: any) {
+    setTaskMsg('');
+    const photo = taskPhotos[task.id] || '';
+    if (task.require_photo && !photo) {
+      setTaskMsg('Для этой задачи нужно приложить фото');
+      return;
+    }
+    const result = await api(`/api/tasks/${task.id}/done`, { method: 'PATCH', body: JSON.stringify({ comment: '', photo_url: photo }) });
+    setTaskPhotos((current) => {
+      const next = { ...current };
+      delete next[task.id];
+      return next;
+    });
     setTaskMsg(result?.offline ? 'Выполнение сохранено офлайн' : 'Задача выполнена');
     load().catch(() => undefined);
+  }
+
+  async function attachTaskPhoto(taskId: string, file?: File | null) {
+    if (!file) return;
+    try {
+      const photo = await taskPhotoFromFile(file);
+      setTaskPhotos((current) => ({ ...current, [taskId]: photo }));
+      setTaskMsg('Фото добавлено к задаче');
+    } catch (error: any) {
+      setTaskMsg(error.message || 'Не удалось добавить фото');
+    }
   }
 
   async function createTechRequest(e: FormEvent) {
@@ -112,14 +147,18 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
     if (!admin && showTechComposer) setShowTechForm(true);
   }, [admin, showTechComposer]);
 
-  const filteredTaskUsers = users.filter((candidate: any) => recipientRoleKeys.includes(candidate.role) && candidate.id !== user.id);
+  const filteredTaskUsers = users
+    .filter((candidate: any) => candidate.active !== false && recipientRoleKeys.includes(candidate.role) && candidate.id !== user.id)
+    .sort((a: any, b: any) => String(departments[a.department] || a.department || '').localeCompare(String(departments[b.department] || b.department || ''), 'ru') || String(a.name || '').localeCompare(String(b.name || ''), 'ru'));
   const taskForm = <form className="form" id="department-task-form" onSubmit={create}>
     <Field label="Задача" value={form.title} onChange={(e: any) => setForm({ ...form, title: e.target.value })} placeholder="Например: проверить заготовки перед сменой" />
     <Textarea label="Описание" value={form.description} onChange={(e: any) => setForm({ ...form, description: e.target.value })} placeholder="Что нужно сделать и где" />
     <Field label="Срок выполнения" type="datetime-local" value={form.due_at} onChange={(e: any) => setForm({ ...form, due_at: e.target.value })} />
-    <Select label="Кому" value={form.target_type} onChange={(e: any) => setForm({ ...form, target_type: e.target.value })}>{Object.entries(targetTypeLabels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</Select>
+    <Select label="Кому" value={form.target_type} onChange={(e: any) => setForm({ ...form, target_type: e.target.value, target_user_id: '' })}>{Object.entries(targetTypeLabels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}</Select>
     {form.target_type === 'role' && <Select label="Роль" value={form.target_role} onChange={(e: any) => setForm({ ...form, target_role: e.target.value })}>{roleOptions.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</Select>}
-    {form.target_type === 'user' && <Select label="Сотрудник" value={form.target_user_id} onChange={(e: any) => setForm({ ...form, target_user_id: e.target.value })}><option value="">Выбрать</option>{filteredTaskUsers.map((candidate: any) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</Select>}
+    {form.target_type === 'user' && <Select label="Сотрудник" required value={form.target_user_id} onChange={(e: any) => setForm({ ...form, target_user_id: e.target.value })}><option value="">Выбрать конкретного сотрудника</option>{filteredTaskUsers.map((candidate: any) => <option key={candidate.id} value={candidate.id}>{candidate.name} · {roles[candidate.role] || candidate.role} · {departments[candidate.department] || candidate.department || 'подразделение'}</option>)}</Select>}
+    {form.target_type === 'user' && filteredTaskUsers.length === 0 && <div className="muted formHint">Нет активных сотрудников, доступных для назначения</div>}
+    <label className="smartTaskFlag"><input type="checkbox" checked={!!form.require_photo} onChange={(e: any) => setForm({ ...form, require_photo: e.target.checked })} /><span>Для выполнения нужно фото</span></label>
   </form>;
 
   if (!admin) {
@@ -146,10 +185,15 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
           <summary className="mobileListSectionHead compactAccordionSummary"><h3>Сегодня</h3><div className="mobileSectionHeadActions"><span className="mobileSectionCount">{activeTasks.length}</span>{isSenior && <button type="button" className="sectionLink" onClick={(event) => { event.preventDefault(); event.stopPropagation(); setShowTaskForm(true); }}>+ задача</button>}</div></summary>
           <div className="mobileTaskList compactAccordionBody">
             {activeTasks.length === 0 && <Empty text="Нет активных задач на текущую смену" />}
-            {activeTasks.map((task) => <div key={task.id} className="mobileTaskRow static">
+            {activeTasks.map((task) => <div key={task.id} className={cx('mobileTaskRow static', task.require_photo && 'needsPhoto')}>
               <span className="mobileTaskStatus" />
-              <div className="mobileTaskCopy"><strong>{task.title}</strong><span>{task.description || 'Без описания'}{task.due_at ? ` · срок: ${fmtDate(task.due_at)}` : ''}</span></div>
-              <Button type="button" kind="soft" onClick={() => done(task.id)}>Выполнено</Button>
+              <div className="mobileTaskCopy">
+                <strong>{task.title}</strong>
+                <span>{task.description || 'Без описания'}{task.due_at ? ` · срок: ${fmtDate(task.due_at)}` : ''}</span>
+                {task.require_photo && <span className="taskPhotoRequirement"><AppIcon name="camera" className="navIcon" />Фото обязательно</span>}
+                {task.require_photo && <label className="taskPhotoAttach"><input type="file" accept="image/*" capture="environment" onChange={(event) => void attachTaskPhoto(task.id, event.currentTarget.files?.[0])} /><b>{taskPhotos[task.id] ? 'Фото добавлено' : 'Добавить фото'}</b></label>}
+              </div>
+              <Button type="button" kind="soft" onClick={() => done(task)}>Выполнено</Button>
               <CommentsPanel entityType="task" entityId={task.id} />
             </div>)}
           </div>
@@ -170,7 +214,7 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
           <summary className="mobileListSectionHead compactAccordionSummary"><h3>Выполнено</h3><span className="mobileSectionCount">{completedCount}</span></summary>
           <div className="mobileTaskList compactAccordionBody">
             {completedCount === 0 && <Empty text="Пока нет завершённых задач" />}
-            {completedTasks.map((task) => <div key={task.id} className="mobileTaskRow static done"><span className="mobileTaskStatus done" /><div className="mobileTaskCopy"><strong>{task.title}</strong><span>{task.description || 'Задача выполнена'}</span></div><span className="badge active">Готово</span></div>)}
+            {completedTasks.map((task) => <div key={task.id} className="mobileTaskRow static done"><span className="mobileTaskStatus done" /><div className="mobileTaskCopy"><strong>{task.title}</strong><span>{task.description || 'Задача выполнена'}{task.assignment?.photo_url ? ' · фото приложено' : ''}</span></div><span className="badge active">Готово</span></div>)}
             {resolvedTechRequests.map((request) => <div key={request.id} className="mobileTaskRow static done techRequestEmployeeView">
               <span className="mobileTaskStatus done" />
               <div className="mobileTaskCopy"><strong>{request.title}</strong><span>{request.manager_comment || request.description || 'Проблема решена менеджером'}</span></div>
@@ -288,6 +332,10 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
         </summary>
         <div className="compactAccordionBody">
           <p>{t.description || 'Без описания'}</p>
+          {t.require_photo && <span className="badge warning">нужно фото</span>}
+          {t.assignments?.some((assignment: any) => assignment.photo_url) && <div className="taskPhotoAuditList">
+            {t.assignments.filter((assignment: any) => assignment.photo_url).map((assignment: any) => <a key={assignment.id} href={assignment.photo_url} target="_blank" rel="noreferrer">Фото: {assignment.user?.name || 'сотрудник'}</a>)}
+          </div>}
           <CommentsPanel entityType="task" entityId={t.id} />
         </div>
       </details>)}</div>

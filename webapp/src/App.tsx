@@ -954,10 +954,12 @@ function RestaurantWorkspace({
 
   const mobileCreateItems: MobileActionItem[] = managerMode
     ? [
-      { id: 'tasks', title: 'Создать задачу', subtitle: 'Поставить задачу команде', icon: 'tasks', onClick: () => setActive('tasks') }
+      { id: 'tasks', title: 'Создать задачу', subtitle: 'Поставить задачу команде', icon: 'tasks', onClick: () => setActive('tasks') },
+      { id: 'assign-inventory', title: 'Назначить инвентаризацию', subtitle: 'Выдать бланк подразделению', icon: 'inventory', onClick: () => setActive('inventory') }
     ]
     : [
       { id: 'users', title: 'Добавить сотрудника', subtitle: 'Открыть управление доступами', icon: 'users', onClick: () => setActive('users') },
+      { id: 'assign-inventory', title: 'Назначить инвентаризацию', subtitle: 'Выдать бланк подразделению', icon: 'inventory', onClick: () => setActive('inventory') },
       { id: 'inventory', title: 'Добавить товар', subtitle: 'Открыть номенклатуру', icon: 'inventory', onClick: () => setActive('inventory') }
     ];
 
@@ -2215,7 +2217,8 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     { id: 'tech', title: 'Сообщить о проблеме', subtitle: 'Поломка или сервисная ситуация', icon: 'support', onClick: () => {
       setTab('tasks');
       setOpenTechComposer(true);
-    } }
+    } },
+    ...(isSenior ? [{ id: 'assign-inventory', title: 'Назначить инвентаризацию', subtitle: 'Бланк для своего подразделения', icon: 'inventory' as IconName, onClick: () => setTab('inventory') }] : [])
   ];
 
   const mobileProfileItems: MobileActionItem[] = [

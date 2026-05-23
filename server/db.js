@@ -34,8 +34,8 @@ const SNAPSHOT_TABLES = [
   { name: 'inventory_values', columns: ['id', 'restaurant_id', 'inventory_run_id', 'product_id', 'qty', 'comment'] },
   { name: 'floor_tables', columns: ['id', 'restaurant_id', 'label', 'seats', 'zone', 'sort_order', 'active', 'created_at'] },
   { name: 'table_reservations', columns: ['id', 'restaurant_id', 'created_by', 'table_ids', 'reserved_for', 'duration_minutes', 'guests_count', 'guest_name', 'guest_phone', 'comment', 'status', 'created_at', 'updated_at'], jsonColumns: ['table_ids'] },
-  { name: 'tasks', columns: ['id', 'restaurant_id', 'title', 'description', 'target_type', 'target_role', 'target_user_id', 'target_department', 'due_at', 'created_by', 'created_at', 'active'] },
-  { name: 'task_assignments', columns: ['id', 'restaurant_id', 'task_id', 'user_id', 'done', 'comment', 'completed_at'] },
+  { name: 'tasks', columns: ['id', 'restaurant_id', 'title', 'description', 'target_type', 'target_role', 'target_user_id', 'target_department', 'due_at', 'require_photo', 'created_by', 'created_at', 'active'] },
+  { name: 'task_assignments', columns: ['id', 'restaurant_id', 'task_id', 'user_id', 'done', 'comment', 'completed_at', 'photo_url'] },
   { name: 'tech_requests', columns: ['id', 'restaurant_id', 'created_by', 'title', 'description', 'category', 'status', 'manager_comment', 'started_at', 'resolved_at', 'created_at', 'updated_at'] },
   { name: 'knowledge_categories', columns: ['id', 'restaurant_id', 'title', 'allowed_roles', 'sort_order'], jsonColumns: ['allowed_roles'] },
   { name: 'knowledge_documents', columns: ['id', 'restaurant_id', 'category_id', 'title', 'type', 'content', 'file_url', 'photo_url', 'ingredients', 'allowed_roles', 'requires_acknowledgement', 'version', 'is_active', 'created_by', 'created_at', 'updated_at', 'sort_order'], jsonColumns: ['allowed_roles', 'ingredients'] },
@@ -120,6 +120,8 @@ async function ensurePostgresSchema() {
   await getPool().query(`alter table if exists product_requests add column if not exists target_role text`);
   await getPool().query(`alter table if exists product_requests add column if not exists target_user_id text references users(id)`);
   await getPool().query(`alter table if exists tasks add column if not exists target_department text`);
+  await getPool().query(`alter table if exists tasks add column if not exists require_photo boolean not null default false`);
+  await getPool().query(`alter table if exists task_assignments add column if not exists photo_url text`);
   await getPool().query(`alter table if exists knowledge_documents add column if not exists photo_url text`);
   await getPool().query(`alter table if exists knowledge_documents add column if not exists ingredients jsonb not null default '[]'`);
   await getPool().query(`alter table if exists integrations add column if not exists sync_interval_seconds int not null default 60`);
@@ -507,7 +509,7 @@ export function createRestaurantWithDefaults(db, data) {
   const task = { id: uid('task'), restaurant_id: restaurant.id, title: 'Проверить актуальность стоп-листа', description: 'Перед открытием смены проверьте стоп-лист и сообщите менеджеру.', target_type: 'all', target_role: null, target_user_id: null, target_department: null, due_at: addDays(1), created_by: null, created_at: nowIso(), active: true };
   db.tasks.push(task);
   db.users.filter(u => u.restaurant_id === restaurant.id && !u.is_super_admin).forEach(u => {
-    db.task_assignments.push({ id: uid('tasg'), restaurant_id: restaurant.id, task_id: task.id, user_id: u.id, done: false, comment: '', completed_at: null });
+    db.task_assignments.push({ id: uid('tasg'), restaurant_id: restaurant.id, task_id: task.id, user_id: u.id, done: false, comment: '', completed_at: null, photo_url: '' });
   });
 
   return restaurant;

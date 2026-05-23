@@ -34,6 +34,7 @@ const __dirname = path.dirname(__filename);
 const webDist = path.resolve(__dirname, '../webapp/dist');
 const uploadsDir = path.resolve(__dirname, 'data/uploads');
 const checklistUploadsDir = path.join(uploadsDir, 'checklists');
+const taskUploadsDir = path.join(uploadsDir, 'tasks');
 const knowledgeUploadsDir = path.join(uploadsDir, 'knowledge');
 const billingUploadsDir = path.join(uploadsDir, 'billing');
 const MANAGER_ROLES = ['owner', 'manager'];
@@ -820,21 +821,29 @@ function normalizeReservationPayload(restaurant_id, rawBody = {}, currentReserva
   };
 }
 
-function saveChecklistPhoto(dataUrl, restaurant_id, run_id, item_id) {
+function saveImageDataUrl(dataUrl, baseDir, publicBasePath, restaurant_id, namePrefix, nameSuffix) {
   const match = String(dataUrl || '').match(/^data:image\/(jpeg|jpg|png|webp);base64,(.+)$/);
   if (!match) {
     throw new Error('Некорректный формат фото');
   }
 
   const ext = match[1] === 'jpeg' ? 'jpg' : match[1];
-  const restaurantDir = path.join(checklistUploadsDir, restaurant_id);
+  const restaurantDir = path.join(baseDir, restaurant_id);
   fs.mkdirSync(restaurantDir, { recursive: true });
 
-  const filename = `${run_id}-${item_id}-${Date.now()}.${ext}`;
+  const filename = `${namePrefix}-${nameSuffix}-${Date.now()}.${ext}`.replace(/[^a-zA-Z0-9._-]+/g, '-');
   const filepath = path.join(restaurantDir, filename);
   fs.writeFileSync(filepath, Buffer.from(match[2], 'base64'));
 
-  return `/uploads/checklists/${restaurant_id}/${filename}`;
+  return `${publicBasePath}/${restaurant_id}/${filename}`;
+}
+
+function saveChecklistPhoto(dataUrl, restaurant_id, run_id, item_id) {
+  return saveImageDataUrl(dataUrl, checklistUploadsDir, '/uploads/checklists', restaurant_id, run_id, item_id);
+}
+
+function saveTaskPhoto(dataUrl, restaurant_id, assignment_id, task_id) {
+  return saveImageDataUrl(dataUrl, taskUploadsDir, '/uploads/tasks', restaurant_id, assignment_id, task_id);
 }
 
 function decodeBase64File(file = {}) {
@@ -1318,7 +1327,7 @@ function makeAssignmentsForTask(task) {
   });
   selected.forEach(u => {
     const exists = db.task_assignments.some(a => a.task_id === task.id && a.user_id === u.id);
-    if (!exists) db.task_assignments.push({ id: uid('tasg'), restaurant_id: task.restaurant_id, task_id: task.id, user_id: u.id, done: false, comment: '', completed_at: null });
+    if (!exists) db.task_assignments.push({ id: uid('tasg'), restaurant_id: task.restaurant_id, task_id: task.id, user_id: u.id, done: false, comment: '', completed_at: null, photo_url: '' });
   });
 }
 
@@ -3275,7 +3284,7 @@ app.get('/api/tasks', auth, ensureRestaurantActive, (req, res) => {
 });
 
 app.post('/api/tasks', auth, ensureRestaurantActive, operationalEditorOnly, runAsync(async (req, res) => {
-  const { title, description, target_type, target_role, target_user_id, due_at } = req.body;
+  const { title, description, target_type, target_role, target_user_id, due_at, require_photo } = req.body;
   if (!title || !target_type) return res.status(400).json({ error: 'Нужны название и получатель задачи' });
 
   let targetDepartment = null;
@@ -3293,6 +3302,11 @@ app.post('/api/tasks', auth, ensureRestaurantActive, operationalEditorOnly, runA
     }
   } else if (target_type === 'role' && !canAssignTaskToRole(req.user, target_role)) {
     return res.status(403).json({ error: 'Нельзя назначить задачу этой роли' });
+  } else if (target_type === 'user') {
+    const targetUser = db.users.find(user => user.id === target_user_id && user.restaurant_id === req.user.restaurant_id && user.active);
+    if (!targetUser || !canAssignTaskToRole(req.user, targetUser.role)) {
+      return res.status(400).json({ error: 'Выберите активного сотрудника для задачи' });
+    }
   }
 
   const task = {
@@ -3305,13 +3319,14 @@ app.post('/api/tasks', auth, ensureRestaurantActive, operationalEditorOnly, runA
     target_user_id: target_user_id || null,
     target_department: targetDepartment,
     due_at: due_at || null,
+    require_photo: Boolean(require_photo),
     created_by: req.user.id,
     created_at: nowIso(),
     active: true
   };
   db.tasks.push(task);
   makeAssignmentsForTask(task);
-  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'task_created', title: `${req.user.name} создал задачу "${title}"`, entity_type: 'task', entity_id: task.id, metadata: { target_type, target_role, target_user_id, target_department: targetDepartment } });
+  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'task_created', title: `${req.user.name} создал задачу "${title}"`, entity_type: 'task', entity_id: task.id, metadata: { target_type, target_role, target_user_id, target_department: targetDepartment, require_photo: Boolean(require_photo) } });
   notifyAssignees(task, { title: 'Новая задача', body: title, entity_type: 'task', entity_id: task.id });
   await persist();
   res.status(201).json(task);
@@ -3320,10 +3335,21 @@ app.post('/api/tasks', auth, ensureRestaurantActive, operationalEditorOnly, runA
 app.patch('/api/tasks/:id/done', auth, ensureRestaurantActive, runAsync(async (req, res) => {
   const assignment = db.task_assignments.find(a => a.task_id === req.params.id && a.user_id === req.user.id && a.restaurant_id === req.user.restaurant_id);
   if (!assignment) return res.status(404).json({ error: 'Задача не найдена' });
+  const task = db.tasks.find(item => item.id === assignment.task_id);
+  const submittedPhoto = String(req.body.photo_url || req.body.photo || '').trim();
+  if (task?.require_photo && !submittedPhoto && !assignment.photo_url) {
+    return res.status(400).json({ error: 'Для выполнения этой задачи нужно приложить фото' });
+  }
+  if (submittedPhoto) {
+    try {
+      assignment.photo_url = saveTaskPhoto(submittedPhoto, req.user.restaurant_id, assignment.id, assignment.task_id);
+    } catch (error) {
+      return res.status(400).json({ error: error.message || 'Не удалось сохранить фото' });
+    }
+  }
   assignment.done = true;
   assignment.comment = req.body.comment || '';
   assignment.completed_at = nowIso();
-  const task = db.tasks.find(item => item.id === assignment.task_id);
   logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'task_completed', title: `${req.user.name} выполнил задачу "${task?.title || 'Задача'}"`, entity_type: 'task', entity_id: assignment.task_id, metadata: { comment: assignment.comment } });
   notifyManagers(req.user.restaurant_id, { title: 'Задача выполнена', body: `${req.user.name}: ${task?.title || 'Задача'}`, entity_type: 'task', entity_id: assignment.task_id });
   await persist();

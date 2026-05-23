@@ -198,6 +198,7 @@ create table if not exists tasks (
   target_user_id text references users(id),
   target_department text,
   due_at timestamptz,
+  require_photo boolean not null default false,
   created_by text references users(id),
   created_at timestamptz not null default now(),
   active boolean not null default true
@@ -210,7 +211,8 @@ create table if not exists task_assignments (
   user_id text not null references users(id),
   done boolean not null default false,
   comment text,
-  completed_at timestamptz
+  completed_at timestamptz,
+  photo_url text
 );
 
 create table if not exists tech_requests (
