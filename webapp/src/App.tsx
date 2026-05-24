@@ -3129,14 +3129,14 @@ function Inventory({ user, admin = false }: any) {
     }
   }
 
-  async function removeProduct() {
-    if (!editingProduct) return;
-    const section = inventorySectionMeta(editingProduct.section as InventorySectionId);
-    if (!window.confirm(`Удалить товар "${editingProduct.name}" из списка "${section.title}"?`)) return;
+  async function removeProduct(targetProduct = editingProduct) {
+    if (!targetProduct) return;
+    const section = inventorySectionMeta(targetProduct.section as InventorySectionId);
+    if (!window.confirm(`Удалить товар "${targetProduct.name}" из списка "${section.title}"?`)) return;
     setProductMsg('');
     try {
-      await api(`/api/admin/products/${editingProduct.id}`, { method: 'DELETE' });
-      setEditingProduct(null);
+      await api(`/api/admin/products/${targetProduct.id}`, { method: 'DELETE' });
+      if (editingProduct?.id === targetProduct.id) setEditingProduct(null);
       setProductMsg(`Товар удалён из списка "${section.title}"`);
       load();
     } catch (error: any) {
@@ -3362,13 +3362,17 @@ function Inventory({ user, admin = false }: any) {
               </summary>
               <div className="inventorySectionList">
                 {section.products.length === 0 && <span className="muted inventorySectionEmpty">Список пока пуст</span>}
-                {section.products.map((product: any) => <button type="button" className="inventorySectionItem inventorySectionButton" key={product.id} onClick={() => startProductEdit(product, section.id)}>
-                  <div>
+                {section.products.map((product: any) => <div className="inventorySectionItem" key={product.id}>
+                  <div className="inventorySectionProductCopy">
                     <strong>{product.name}</strong>
                     <span>{product.category || section.defaultCategory}</span>
                   </div>
                   <em>{product.unit}</em>
-                </button>)}
+                  <div className="inventorySectionItemActions">
+                    <Button kind="soft" type="button" onClick={() => startProductEdit(product, section.id)}>Редактировать</Button>
+                    <Button kind="danger" type="button" onClick={() => removeProduct({ id: product.id, section: section.id, name: product.name })}>Удалить</Button>
+                  </div>
+                </div>)}
               </div>
             </details>)}
           </div>
