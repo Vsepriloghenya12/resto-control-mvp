@@ -8540,6 +8540,20 @@ body {
   border-radius: 8px;
 }
 
+.overviewProblemActions {
+  max-width: 220px;
+}
+
+.overviewProblemActions label {
+  margin: 0;
+}
+
+.overviewProblemActions select {
+  min-height: 32px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+
 .inventoryAssignForm {
   align-items: end;
 }

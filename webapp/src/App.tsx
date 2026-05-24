@@ -1685,10 +1685,29 @@ function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager'; onNavig
   const [data, setData] = useState<any>(null);
   const [activePanel, setActivePanel] = useState<AdminOverviewPanelKey>('employees');
   const [taskRange, setTaskRange] = useState({ from: today, to: today });
-  useEffect(() => {
+  const [updatingProblemId, setUpdatingProblemId] = useState('');
+  const [overviewMsg, setOverviewMsg] = useState('');
+  function loadOverview() {
     const query = new URLSearchParams({ task_from: taskRange.from, task_to: taskRange.to });
-    api(`/api/admin/overview?${query.toString()}`).then(setData);
+    return api(`/api/admin/overview?${query.toString()}`).then(setData);
+  }
+  useEffect(() => {
+    loadOverview().catch(() => setData(null));
   }, [taskRange.from, taskRange.to]);
+  async function updateOverviewProblemStatus(problem: any, status: string) {
+    if (!problem?.id || status === problem.status) return;
+    setOverviewMsg('');
+    setUpdatingProblemId(problem.id);
+    try {
+      await api(`/api/tech-requests/${problem.id}`, { method: 'PATCH', body: JSON.stringify({ status, manager_comment: problem.manager_comment || '' }) });
+      setOverviewMsg('Статус проблемы обновлён');
+      await loadOverview();
+    } catch (error: any) {
+      setOverviewMsg(error.message || 'Не удалось обновить проблему');
+    } finally {
+      setUpdatingProblemId('');
+    }
+  }
   if (!data) return <Card><Empty text="Загружаем обзор" /></Card>;
   const managerMode = mode === 'manager';
   const employeeLimit = data.employee_limit === null ? '∞' : data.employee_limit;
@@ -1728,16 +1747,17 @@ function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager'; onNavig
       <StatCard icon="inventory" title="Инвентаризации" value={statNumbers({ value: inventorySummary.ready, tone: 'done' }, { value: inventorySummary.not_ready, tone: 'todo' })} active={activePanel === 'inventory'} onClick={() => setActivePanel('inventory')} />
     </div>
 
-    <AdminOverviewDetailPanel activePanel={activePanel} employees={employees} rows={employeeMetrics} shifts={openShiftsToday} taskRange={taskRange} onTaskRangeChange={setTaskRange} problems={problemSummary.details || []} inventoryAssignments={data.inventory_assignments_today || []} />
+    {overviewMsg && <div className={overviewMsg.includes('обновл') ? 'notice' : 'error'}>{overviewMsg}</div>}
+    <AdminOverviewDetailPanel activePanel={activePanel} employees={employees} rows={employeeMetrics} shifts={openShiftsToday} taskRange={taskRange} onTaskRangeChange={setTaskRange} problems={problemSummary.details || []} updatingProblemId={updatingProblemId} onProblemStatusChange={updateOverviewProblemStatus} inventoryAssignments={data.inventory_assignments_today || []} />
   </>;
 }
 
-function AdminOverviewDetailPanel({ activePanel, employees, rows, shifts, taskRange, onTaskRangeChange, problems, inventoryAssignments }: { activePanel: AdminOverviewPanelKey; employees: any[]; rows: any[]; shifts: any[]; taskRange: any; onTaskRangeChange: (range: any) => void; problems: any[]; inventoryAssignments: any[] }) {
+function AdminOverviewDetailPanel({ activePanel, employees, rows, shifts, taskRange, onTaskRangeChange, problems, updatingProblemId, onProblemStatusChange, inventoryAssignments }: { activePanel: AdminOverviewPanelKey; employees: any[]; rows: any[]; shifts: any[]; taskRange: any; onTaskRangeChange: (range: any) => void; problems: any[]; updatingProblemId: string; onProblemStatusChange: (problem: any, status: string) => void; inventoryAssignments: any[] }) {
   if (activePanel === 'employees') return <OverviewEmployeesList employees={employees} rows={rows} />;
   if (activePanel === 'shifts') return <OpenShiftEmployees shifts={shifts} rows={rows} />;
   if (activePanel === 'checklists') return <OverviewChecklistLists rows={rows} />;
   if (activePanel === 'tasks') return <OverviewTaskLists rows={rows} taskRange={taskRange} onTaskRangeChange={onTaskRangeChange} />;
-  if (activePanel === 'problems') return <OverviewProblemLists problems={problems} />;
+  if (activePanel === 'problems') return <OverviewProblemLists problems={problems} updatingProblemId={updatingProblemId} onStatusChange={onProblemStatusChange} />;
   if (activePanel === 'documents') return <OverviewDocumentLists rows={rows} />;
   return <OverviewInventoryLists assignments={inventoryAssignments} rows={rows} />;
 }
@@ -1816,24 +1836,29 @@ function OverviewTaskCard({ item }: { item: any }) {
   return <article className="employeeDetailCard overviewDetailCard"><div className="employeeDetailCardHead"><strong>{task.title || 'Задача'}</strong><span className={cx('badge', done ? 'active' : task.overdue ? 'cancelled' : 'warning')}>{done ? 'выполнено' : task.overdue ? 'просрочено' : task.source === 'tech_request' ? 'проблема' : 'в работе'}</span></div><p>{item.user?.name || 'Сотрудник'} · {done ? employeeDoneTaskDescription(task) : employeeTaskDescription(task)}</p></article>;
 }
 
-function OverviewProblemLists({ problems }: { problems: any[] }) {
+function OverviewProblemLists({ problems, updatingProblemId, onStatusChange }: { problems: any[]; updatingProblemId: string; onStatusChange: (problem: any, status: string) => void }) {
   const newItems = problems.filter((problem: any) => problem.status === 'new');
   const inProgressItems = problems.filter((problem: any) => problem.status === 'in_progress');
   return <section className="overviewListPanel employeeMetricsPlain">
     <h3>Проблемы</h3>
     <div className="employeeDetailColumns overviewDetailColumns">
-      <EmployeeDetailList title="Новые" count={newItems.length} empty="Новых проблем нет" defaultOpen>{newItems.map((problem: any) => <OverviewProblemCard problem={problem} key={problem.id} />)}</EmployeeDetailList>
-      <EmployeeDetailList title="В работе" count={inProgressItems.length} empty="Проблем в работе нет" defaultOpen>{inProgressItems.map((problem: any) => <OverviewProblemCard problem={problem} key={problem.id} />)}</EmployeeDetailList>
+      <EmployeeDetailList title="Новые" count={newItems.length} empty="Новых проблем нет" defaultOpen>{newItems.map((problem: any) => <OverviewProblemCard problem={problem} updating={updatingProblemId === problem.id} onStatusChange={onStatusChange} key={problem.id} />)}</EmployeeDetailList>
+      <EmployeeDetailList title="В работе" count={inProgressItems.length} empty="Проблем в работе нет" defaultOpen>{inProgressItems.map((problem: any) => <OverviewProblemCard problem={problem} updating={updatingProblemId === problem.id} onStatusChange={onStatusChange} key={problem.id} />)}</EmployeeDetailList>
     </div>
   </section>;
 }
 
-function OverviewProblemCard({ problem }: { problem: any }) {
+function OverviewProblemCard({ problem, updating, onStatusChange }: { problem: any; updating: boolean; onStatusChange: (problem: any, status: string) => void }) {
   const inProgress = problem.status === 'in_progress';
   return <article className="employeeDetailCard overviewDetailCard">
     <div className="employeeDetailCardHead"><strong>{problem.title || 'Проблема'}</strong><span className={cx('badge', inProgress ? 'trial' : 'warning')}>{techRequestStatuses[problem.status] || problem.status || 'новая'}</span></div>
     <p>{problem.created_by_user?.name || 'Сотрудник'} · {techRequestCategories[problem.category] || 'Другое'} · {fmtDate(problem.created_at)}</p>
     {problem.manager_comment && <p>{problem.manager_comment}</p>}
+    <div className="overviewProblemActions">
+      <Select label="Статус" value={problem.status || 'new'} disabled={updating} onChange={(event: any) => onStatusChange(problem, event.target.value)}>
+        {Object.entries(techRequestStatuses).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+      </Select>
+    </div>
   </article>;
 }
 
