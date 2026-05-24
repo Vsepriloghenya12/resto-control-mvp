@@ -8571,6 +8571,44 @@ body {
   font-size: 0.82rem;
 }
 
+.overviewTaskCreateForm {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(160px, 0.8fr) minmax(150px, 0.7fr);
+  gap: 10px;
+  align-items: end;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in oklch, var(--border) 78%, var(--foreground) 22%);
+  border-radius: 9px;
+  background: color-mix(in oklch, var(--card) 88%, var(--background) 12%);
+}
+
+.overviewTaskCreateForm textarea,
+.overviewTaskCreateForm .overviewTaskPhotoFlag,
+.overviewTaskCreateForm .actions {
+  grid-column: span 1;
+}
+
+.overviewTaskCreateForm textarea {
+  min-height: 42px;
+}
+
+.overviewTaskPhotoFlag {
+  min-height: 38px;
+  align-self: end;
+}
+
+.overviewTaskCreateForm .actions {
+  margin: 0;
+  justify-content: flex-end;
+}
+
+@media (max-width: 980px) {
+  .overviewTaskCreateForm {
+    grid-template-columns: 1fr;
+  }
+}
+
 .inventoryAssignForm {
   align-items: end;
 }

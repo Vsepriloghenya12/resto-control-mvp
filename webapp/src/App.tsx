@@ -41,6 +41,8 @@ import {
   seniorRoles,
   techRequestCategories,
   techRequestStatuses,
+  targetTypeLabels,
+  taskRecipientRolesFor,
   manageableRolesFor,
   type InventorySectionId
 } from './lib/dictionaries';
@@ -1313,7 +1315,7 @@ function RestaurantAdmin({ user, restaurant, onLogout }: any) {
     { id: 'billing', title: 'Оплата' }
   ]);
   const section = useMemo(() => {
-    if (tab === 'overview') return <AdminOverview mode={user.role === 'manager' ? 'manager' : 'owner'} onNavigate={setTab} />;
+    if (tab === 'overview') return <AdminOverview user={user} mode={user.role === 'manager' ? 'manager' : 'owner'} onNavigate={setTab} />;
     if (tab === 'users') return <UsersAdmin user={user} />;
     if (tab === 'checklists') return <Checklists user={user} admin />;
     if (tab === 'bookings') return <Bookings user={user} admin />;
@@ -1680,13 +1682,14 @@ function SubscriptionBanner({ restaurant, openBilling }: any) {
   return <TrialBanner headline={headline} subline={subline} onAction={openBilling} />;
 }
 
-function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager'; onNavigate?: (tab: string) => void }) {
+function AdminOverview({ user, mode = 'owner' }: { user: any; mode?: 'owner' | 'manager'; onNavigate?: (tab: string) => void }) {
   const today = inputDateKey();
   const [data, setData] = useState<any>(null);
   const [activePanel, setActivePanel] = useState<AdminOverviewPanelKey>('employees');
   const [taskRange, setTaskRange] = useState({ from: today, to: today });
   const [updatingProblemId, setUpdatingProblemId] = useState('');
   const [overviewMsg, setOverviewMsg] = useState('');
+  const [taskForm, setTaskForm] = useState<any>({ title: '', description: '', target_type: 'all', target_role: 'waiter', target_user_id: '', due_at: '', require_photo: false });
   function loadOverview() {
     const query = new URLSearchParams({ task_from: taskRange.from, task_to: taskRange.to });
     return api(`/api/admin/overview?${query.toString()}`).then(setData);
@@ -1706,6 +1709,19 @@ function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager'; onNavig
       setOverviewMsg(error.message || 'Не удалось обновить проблему');
     } finally {
       setUpdatingProblemId('');
+    }
+  }
+  async function createOverviewTask(e: FormEvent) {
+    e.preventDefault();
+    setOverviewMsg('');
+    try {
+      const result = await api('/api/tasks', { method: 'POST', body: JSON.stringify(taskForm) });
+      setTaskForm((current: any) => ({ ...current, title: '', description: '', target_user_id: '', due_at: '', require_photo: false }));
+      setOverviewMsg(result?.offline ? 'Задача сохранена офлайн' : 'Задача создана');
+      await loadOverview();
+      setActivePanel('tasks');
+    } catch (error: any) {
+      setOverviewMsg(error.message || 'Не удалось создать задачу');
     }
   }
   if (!data) return <Card><Empty text="Загружаем обзор" /></Card>;
@@ -1748,15 +1764,15 @@ function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager'; onNavig
     </div>
 
     {overviewMsg && <div className={overviewMsg.includes('обновл') ? 'notice' : 'error'}>{overviewMsg}</div>}
-    <AdminOverviewDetailPanel activePanel={activePanel} employees={employees} rows={employeeMetrics} shifts={openShiftsToday} taskRange={taskRange} onTaskRangeChange={setTaskRange} problems={problemSummary.details || []} updatingProblemId={updatingProblemId} onProblemStatusChange={updateOverviewProblemStatus} inventoryAssignments={data.inventory_assignments_today || []} />
+    <AdminOverviewDetailPanel activePanel={activePanel} user={user} employees={employees} rows={employeeMetrics} shifts={openShiftsToday} taskRange={taskRange} onTaskRangeChange={setTaskRange} taskForm={taskForm} onTaskFormChange={setTaskForm} onTaskCreate={createOverviewTask} problems={problemSummary.details || []} updatingProblemId={updatingProblemId} onProblemStatusChange={updateOverviewProblemStatus} inventoryAssignments={data.inventory_assignments_today || []} />
   </>;
 }
 
-function AdminOverviewDetailPanel({ activePanel, employees, rows, shifts, taskRange, onTaskRangeChange, problems, updatingProblemId, onProblemStatusChange, inventoryAssignments }: { activePanel: AdminOverviewPanelKey; employees: any[]; rows: any[]; shifts: any[]; taskRange: any; onTaskRangeChange: (range: any) => void; problems: any[]; updatingProblemId: string; onProblemStatusChange: (problem: any, status: string) => void; inventoryAssignments: any[] }) {
+function AdminOverviewDetailPanel({ activePanel, user, employees, rows, shifts, taskRange, onTaskRangeChange, taskForm, onTaskFormChange, onTaskCreate, problems, updatingProblemId, onProblemStatusChange, inventoryAssignments }: { activePanel: AdminOverviewPanelKey; user: any; employees: any[]; rows: any[]; shifts: any[]; taskRange: any; onTaskRangeChange: (range: any) => void; taskForm: any; onTaskFormChange: (next: any) => void; onTaskCreate: (e: FormEvent) => void; problems: any[]; updatingProblemId: string; onProblemStatusChange: (problem: any, status: string) => void; inventoryAssignments: any[] }) {
   if (activePanel === 'employees') return <OverviewEmployeesList employees={employees} rows={rows} />;
   if (activePanel === 'shifts') return <OpenShiftEmployees shifts={shifts} rows={rows} />;
   if (activePanel === 'checklists') return <OverviewChecklistLists rows={rows} />;
-  if (activePanel === 'tasks') return <OverviewTaskLists rows={rows} taskRange={taskRange} onTaskRangeChange={onTaskRangeChange} />;
+  if (activePanel === 'tasks') return <OverviewTaskLists user={user} employees={employees} rows={rows} taskRange={taskRange} onTaskRangeChange={onTaskRangeChange} taskForm={taskForm} onTaskFormChange={onTaskFormChange} onTaskCreate={onTaskCreate} />;
   if (activePanel === 'problems') return <OverviewProblemLists problems={problems} updatingProblemId={updatingProblemId} onStatusChange={onProblemStatusChange} />;
   if (activePanel === 'documents') return <OverviewDocumentLists rows={rows} />;
   return <OverviewInventoryLists assignments={inventoryAssignments} rows={rows} />;
@@ -1805,13 +1821,20 @@ function OverviewChecklistCard({ item }: { item: any }) {
   return <article className="employeeDetailCard overviewDetailCard"><div className="employeeDetailCardHead"><strong>{checklist.title || 'Чек-лист'}</strong><span className={cx('badge', completed ? 'active' : 'warning')}>{completed ? 'выполнено' : 'не выполнено'}</span></div><p>{item.user?.name || 'Сотрудник'} · {roles[item.user?.role] || item.user?.role || 'роль не указана'}{checklist.completed_at ? ` · ${fmtDate(checklist.completed_at)}` : ''}</p>{notDoneItems.length > 0 && <EmployeeDetailBullets items={notDoneItems} />}{completed && doneItems.length > 0 && <EmployeeDetailBullets items={doneItems} done />}</article>;
 }
 
-function OverviewTaskLists({ rows, taskRange, onTaskRangeChange }: { rows: any[]; taskRange: any; onTaskRangeChange: (range: any) => void }) {
+function OverviewTaskLists({ user, employees, rows, taskRange, onTaskRangeChange, taskForm, onTaskFormChange, onTaskCreate }: { user: any; employees: any[]; rows: any[]; taskRange: any; onTaskRangeChange: (range: any) => void; taskForm: any; onTaskFormChange: (next: any) => void; onTaskCreate: (e: FormEvent) => void }) {
   const items = overviewTasks(rows);
   const overdueItems = items.filter((item: any) => !item.task.done && item.task.overdue);
   const openItems = items.filter((item: any) => !item.task.done && !item.task.overdue);
   const doneItems = items.filter((item: any) => item.task.done);
   const today = inputDateKey();
   const setQuickRange = (from: string, to = from) => onTaskRangeChange({ from, to });
+  const recipientRoleKeys = taskRecipientRolesFor(user);
+  const roleOptions = executableRoles.filter(([key]) => recipientRoleKeys.includes(key));
+  const targetUsers = employees
+    .filter((employee: any) => employee.active !== false && recipientRoleKeys.includes(employee.role) && employee.id !== user.id)
+    .sort((a: any, b: any) => String(departments[a.department] || a.department || '').localeCompare(String(departments[b.department] || b.department || ''), 'ru') || String(a.name || '').localeCompare(String(b.name || ''), 'ru'));
+  const selectedRoleIsAvailable = roleOptions.some(([key]) => key === taskForm.target_role);
+  const normalizedTaskForm = selectedRoleIsAvailable ? taskForm : { ...taskForm, target_role: roleOptions[0]?.[0] || 'waiter' };
   return <section className="overviewListPanel employeeMetricsPlain">
     <div className="overviewPanelHead overviewTaskPanelHead">
       <div><h3>Задачи</h3><p>Показаны задачи только за выбранный день или период</p></div>
@@ -1823,6 +1846,23 @@ function OverviewTaskLists({ rows, taskRange, onTaskRangeChange }: { rows: any[]
         <label><span>по</span><input type="date" value={taskRange.to} onChange={(e: any) => onTaskRangeChange({ ...taskRange, to: e.target.value || taskRange.from })} /></label>
       </div>
     </div>
+    <form className="overviewTaskCreateForm" onSubmit={onTaskCreate}>
+      <Field label="Новая задача" value={normalizedTaskForm.title} onChange={(e: any) => onTaskFormChange({ ...normalizedTaskForm, title: e.target.value })} placeholder="Что нужно выполнить" />
+      <Field label="Срок" type="datetime-local" value={normalizedTaskForm.due_at} onChange={(e: any) => onTaskFormChange({ ...normalizedTaskForm, due_at: e.target.value })} />
+      <Select label="Кому" value={normalizedTaskForm.target_type} onChange={(e: any) => onTaskFormChange({ ...normalizedTaskForm, target_type: e.target.value, target_user_id: '' })}>
+        {Object.entries(targetTypeLabels).map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+      </Select>
+      {normalizedTaskForm.target_type === 'role' && <Select label="Роль" value={normalizedTaskForm.target_role} onChange={(e: any) => onTaskFormChange({ ...normalizedTaskForm, target_role: e.target.value })}>
+        {roleOptions.map(([key, value]) => <option key={key} value={key}>{value}</option>)}
+      </Select>}
+      {normalizedTaskForm.target_type === 'user' && <Select label="Сотрудник" required value={normalizedTaskForm.target_user_id} onChange={(e: any) => onTaskFormChange({ ...normalizedTaskForm, target_user_id: e.target.value })}>
+        <option value="">Выбрать сотрудника</option>
+        {targetUsers.map((employee: any) => <option key={employee.id} value={employee.id}>{employee.name} · {roles[employee.role] || employee.role}</option>)}
+      </Select>}
+      <Textarea label="Описание" value={normalizedTaskForm.description} onChange={(e: any) => onTaskFormChange({ ...normalizedTaskForm, description: e.target.value })} placeholder="Детали задачи" />
+      <label className="smartTaskFlag overviewTaskPhotoFlag"><input type="checkbox" checked={!!normalizedTaskForm.require_photo} onChange={(e: any) => onTaskFormChange({ ...normalizedTaskForm, require_photo: e.target.checked })} /><span>Нужно фото</span></label>
+      <div className="actions adminFormActions"><Button type="submit">Создать задачу</Button></div>
+    </form>
     <div className="employeeDetailColumns overviewDetailColumns">
       <EmployeeDetailList title="Не выполнено" count={openItems.length} empty="Невыполненных задач за период нет" defaultOpen>{openItems.map((item: any) => <OverviewTaskCard item={item} key={item.id} />)}</EmployeeDetailList>
       <EmployeeDetailList title="Просрочено" count={overdueItems.length} empty="Просроченных задач за период нет" defaultOpen>{overdueItems.map((item: any) => <OverviewTaskCard item={item} key={`overdue-${item.id}`} />)}</EmployeeDetailList>
