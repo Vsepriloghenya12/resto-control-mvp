@@ -8694,3 +8694,245 @@ body {
     width: 100%;
   }
 }
+
+/* Unified native mobile shell: keep iPhone Safari, Chrome and installed PWA aligned. */
+@supports (-webkit-touch-callout: none) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+@media (max-width: 980px) {
+  :root {
+    --mobile-header-safe: env(safe-area-inset-top, 0px);
+    --mobile-bottom-safe: env(safe-area-inset-bottom, 0px);
+    --mobile-page-x: 14px;
+    --mobile-nav-h: 78px;
+    --mobile-radius: 16px;
+  }
+
+  html {
+    width: 100%;
+    min-height: 100%;
+    min-height: 100svh;
+    overflow-x: clip;
+    background: var(--background);
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body,
+  #root,
+  .appShell {
+    width: 100%;
+    min-height: 100%;
+    min-height: 100svh;
+    min-height: 100dvh;
+    overflow-x: clip;
+    background: var(--background);
+    overscroll-behavior-x: none;
+  }
+
+  body {
+    position: relative;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    min-height: 44px;
+  }
+
+  .basicWorkspace,
+  .workspaceLayout,
+  .employeeMobileOnly,
+  .ownerDesktopWorkspace,
+  .managerWorkspace {
+    width: 100%;
+    min-height: 100svh;
+    min-height: 100dvh;
+    overflow-x: clip;
+  }
+
+  .workspaceLayout,
+  .basicWorkspace {
+    display: block;
+  }
+
+  .mobileWorkspaceChrome {
+    display: block;
+    padding: 0;
+    position: sticky;
+    top: 0;
+    z-index: 42;
+    border: 0;
+    background: var(--background);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .mobileHeader,
+  .employeeMobileOnly .mobileHeader {
+    position: sticky;
+    top: 0;
+    padding: calc(8px + var(--mobile-header-safe)) var(--mobile-page-x) 8px;
+    border-bottom: 1px solid color-mix(in oklch, var(--border) 80%, transparent);
+    border-radius: 0;
+    background: var(--background);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .mobileTopbar {
+    min-height: 44px;
+  }
+
+  .mobileIconButton,
+  .mobileAvatarButton,
+  .bottomNavItem {
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .pageContainer,
+  .workspacePageContainer,
+  .employeeMobileOnly .pageContainer {
+    width: 100%;
+    max-width: 100%;
+    padding: 10px var(--mobile-page-x) calc(var(--mobile-nav-h) + var(--mobile-bottom-safe) + 16px);
+    overflow-x: clip;
+  }
+
+  .workspaceContent,
+  .contentStack,
+  .mobileSectionStack,
+  .mobileInventoryScreen,
+  .mobileTasksScreen,
+  .mobileChecklistScreen,
+  .bookingMobileScreen {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: clip;
+  }
+
+  .mobileSectionStack {
+    gap: 12px;
+  }
+
+  .mobileCard,
+  .card,
+  .inventoryPlainCard,
+  .mobileInventoryPlainPanel,
+  .mobileCompletedNotice,
+  .mobileInlineHint {
+    border-radius: var(--mobile-radius);
+  }
+
+  .bottomNavigation {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 70;
+    height: calc(var(--mobile-nav-h) + var(--mobile-bottom-safe));
+    padding: 0;
+    pointer-events: none;
+  }
+
+  .bottomNavigationRail {
+    pointer-events: auto;
+    height: 100%;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    align-items: stretch;
+    gap: 2px;
+    padding: 6px 10px calc(6px + var(--mobile-bottom-safe));
+    border-radius: 0;
+    border-top: 1px solid color-mix(in oklch, var(--border) 86%, transparent);
+    background: var(--background);
+    box-shadow: 0 -10px 28px color-mix(in oklch, black 28%, transparent);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .bottomNavItem {
+    min-width: 0;
+    min-height: 54px;
+    height: 100%;
+    padding: 5px 2px;
+    border-radius: 12px;
+    color: var(--text-secondary);
+  }
+
+  .bottomNavItem.active {
+    color: var(--primary);
+  }
+
+  .bottomNavItem.active::before {
+    top: 3px;
+    left: 50%;
+    width: 4px;
+    height: 4px;
+    border-radius: 999px;
+    transform: translateX(-50%);
+  }
+
+  .bottomNavItem span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.68rem;
+    line-height: 1.1;
+  }
+
+  .bottomNavItem .navIcon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .bottomNavCreateBadge {
+    width: 40px;
+    height: 40px;
+    border-radius: 14px;
+  }
+
+  .bottomSheetBackdrop,
+  .modal,
+  .cameraOverlay,
+  .plainTextDocOverlay {
+    min-height: 100svh;
+    min-height: 100dvh;
+    overscroll-behavior: contain;
+  }
+
+  .appUpdateBanner {
+    bottom: calc(var(--mobile-nav-h) + var(--mobile-bottom-safe) + 10px);
+  }
+
+  .bottomSheet {
+    max-height: calc(100dvh - var(--mobile-header-safe) - 16px);
+    padding-bottom: calc(16px + var(--mobile-bottom-safe));
+    border-radius: 20px 20px 0 0;
+  }
+
+  .mobileChipRow,
+  .mobileChecklistPicker,
+  .mobileChecklistRail {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .mobileChipRow::-webkit-scrollbar,
+  .mobileChecklistPicker::-webkit-scrollbar,
+  .mobileChecklistRail::-webkit-scrollbar {
+    display: none;
+  }
+}

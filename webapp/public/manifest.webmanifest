@@ -2,9 +2,11 @@
   "name": "Resto Control",
   "short_name": "Resto",
   "start_url": "/",
+  "scope": "/",
+  "orientation": "portrait",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#c6005c",
+  "background_color": "#101216",
+  "theme_color": "#101216",
   "description": "Чек-листы, заявки, инвентаризация и база знаний для ресторанов",
   "shortcuts": [
     {
