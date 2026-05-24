@@ -1850,7 +1850,9 @@ function EmployeeDetailBullets({ items, done = false }: { items: any[]; done?: b
     {visibleItems.map((item: any) => <li key={item.id || item.text} className={done ? 'done' : ''}>
       <span>{item.text || item.title || 'Пункт'}</span>
       {item.comment && <em>{item.comment}</em>}
-      {item.photo_url && <em>Фото приложено</em>}
+      {item.photo_url && <a className="employeeDetailBulletPhotoLink" href={item.photo_url} target="_blank" rel="noreferrer">
+        <img className="employeeDetailBulletPhoto" src={item.photo_url} alt={`Фото к пункту: ${item.text || item.title || 'чек-лист'}`} />
+      </a>}
     </li>)}
     {items.length > visibleItems.length && <li><span>Ещё {items.length - visibleItems.length}</span></li>}
   </ul>;
@@ -2382,7 +2384,7 @@ function Today({
       </button>
     </div>
 
-    <Card title="Приоритет" className="mobileCard compactMobileCard">
+    <Card title="Приоритет" className="mobileCard compactMobileCard mobilePriorityCard">
       <div className="mobileTaskList">
         {priorityItems.slice(0, 4).map((item: any) => <button key={item.id} type="button" className="mobileTaskRow compact" onClick={item.onClick}>
           <span className="mobileTaskStatus" />

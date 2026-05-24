@@ -1875,6 +1875,39 @@ input[type='checkbox'] {
   padding: 18px;
 }
 
+.mobilePriorityCard .mobileTaskList {
+  gap: 10px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.mobilePriorityCard .mobileTaskRow {
+  border: 1px solid color-mix(in oklch, var(--border) 86%, var(--foreground) 14%);
+  border-radius: 14px;
+  background: color-mix(in oklch, var(--card) 84%, var(--foreground) 4%);
+  color: var(--text);
+}
+
+.mobilePriorityCard .mobileTaskRow:hover {
+  background: color-mix(in oklch, var(--card) 78%, var(--foreground) 7%);
+}
+
+.mobilePriorityCard .mobileTaskStatus {
+  border-color: color-mix(in srgb, var(--status-error) 62%, transparent);
+  background: color-mix(in srgb, var(--status-error) 18%, transparent);
+}
+
+.mobilePriorityCard .mobileTaskCopy strong,
+.mobilePriorityCard .navIcon {
+  color: var(--text-primary);
+}
+
+.mobilePriorityCard .mobileTaskCopy span {
+  color: var(--text-secondary);
+}
+
 .mobileOverviewRow {
   width: 100%;
   display: grid;
@@ -6505,6 +6538,22 @@ body {
 .employeeDetailBullets em {
   color: var(--text-secondary);
   font-style: normal;
+}
+
+.employeeDetailBulletPhotoLink {
+  display: block;
+  width: min(180px, 100%);
+  margin-top: 4px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklch, var(--border) 82%, var(--foreground) 18%);
+  background: color-mix(in oklch, var(--foreground) 4%, transparent);
+}
+
+.employeeDetailBulletPhoto {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
 }
 
 .employeeDetailEmpty,
