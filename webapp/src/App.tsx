@@ -40,6 +40,7 @@ import {
   roles,
   seniorRoles,
   techRequestCategories,
+  techRequestStatuses,
   manageableRolesFor,
   type InventorySectionId
 } from './lib/dictionaries';
@@ -73,7 +74,7 @@ type MobileWorkspaceConfig = {
   onAction?: () => void;
 };
 
-type AdminOverviewPanelKey = 'employees' | 'shifts' | 'checklists' | 'tasks' | 'documents' | 'inventory';
+type AdminOverviewPanelKey = 'employees' | 'shifts' | 'checklists' | 'tasks' | 'problems' | 'documents' | 'inventory';
 
 
 function inputDateKey(value?: string | Date) {
@@ -668,7 +669,9 @@ function AdminProblemDashboard({ onNavigate }: { onNavigate?: (tab: string) => v
     <div className="problemMetrics">
       <button type="button" onClick={() => onNavigate?.('checklists')}><strong>{metrics.open_shifts || 0}</strong><span>смен сейчас</span></button>
       <button type="button" onClick={() => onNavigate?.('tasks')}><strong>{metrics.overdue_tasks || 0}</strong><span>просрочено</span></button>
-      <button type="button" onClick={() => onNavigate?.('tasks')}><strong>{metrics.open_tech_requests || 0}</strong><span>проблем</span></button>
+      <button type="button" onClick={() => onNavigate?.('tasks')}><strong>{metrics.new_tech_requests || 0}</strong><span>новых проблем</span></button>
+      <button type="button" onClick={() => onNavigate?.('tasks')}><strong>{metrics.not_done_tech_requests || metrics.open_tech_requests || 0}</strong><span>невыполненных</span></button>
+      <button type="button" onClick={() => onNavigate?.('tasks')}><strong>{metrics.in_progress_tech_requests || 0}</strong><span>в работе</span></button>
       <button type="button" onClick={() => onNavigate?.('knowledge')}><strong>{metrics.pending_acknowledgements || 0}</strong><span>ознакомлений ждут</span></button>
     </div>
     <div className="problemList">
@@ -1331,7 +1334,7 @@ function RestaurantAdmin({ user, restaurant, onLogout }: any) {
     onBillingPlanSelect={setPreferredBillingPlan}
     banner={(openBilling) => user.role === 'owner' ? <SubscriptionBanner restaurant={restaurant} openBilling={openBilling} /> : null}
   >
-    <div className="contentStack">{section}</div>
+    <div className={cx('contentStack', tab === 'overview' && 'reportPage')}>{section}</div>
   </RestaurantWorkspace>;
 }
 
@@ -1693,6 +1696,7 @@ function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager'; onNavig
   const summary = data.summary || {};
   const checklistSummary = summary.checklists || {};
   const taskSummary = summary.tasks || {};
+  const problemSummary = summary.problems || {};
   const documentSummary = summary.documents || {};
   const inventorySummary = summary.inventories || {};
   const employeeMetrics = data.employee_metrics || [];
@@ -1719,19 +1723,21 @@ function AdminOverview({ mode = 'owner' }: { mode?: 'owner' | 'manager'; onNavig
       <StatCard icon="users" title="Сотрудники на смене" value={statNumber(openShiftsToday.length, openShiftsToday.length ? 'done' : 'neutral')} active={activePanel === 'shifts'} onClick={() => setActivePanel('shifts')} />
       <StatCard icon="checklists" title="Чек-листы сегодня" value={statNumbers({ value: checklistSummary.done ?? data.checklists_today, tone: 'done' }, { value: checklistSummary.not_done, tone: 'todo' })} active={activePanel === 'checklists'} onClick={() => setActivePanel('checklists')} />
       <StatCard icon="tasks" title="Задачи" value={statNumbers({ value: openTasksCount, tone: 'todo' }, { value: taskSummary.overdue, tone: 'todo' }, { value: taskSummary.done, tone: 'done' })} active={activePanel === 'tasks'} onClick={() => setActivePanel('tasks')} />
+      <StatCard icon="tasks" title="Проблемы" value={statNumbers({ value: problemSummary.new, tone: 'todo' }, { value: problemSummary.not_done, tone: 'todo' }, { value: problemSummary.in_progress, tone: 'neutral' })} active={activePanel === 'problems'} onClick={() => setActivePanel('problems')} />
       <StatCard icon="document" title="Документы" value={statNumber(documentSummary.total ?? data.docs, 'neutral')} active={activePanel === 'documents'} onClick={() => setActivePanel('documents')} />
       <StatCard icon="inventory" title="Инвентаризации" value={statNumbers({ value: inventorySummary.ready, tone: 'done' }, { value: inventorySummary.not_ready, tone: 'todo' })} active={activePanel === 'inventory'} onClick={() => setActivePanel('inventory')} />
     </div>
 
-    <AdminOverviewDetailPanel activePanel={activePanel} employees={employees} rows={employeeMetrics} shifts={openShiftsToday} taskRange={taskRange} onTaskRangeChange={setTaskRange} inventoryAssignments={data.inventory_assignments_today || []} />
+    <AdminOverviewDetailPanel activePanel={activePanel} employees={employees} rows={employeeMetrics} shifts={openShiftsToday} taskRange={taskRange} onTaskRangeChange={setTaskRange} problems={problemSummary.details || []} inventoryAssignments={data.inventory_assignments_today || []} />
   </>;
 }
 
-function AdminOverviewDetailPanel({ activePanel, employees, rows, shifts, taskRange, onTaskRangeChange, inventoryAssignments }: { activePanel: AdminOverviewPanelKey; employees: any[]; rows: any[]; shifts: any[]; taskRange: any; onTaskRangeChange: (range: any) => void; inventoryAssignments: any[] }) {
+function AdminOverviewDetailPanel({ activePanel, employees, rows, shifts, taskRange, onTaskRangeChange, problems, inventoryAssignments }: { activePanel: AdminOverviewPanelKey; employees: any[]; rows: any[]; shifts: any[]; taskRange: any; onTaskRangeChange: (range: any) => void; problems: any[]; inventoryAssignments: any[] }) {
   if (activePanel === 'employees') return <OverviewEmployeesList employees={employees} rows={rows} />;
   if (activePanel === 'shifts') return <OpenShiftEmployees shifts={shifts} rows={rows} />;
   if (activePanel === 'checklists') return <OverviewChecklistLists rows={rows} />;
   if (activePanel === 'tasks') return <OverviewTaskLists rows={rows} taskRange={taskRange} onTaskRangeChange={onTaskRangeChange} />;
+  if (activePanel === 'problems') return <OverviewProblemLists problems={problems} />;
   if (activePanel === 'documents') return <OverviewDocumentLists rows={rows} />;
   return <OverviewInventoryLists assignments={inventoryAssignments} rows={rows} />;
 }
@@ -1810,6 +1816,27 @@ function OverviewTaskCard({ item }: { item: any }) {
   return <article className="employeeDetailCard overviewDetailCard"><div className="employeeDetailCardHead"><strong>{task.title || 'Задача'}</strong><span className={cx('badge', done ? 'active' : task.overdue ? 'cancelled' : 'warning')}>{done ? 'выполнено' : task.overdue ? 'просрочено' : task.source === 'tech_request' ? 'проблема' : 'в работе'}</span></div><p>{item.user?.name || 'Сотрудник'} · {done ? employeeDoneTaskDescription(task) : employeeTaskDescription(task)}</p></article>;
 }
 
+function OverviewProblemLists({ problems }: { problems: any[] }) {
+  const newItems = problems.filter((problem: any) => problem.status === 'new');
+  const inProgressItems = problems.filter((problem: any) => problem.status === 'in_progress');
+  return <section className="overviewListPanel employeeMetricsPlain">
+    <h3>Проблемы</h3>
+    <div className="employeeDetailColumns overviewDetailColumns">
+      <EmployeeDetailList title="Новые" count={newItems.length} empty="Новых проблем нет" defaultOpen>{newItems.map((problem: any) => <OverviewProblemCard problem={problem} key={problem.id} />)}</EmployeeDetailList>
+      <EmployeeDetailList title="В работе" count={inProgressItems.length} empty="Проблем в работе нет" defaultOpen>{inProgressItems.map((problem: any) => <OverviewProblemCard problem={problem} key={problem.id} />)}</EmployeeDetailList>
+    </div>
+  </section>;
+}
+
+function OverviewProblemCard({ problem }: { problem: any }) {
+  const inProgress = problem.status === 'in_progress';
+  return <article className="employeeDetailCard overviewDetailCard">
+    <div className="employeeDetailCardHead"><strong>{problem.title || 'Проблема'}</strong><span className={cx('badge', inProgress ? 'trial' : 'warning')}>{techRequestStatuses[problem.status] || problem.status || 'новая'}</span></div>
+    <p>{problem.created_by_user?.name || 'Сотрудник'} · {techRequestCategories[problem.category] || 'Другое'} · {fmtDate(problem.created_at)}</p>
+    {problem.manager_comment && <p>{problem.manager_comment}</p>}
+  </article>;
+}
+
 function OverviewDocumentLists({ rows }: { rows: any[] }) {
   const items = overviewDocuments(rows); const pendingItems = items.filter((item: any) => item.document.status === 'pending'); const acknowledgedItems = items.filter((item: any) => item.document.status === 'acknowledged');
   return <section className="overviewListPanel employeeMetricsPlain"><h3>Документы</h3><div className="employeeDetailColumns overviewDetailColumns"><EmployeeDetailList title="Ждут ознакомления" count={pendingItems.length} empty="Нет документов, ожидающих ознакомления" defaultOpen>{pendingItems.map((item: any) => <OverviewDocumentCard item={item} key={item.id} />)}</EmployeeDetailList><EmployeeDetailList title="Ознакомлены" count={acknowledgedItems.length} empty="Ознакомленных документов пока нет" defaultOpen>{acknowledgedItems.map((item: any) => <OverviewDocumentCard item={item} key={item.id} />)}</EmployeeDetailList></div></section>;
@@ -1879,7 +1906,9 @@ function EmployeeChecklistAuditCard({ checklist }: { checklist: any }) {
           <em>{item.done ? 'готово' : 'не выполнено'}</em>
         </div>
         {item.comment && <p className="employeeChecklistAuditComment">{item.comment}</p>}
-        {item.photo_url && <img className="employeeChecklistAuditPhoto" src={item.photo_url} alt={`Фото к пункту: ${item.text || item.title || 'чек-лист'}`} />}
+        {item.photo_url && <a className="employeeChecklistAuditPhotoLink" href={item.photo_url} target="_blank" rel="noreferrer">
+          <img className="employeeChecklistAuditPhoto" src={item.photo_url} alt={`Фото к пункту: ${item.text || item.title || 'чек-лист'}`} />
+        </a>}
       </div>)}
     </div>
   </article>;
@@ -2847,6 +2876,31 @@ function Checklists({ user, admin = false }: any) {
 
     {admin && !editingTemplateId && isTemplateEditorOpen && <Card title="Новый чек-лист">
       {renderTemplateEditorForm()}
+    </Card>}
+
+    {admin && <Card title="Выполненные чек-листы">
+      {completedRuns.length === 0 && <Empty text="Сотрудники ещё не отправляли чек-листы" />}
+      {completedRuns.length > 0 && <div className="adminChecklistReportList employeeChecklistAuditItems">
+        {completedRuns.slice(0, 20).map((run: any) => {
+          const template = templates.find((item: any) => item.id === run.template_id) || run.template || {};
+          const templateItems = template.items || [];
+          const items = templateItems.map((item: any) => {
+            const answer = (run.answers || []).find((candidate: any) => candidate.item_id === item.id);
+            return { ...item, done: Boolean(answer?.done), comment: answer?.comment || '', photo_url: answer?.photo_url || '' };
+          });
+          return <EmployeeChecklistAuditCard
+            key={run.id}
+            checklist={{
+              id: run.id,
+              title: `${template.title || 'Чек-лист'} · ${run.user?.name || 'Сотрудник'}`,
+              type: template.type || run.template?.type,
+              status: run.status,
+              completed_at: run.completed_at || run.created_at,
+              items
+            }}
+          />;
+        })}
+      </div>}
     </Card>}
 
     {cameraTarget && <CameraCapture

@@ -488,3 +488,12 @@ create table if not exists closing_documents (
   signed_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+create table if not exists upload_files (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  path text not null unique,
+  mime_type text not null,
+  data_base64 text not null,
+  created_at timestamptz not null default now()
+);

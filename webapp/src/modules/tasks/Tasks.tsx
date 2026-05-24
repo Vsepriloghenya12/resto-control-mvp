@@ -27,7 +27,20 @@ function taskPhotoFromFile(file: File): Promise<string> {
   });
 }
 
+function inputDateKey(value?: string | Date) {
+  const date = value instanceof Date ? value : value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return new Date().toISOString().slice(0, 10);
+  return date.toISOString().slice(0, 10);
+}
+
+function shiftInputDate(dateKey: string, days: number) {
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 export function Tasks({ user, admin = false, showTechComposer = false, onCloseComposer }: any) {
+  const today = inputDateKey();
   const [tasks, setTasks] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [techRequests, setTechRequests] = useState<any[]>([]);
@@ -39,6 +52,7 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
   const [taskPhotos, setTaskPhotos] = useState<Record<string, string>>({});
   const [showTechForm, setShowTechForm] = useState(false);
   const [techForm, setTechForm] = useState<any>({ title: '', description: '', category: 'equipment', urgency: 'normal' });
+  const [problemRange, setProblemRange] = useState({ from: today, to: today });
   const isSenior = seniorRoles.includes(user?.role);
   const canCreateTasks = admin || isSenior;
   const canManageTechRequests = admin && ['owner', 'manager'].includes(user?.role);
@@ -54,10 +68,13 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
   }, [canCreateTasks, user.role]);
 
   async function load() {
+    const techRequestPath = canManageTechRequests
+      ? `/api/tech-requests?${new URLSearchParams({ from: problemRange.from, to: problemRange.to }).toString()}`
+      : '/api/tech-requests';
     const [taskRows, userRows, techRows] = await Promise.all([
       api(canCreateTasks ? '/api/tasks?manage=1' : '/api/tasks'),
       canCreateTasks ? api('/api/admin/users') : Promise.resolve([]),
-      shouldLoadTechRequests ? api('/api/tech-requests') : Promise.resolve([])
+      shouldLoadTechRequests ? api(techRequestPath) : Promise.resolve([])
     ]);
     setTasks(taskRows);
     if (canCreateTasks) setUsers(userRows);
@@ -70,7 +87,7 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [problemRange.from, problemRange.to]);
 
   async function create(e: FormEvent) {
     e.preventDefault();
@@ -262,9 +279,17 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
   const closedTechRequests = techRequests
     .filter((request) => ['done', 'cancelled'].includes(request.status))
     .sort((a, b) => String(b.resolved_at || b.updated_at || b.created_at || '').localeCompare(String(a.resolved_at || a.updated_at || a.created_at || '')));
+  const setProblemQuickRange = (from: string, to = from) => setProblemRange({ from, to });
+  const problemDateTools = <div className="overviewDateTools problemDateTools">
+    <Button type="button" kind="soft" onClick={() => setProblemQuickRange(today)}>Сегодня</Button>
+    <Button type="button" kind="soft" onClick={() => setProblemQuickRange(shiftInputDate(today, -1))}>Вчера</Button>
+    <Button type="button" kind="soft" onClick={() => setProblemQuickRange(shiftInputDate(today, -6), today)}>7 дней</Button>
+    <label><span>с</span><input type="date" value={problemRange.from} onChange={(e: any) => setProblemRange({ ...problemRange, from: e.target.value || today })} /></label>
+    <label><span>по</span><input type="date" value={problemRange.to} onChange={(e: any) => setProblemRange({ ...problemRange, to: e.target.value || problemRange.from })} /></label>
+  </div>;
 
   return <>
-    {canManageTechRequests && <Card title="Проблемы сотрудников" right={<span className="badge warning">{activeTechRequests.length} открыто</span>}>
+    {canManageTechRequests && <Card title="Проблемы сотрудников" right={<div className="problemCardToolbar"><span className="badge warning">{activeTechRequests.length} открыто</span>{problemDateTools}</div>}>
       {activeTechRequests.length === 0 && <Empty text="Открытых проблем пока нет" />}
       <div className="compactAccordionList">
         {activeTechRequests.map((request) => {
@@ -298,7 +323,7 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
       {techMsg && <div className={techMsg.includes('обновлена') ? 'notice' : 'error'}>{techMsg}</div>}
     </Card>}
 
-    {canManageTechRequests && <Card title="История проблем">
+    {canManageTechRequests && <Card title="История проблем" right={<span className="badge">{closedTechRequests.length} закрыто</span>}>
       {closedTechRequests.length === 0 && <Empty text="Закрытых проблем пока нет" />}
       <div className="compactAccordionList">
         {closedTechRequests.map((request) => <details className="compactAccordion techRequestCard" key={request.id}>

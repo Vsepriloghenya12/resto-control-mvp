@@ -123,6 +123,11 @@ function taskTouchesRange(task, assignment, range) {
   return dateKeyInRange(taskWorkDate(task), range);
 }
 
+function techRequestRangeDate(request) {
+  if (['done', 'cancelled'].includes(request?.status)) return request.resolved_at || request.updated_at || request.created_at;
+  return request?.created_at;
+}
+
 function inventoryAssignmentDetails(assignment) {
   const template = db.inventory_templates.find(t => t.id === assignment.template_id);
   const runs = sameRestaurant(db.inventory_runs, assignment.restaurant_id)
@@ -828,14 +833,33 @@ function saveImageDataUrl(dataUrl, baseDir, publicBasePath, restaurant_id, nameP
   }
 
   const ext = match[1] === 'jpeg' ? 'jpg' : match[1];
+  const mimeType = ext === 'jpg' ? 'image/jpeg' : `image/${ext}`;
   const restaurantDir = path.join(baseDir, restaurant_id);
   fs.mkdirSync(restaurantDir, { recursive: true });
 
   const filename = `${namePrefix}-${nameSuffix}-${Date.now()}.${ext}`.replace(/[^a-zA-Z0-9._-]+/g, '-');
   const filepath = path.join(restaurantDir, filename);
-  fs.writeFileSync(filepath, Buffer.from(match[2], 'base64'));
+  const buffer = Buffer.from(match[2], 'base64');
+  fs.writeFileSync(filepath, buffer);
 
-  return `${publicBasePath}/${restaurant_id}/${filename}`;
+  const publicPath = `${publicBasePath}/${restaurant_id}/${filename}`;
+  rememberUploadFile(publicPath, restaurant_id, mimeType, buffer);
+  return publicPath;
+}
+
+function rememberUploadFile(publicPath, restaurant_id, mimeType, buffer) {
+  db.upload_files = Array.isArray(db.upload_files) ? db.upload_files : [];
+  const existing = db.upload_files.find(file => file.path === publicPath);
+  const row = {
+    id: existing?.id || uid('upl'),
+    restaurant_id,
+    path: publicPath,
+    mime_type: mimeType || 'application/octet-stream',
+    data_base64: buffer.toString('base64'),
+    created_at: existing?.created_at || nowIso()
+  };
+  if (existing) Object.assign(existing, row);
+  else db.upload_files.push(row);
 }
 
 function saveChecklistPhoto(dataUrl, restaurant_id, run_id, item_id) {
@@ -1772,6 +1796,8 @@ app.get('/api/admin/problems', auth, ensureRestaurantActive, adminOnly, (req, re
     return task?.due_at && new Date(task.due_at).getTime() < now;
   });
   const openTech = sameRestaurant(db.tech_requests, rid).filter(t => !['done', 'cancelled'].includes(t.status));
+  const newTech = openTech.filter(t => t.status === 'new');
+  const inProgressTech = openTech.filter(t => t.status === 'in_progress');
   const staff = sameRestaurant(db.users, rid).filter(u => u.active && !u.is_super_admin && !MANAGER_ROLES.includes(u.role));
   const requiredDocs = sameRestaurant(db.knowledge_documents, rid).filter(d => d.is_active && d.requires_acknowledgement);
   const pendingAck = requiredDocs.reduce((total, doc) => {
@@ -1787,7 +1813,7 @@ app.get('/api/admin/problems', auth, ensureRestaurantActive, adminOnly, (req, re
     }),
     ...openTech.slice(0, 8).map(t => ({ id: `tech-${t.id}`, tone: t.status === 'new' ? 'warning' : 'info', title: t.title, subtitle: `Проблема · ${techRequestStatuses[t.status] || t.status}`, type: 'tech_request', type_label: problemTypeLabels.tech_request, entity_id: t.id }))
   ];
-  res.json({ metrics: { open_shifts: collection('shifts').filter(s => s.restaurant_id === rid && s.status === 'open').length, open_tasks: openAssignments.length, overdue_tasks: overdueAssignments.length, open_tech_requests: openTech.length, checklist_runs_today: sameRestaurant(db.checklist_runs, rid).filter(r => String(r.created_at||'').slice(0,10) === today).length, pending_acknowledgements: pendingAck }, problems: problems.slice(0,20) });
+  res.json({ metrics: { open_shifts: collection('shifts').filter(s => s.restaurant_id === rid && s.status === 'open').length, open_tasks: openAssignments.length, overdue_tasks: overdueAssignments.length, open_tech_requests: openTech.length, new_tech_requests: newTech.length, in_progress_tech_requests: inProgressTech.length, not_done_tech_requests: openTech.length, checklist_runs_today: sameRestaurant(db.checklist_runs, rid).filter(r => String(r.created_at||'').slice(0,10) === today).length, pending_acknowledgements: pendingAck }, problems: problems.slice(0,20) });
 });
 
 app.get('/api/comments', auth, ensureRestaurantActive, (req, res) => {
@@ -2252,7 +2278,19 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
   const taskAssignments = sameRestaurant(db.task_assignments, rid);
   const techRequests = sameRestaurant(db.tech_requests, rid);
   const openTechRequests = techRequests.filter(request => !['done', 'cancelled'].includes(request.status));
-  const doneTechRequests = techRequests.filter(request => request.status === 'done');
+  const newTechRequests = openTechRequests.filter(request => request.status === 'new');
+  const inProgressTechRequests = openTechRequests.filter(request => request.status === 'in_progress');
+  const problemSummary = {
+    new: newTechRequests.length,
+    not_done: openTechRequests.length,
+    in_progress: inProgressTechRequests.length,
+    details: openTechRequests
+      .map(request => ({
+        ...request,
+        created_by_user: publicUser(db.users.find(user => user.id === request.created_by))
+      }))
+      .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+  };
   const taskById = new Map(activeTasks.map(task => [task.id, task]));
   const periodTaskAssignments = taskAssignments
     .filter(assignment => taskById.has(assignment.task_id))
@@ -2271,8 +2309,6 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
     overdue: overduePeriodTaskAssignments.length,
     open: openPeriodTaskAssignments.length
   };
-  void openTechRequests;
-  void doneTechRequests;
   const checklistSummary = {
     done: completedChecklistKeys.size,
     not_done: Math.max(0, expectedChecklistKeys.size - completedChecklistKeys.size),
@@ -2438,6 +2474,7 @@ app.get('/api/admin/overview', auth, ensureRestaurantActive, adminOnly, (req, re
       },
       checklists: checklistSummary,
       tasks: taskSummary,
+      problems: problemSummary,
       documents: documentSummary,
       inventories: inventorySummary
     },
@@ -3360,8 +3397,11 @@ app.patch('/api/tasks/:id/done', auth, ensureRestaurantActive, runAsync(async (r
 app.get('/api/tech-requests', auth, ensureRestaurantActive, (req, res) => {
   const rid = req.user.restaurant_id;
   const isAdmin = ['owner', 'manager'].includes(req.user.role);
+  const hasRange = req.query.from !== undefined || req.query.to !== undefined;
+  const range = hasRange ? normalizeDateRange(req.query) : null;
   const rows = sameRestaurant(db.tech_requests, rid)
     .filter(request => isAdmin || request.created_by === req.user.id)
+    .filter(request => !range || dateKeyInRange(techRequestRangeDate(request), range))
     .map(request => ({
       ...request,
       created_by_user: publicUser(db.users.find(user => user.id === request.created_by))
@@ -3953,7 +3993,19 @@ function setStaticCacheHeaders(res, filePath) {
   res.setHeader('Cache-Control', 'public, max-age=3600');
 }
 
-app.use('/uploads', express.static(uploadsDir));
+app.get('/uploads/*', (req, res, next) => {
+  const publicPath = `/uploads/${req.params[0] || ''}`;
+  const storedFile = Array.isArray(db.upload_files)
+    ? db.upload_files.find(file => file.path === publicPath)
+    : null;
+  if (!storedFile?.data_base64) return next();
+
+  const buffer = Buffer.from(storedFile.data_base64, 'base64');
+  res.setHeader('Content-Type', storedFile.mime_type || 'application/octet-stream');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.send(buffer);
+});
+app.use('/uploads', express.static(uploadsDir, { fallthrough: false }));
 app.use(express.static(webDist, { setHeaders: setStaticCacheHeaders }));
 app.get('*', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');

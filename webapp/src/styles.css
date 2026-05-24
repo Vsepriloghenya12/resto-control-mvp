@@ -6475,12 +6475,19 @@ body {
   line-height: 1.45;
 }
 
-.employeeChecklistAuditPhoto {
+.employeeChecklistAuditPhotoLink {
+  display: block;
   width: min(320px, calc(100% - 32px));
-  max-height: 240px;
   margin-left: 32px;
   border-radius: 12px;
+  overflow: hidden;
   border: 1px solid color-mix(in oklch, var(--muted-foreground) 16%, transparent);
+}
+
+.employeeChecklistAuditPhoto {
+  display: block;
+  width: 100%;
+  max-height: 240px;
   object-fit: cover;
 }
 
@@ -8340,6 +8347,177 @@ body {
   background: var(--surface);
   color: var(--text);
   padding: 6px 8px;
+}
+
+.problemCardToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.problemDateTools {
+  align-items: center;
+}
+
+.reportPage {
+  gap: 14px;
+}
+
+.reportPage .statsGrid {
+  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
+  gap: 12px;
+  margin-bottom: 0;
+}
+
+.reportPage .statCard {
+  position: relative;
+  min-height: 118px;
+  align-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 10px;
+  background: color-mix(in oklch, var(--card) 88%, var(--background) 12%);
+  border-color: color-mix(in oklch, var(--border) 86%, var(--foreground) 14%);
+  box-shadow: none;
+}
+
+.reportPage .statCard:hover,
+.reportPage .statCard.active {
+  transform: none;
+  background: color-mix(in oklch, var(--card) 82%, var(--primary) 10%);
+  border-color: color-mix(in oklch, var(--primary) 46%, var(--border) 54%);
+}
+
+.reportPage .statBadge {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: color-mix(in oklch, var(--primary) 14%, transparent);
+}
+
+.reportPage .statCopy {
+  gap: 5px;
+}
+
+.reportPage .statLabel {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.reportPage .statValue {
+  font-size: clamp(1.55rem, 2vw, 2rem);
+}
+
+.reportPage .statNumberSet,
+.reportPage .statNumberGroup {
+  gap: 6px;
+}
+
+.reportPage .overviewListPanel,
+.reportPage .employeeMetricsPlain,
+.reportPage .openShiftPanel {
+  margin: 0;
+  padding: 14px;
+  border: 1px solid color-mix(in oklch, var(--border) 86%, var(--foreground) 14%);
+  border-radius: 10px;
+  background: color-mix(in oklch, var(--card) 88%, var(--background) 12%);
+}
+
+.reportPage .overviewPanelHead {
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid color-mix(in oklch, var(--border) 86%, transparent);
+}
+
+.reportPage .openShiftPanel h3,
+.reportPage .employeeMetricsPlain h3,
+.reportPage .overviewPanelHead h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 0.98rem;
+  font-weight: 880;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.reportPage .overviewPanelHead p {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.reportPage .employeeDetailColumns {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.reportPage .employeeDetailSection {
+  padding: 12px;
+  border-radius: 9px;
+  background: color-mix(in oklch, var(--foreground) 3.5%, transparent);
+  border-color: color-mix(in oklch, var(--border) 78%, var(--foreground) 22%);
+}
+
+.reportPage .employeeDetailSectionHead {
+  margin-bottom: 9px;
+}
+
+.reportPage .employeeDetailSectionHead strong {
+  font-size: 0.82rem;
+}
+
+.reportPage .employeeDetailSectionHead span {
+  min-width: 24px;
+  height: 24px;
+  background: color-mix(in oklch, var(--foreground) 7%, transparent);
+}
+
+.reportPage .employeeDetailCard {
+  padding: 10px;
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--foreground) 4.5%, transparent);
+  border-color: color-mix(in oklch, var(--border) 74%, var(--foreground) 26%);
+}
+
+.reportPage .employeeDetailCardHead strong {
+  font-size: 0.82rem;
+}
+
+.reportPage .employeeDetailCard p,
+.reportPage .employeeDetailBullets li {
+  font-size: 0.74rem;
+}
+
+.reportPage .employeeMetricsList,
+.reportPage .openShiftList {
+  border: 1px solid color-mix(in oklch, var(--border) 76%, var(--foreground) 24%);
+  border-radius: 9px;
+  overflow: hidden;
+  background: color-mix(in oklch, var(--foreground) 3%, transparent);
+}
+
+.reportPage .employeeMetricsEntry,
+.reportPage .openShiftEntry {
+  border-color: color-mix(in oklch, var(--border) 76%, transparent);
+}
+
+.reportPage .employeeMetricsRow,
+.reportPage .openShiftRow {
+  min-height: 50px;
+  padding: 10px 12px;
+}
+
+.reportPage .overviewDateTools button,
+.reportPage .overviewDateTools input {
+  min-height: 32px;
+  border-radius: 8px;
+}
+
+.reportPage .badge {
+  border-radius: 8px;
 }
 
 .inventoryAssignForm {
