@@ -289,7 +289,11 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
   </div>;
 
   return <>
-    {canManageTechRequests && <Card title="Проблемы сотрудников" right={<div className="problemCardToolbar"><span className="badge warning">{activeTechRequests.length} открыто</span>{problemDateTools}</div>}>
+    {canManageTechRequests && <Card className="problemPeriodCard" title="Период проблем">
+      {problemDateTools}
+    </Card>}
+
+    {canManageTechRequests && <Card title="Проблемы сотрудников" right={<span className="badge warning">{activeTechRequests.length} открыто</span>}>
       {activeTechRequests.length === 0 && <Empty text="Открытых проблем пока нет" />}
       <div className="compactAccordionList">
         {activeTechRequests.map((request) => {

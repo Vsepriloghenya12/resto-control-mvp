@@ -3998,14 +3998,20 @@ app.get('/uploads/*', (req, res, next) => {
   const storedFile = Array.isArray(db.upload_files)
     ? db.upload_files.find(file => file.path === publicPath)
     : null;
-  if (!storedFile?.data_base64) return next();
+  if (!storedFile?.data_base64) {
+    const diskPath = path.resolve(uploadsDir, req.params[0] || '');
+    if (!diskPath.startsWith(`${uploadsDir}${path.sep}`) || !fs.existsSync(diskPath)) {
+      return res.status(404).type('text/plain').send('Файл не найден');
+    }
+    return next();
+  }
 
   const buffer = Buffer.from(storedFile.data_base64, 'base64');
   res.setHeader('Content-Type', storedFile.mime_type || 'application/octet-stream');
   res.setHeader('Cache-Control', 'public, max-age=3600');
   res.send(buffer);
 });
-app.use('/uploads', express.static(uploadsDir, { fallthrough: false }));
+app.use('/uploads', express.static(uploadsDir));
 app.use(express.static(webDist, { setHeaders: setStaticCacheHeaders }));
 app.get('*', (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');

@@ -8,6 +8,7 @@ import './styles.css';
 configurePwaModeFromUrl();
 registerPwaInstallPrompt();
 registerAppUpdateFlow();
+document.documentElement.classList.add('dark');
 
 createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

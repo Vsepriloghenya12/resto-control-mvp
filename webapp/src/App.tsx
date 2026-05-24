@@ -1871,15 +1871,22 @@ function EmployeeDetailList({ title, count, empty, children, defaultOpen = false
   </details>;
 }
 
+function PhotoPreviewLink({ src, alt, linkClassName, imageClassName }: { src?: string; alt: string; linkClassName: string; imageClassName: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!src) return null;
+  if (failed) return <span className="photoUnavailable">Фото недоступно</span>;
+  return <a className={linkClassName} href={src} target="_blank" rel="noreferrer">
+    <img className={imageClassName} src={src} alt={alt} onError={() => setFailed(true)} />
+  </a>;
+}
+
 function EmployeeDetailBullets({ items, done = false }: { items: any[]; done?: boolean }) {
   const visibleItems = items.slice(0, 6);
   return <ul className="employeeDetailBullets">
     {visibleItems.map((item: any) => <li key={item.id || item.text} className={done ? 'done' : ''}>
       <span>{item.text || item.title || 'Пункт'}</span>
       {item.comment && <em>{item.comment}</em>}
-      {item.photo_url && <a className="employeeDetailBulletPhotoLink" href={item.photo_url} target="_blank" rel="noreferrer">
-        <img className="employeeDetailBulletPhoto" src={item.photo_url} alt={`Фото к пункту: ${item.text || item.title || 'чек-лист'}`} />
-      </a>}
+      <PhotoPreviewLink src={item.photo_url} linkClassName="employeeDetailBulletPhotoLink" imageClassName="employeeDetailBulletPhoto" alt={`Фото к пункту: ${item.text || item.title || 'чек-лист'}`} />
     </li>)}
     {items.length > visibleItems.length && <li><span>Ещё {items.length - visibleItems.length}</span></li>}
   </ul>;
@@ -1906,9 +1913,7 @@ function EmployeeChecklistAuditCard({ checklist }: { checklist: any }) {
           <em>{item.done ? 'готово' : 'не выполнено'}</em>
         </div>
         {item.comment && <p className="employeeChecklistAuditComment">{item.comment}</p>}
-        {item.photo_url && <a className="employeeChecklistAuditPhotoLink" href={item.photo_url} target="_blank" rel="noreferrer">
-          <img className="employeeChecklistAuditPhoto" src={item.photo_url} alt={`Фото к пункту: ${item.text || item.title || 'чек-лист'}`} />
-        </a>}
+        <PhotoPreviewLink src={item.photo_url} linkClassName="employeeChecklistAuditPhotoLink" imageClassName="employeeChecklistAuditPhoto" alt={`Фото к пункту: ${item.text || item.title || 'чек-лист'}`} />
       </div>)}
     </div>
   </article>;
