@@ -1199,16 +1199,31 @@ function collectTtkNameAroundLine(rawLines, index, inlineName) {
   return normalizeTtkIngredientName([...before, inlineName, ...after].filter(Boolean).join(' '));
 }
 
+function stripTtkTableHeaderPrefix(line) {
+  const text = stripTtkTechnologyText(line);
+  const unit = '(?:кг|г|л|мл|шт\\.?|порц\\.?)';
+  const amount = '(?:\\d+[,.]\\d+\\s+){1,4}\\d+[,.]\\d+';
+  const rowStart = text.match(new RegExp('^(.*?)(\\b\\d+\\s+[^\\d\\n]+?\\s+' + unit + '\\s+' + amount + '\\b.*)$', 'i'));
+  if (rowStart && /(наименование продукта|ед\.?\s*изм|брутто|вес нетто|вес готового)/i.test(rowStart[1])) {
+    return cleanTtkText(rowStart[2]);
+  }
+  const compactStart = text.match(new RegExp('^(.*?)(\\b\\d+\\s+' + unit + '\\s+' + amount + '\\b.*)$', 'i'));
+  if (compactStart && /(наименование продукта|ед\.?\s*изм|брутто|вес нетто|вес готового)/i.test(compactStart[1])) {
+    return cleanTtkText(compactStart[2]);
+  }
+  return text;
+}
+
 function parseTtkRowsFromLayout(source) {
   const rawLines = String(source || '').replace(/\r/g, '').split('\n');
   const ingredients = [];
   const amountSequence = '((?:\\d+[,.]\\d+\\s+){1,4}\\d+[,.]\\d+)';
   const rowPattern = new RegExp('^\\s*(\\d+)\\s+(.*?)\\s+(кг|г|л|мл|шт\\.?|порц\\.?)\\s+' + amountSequence + '\\b', 'i');
-  const compactRowPattern = new RegExp('^\\s*(\\d+)\\s+(кг|г|л|мл|шт\\.?|порц\\.?)\\s+' + amountSequence + '\\b', 'i');
+  const compactRowPattern = new RegExp('^\\s*(\\d+)\\s+(кг|г|л|мл|шт\\.?|порц\\.?)\\s+' + amountSequence + '\\b\\s*(.*)$', 'i');
 
   for (let i = 0; i < rawLines.length; i += 1) {
     const raw = rawLines[i];
-    const cleaned = stripTtkTechnologyText(raw);
+    const cleaned = stripTtkTableHeaderPrefix(raw);
     if (!cleaned || /^ИТОГО/i.test(cleaned)) continue;
     const match = cleaned.match(rowPattern);
     const compactMatch = match ? null : cleaned.match(compactRowPattern);
@@ -1217,7 +1232,8 @@ function parseTtkRowsFromLayout(source) {
     const inlineName = normalizeTtkIngredientName(match ? match[2] : '');
     const unit = match ? match[3] : compactMatch[2];
     const amountText = match ? match[4] : compactMatch[3];
-    const name = collectTtkNameAroundLine(rawLines, i, inlineName);
+    const compactTailName = compactMatch ? normalizeTtkIngredientName(compactMatch[4]) : '';
+    const name = compactTailName || collectTtkNameAroundLine(rawLines, i, inlineName);
     const amounts = amountText.match(/\d+[,.]\d+/g) || [];
     addTtkIngredient(ingredients, name, unit, amounts);
   }
