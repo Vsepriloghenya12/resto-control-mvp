@@ -5091,6 +5091,11 @@ textarea {
     box-shadow: none;
   }
 
+  .mobileCard.mobilePriorityCard {
+    background: color-mix(in oklch, var(--card) 92%, var(--background) 8%);
+    border-color: color-mix(in oklch, var(--border) 82%, var(--foreground) 18%);
+  }
+
   .flatMobileCard,
   .inventoryPlainCard {
     background: transparent;
