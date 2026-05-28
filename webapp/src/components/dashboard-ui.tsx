@@ -144,13 +144,15 @@ export function WorkspaceHeader({
   roleLabel,
   onLogout,
   onNotifications,
-  notificationCount = 0
+  notificationCount = 0,
+  extraActions
 }: {
   userName: string;
   roleLabel: string;
   onLogout: () => void;
   onNotifications?: () => void;
   notificationCount?: number;
+  extraActions?: ReactNode;
 }) {
   return <header className="workspaceHeader">
     <div className="workspaceGreeting">
@@ -158,6 +160,7 @@ export function WorkspaceHeader({
       <p>{roleLabel}</p>
     </div>
     <div className="workspaceActions">
+      {extraActions}
       <button type="button" className="iconGhost" aria-label="Уведомления" onClick={onNotifications}>
         <AppIcon name="notification" className="navIcon" />
         {notificationCount > 0 && <span className="notificationDot" />}

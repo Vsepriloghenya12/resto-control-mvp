@@ -59,7 +59,7 @@ import {
 
 type View = 'login' | 'register';
 type Tab = string;
-type WorkspaceModalKind = 'notifications' | 'support' | 'billing' | null;
+type WorkspaceModalKind = 'notifications' | 'support' | 'billing' | 'restaurant' | null;
 type MobileSheetKind = 'menu' | 'create' | 'profile' | null;
 type MobileWorkspaceConfig = {
   title: ReactNode;
@@ -543,6 +543,11 @@ export default function App() {
     setSession(data);
   }
 
+  function updateSession(data: any) {
+    if (data?.token) setToken(data.token);
+    setSession(data);
+  }
+
   if (loading) return <>
     <div className="splash">
       <img className="splashLogo" src={brandLogoSrc} alt="Resto Control" />
@@ -561,7 +566,7 @@ export default function App() {
     {user.is_super_admin
       ? <SuperAdmin user={user} onLogout={onLogout} />
       : ['owner', 'manager'].includes(user.role)
-        ? <RestaurantAdmin user={user} restaurant={session.restaurant} restaurants={session.restaurants || []} onRestaurantSwitch={switchRestaurant} onLogout={onLogout} />
+        ? <RestaurantAdmin user={user} restaurant={session.restaurant} restaurants={session.restaurants || []} onRestaurantSwitch={switchRestaurant} onRestaurantCreated={updateSession} onLogout={onLogout} />
         : <EmployeeApp user={user} restaurant={session.restaurant} onLogout={onLogout} />}
     <AppUpdateBanner update={availableUpdate} onDismiss={() => setAvailableUpdate(null)} />
   </div>;
@@ -854,6 +859,7 @@ function RestaurantWorkspace({
   setActive,
   onLogout,
   onRestaurantSwitch,
+  onRestaurantCreated,
   banner,
   onBillingPlanSelect,
   children
@@ -866,6 +872,7 @@ function RestaurantWorkspace({
   setActive: (next: string) => void;
   onLogout: () => void;
   onRestaurantSwitch?: (restaurantId: string) => void | Promise<void>;
+  onRestaurantCreated?: (session: any) => void;
   banner: (openBilling: () => void) => any;
   onBillingPlanSelect?: (planId: string) => void;
   children: any;
@@ -874,6 +881,9 @@ function RestaurantWorkspace({
   const [sheet, setSheet] = useState<MobileSheetKind>(null);
   const [supportUnread, setSupportUnread] = useState(0);
   const [notificationCount, setNotificationCount] = useState(0);
+  const [restaurantForm, setRestaurantForm] = useState({ name: '', city: restaurant?.city || '', phone: restaurant?.phone || '', email: restaurant?.email || '' });
+  const [restaurantMsg, setRestaurantMsg] = useState('');
+  const [restaurantBusy, setRestaurantBusy] = useState(false);
 
   async function loadSupportUnread() {
     if (!['owner', 'manager'].includes(user.role)) {
@@ -917,8 +927,30 @@ function RestaurantWorkspace({
     setModalKind('billing');
   }
 
+  function openRestaurantCreate() {
+    setRestaurantForm({ name: '', city: restaurant?.city || '', phone: restaurant?.phone || '', email: restaurant?.email || '' });
+    setRestaurantMsg('');
+    setModalKind('restaurant');
+  }
+
   function closeModal() {
     setModalKind(null);
+  }
+
+  async function submitRestaurantCreate(event: FormEvent) {
+    event.preventDefault();
+    setRestaurantBusy(true);
+    setRestaurantMsg('');
+    try {
+      const data = await api('/api/owner/restaurants', { method: 'POST', body: JSON.stringify(restaurantForm) });
+      onRestaurantCreated?.(data);
+      setRestaurantMsg('Ресторан добавлен');
+      closeModal();
+    } catch (error: any) {
+      setRestaurantMsg(error?.message || 'Не удалось добавить ресторан');
+    } finally {
+      setRestaurantBusy(false);
+    }
   }
 
   const modal: { title: string; text?: string; details?: ReactNode; actions: { label: string; kind?: string; onClick: () => void }[] } | null = modalKind === 'notifications'
@@ -957,6 +989,21 @@ function RestaurantWorkspace({
             ]
           }
         : null;
+  const restaurantCreateForm = <form className="form two compactAdminForm" onSubmit={submitRestaurantCreate}>
+    <Field label="Название ресторана" value={restaurantForm.name} onChange={(e: any) => setRestaurantForm({ ...restaurantForm, name: e.target.value })} />
+    <Field label="Город" value={restaurantForm.city} onChange={(e: any) => setRestaurantForm({ ...restaurantForm, city: e.target.value })} />
+    <Field label="Телефон" value={restaurantForm.phone} onChange={(e: any) => setRestaurantForm({ ...restaurantForm, phone: e.target.value })} />
+    <Field label="Эл. почта" value={restaurantForm.email} onChange={(e: any) => setRestaurantForm({ ...restaurantForm, email: e.target.value })} />
+    <div className="formActionsWide">
+      <Button type="button" kind="soft" onClick={closeModal}>Отмена</Button>
+      <Button type="submit" disabled={restaurantBusy}>{restaurantBusy ? 'Создаём...' : 'Добавить ресторан'}</Button>
+    </div>
+    {restaurantMsg && <div className={restaurantMsg.includes('добав') ? 'notice compactNotice formNoticeWide' : 'error compactNotice formNoticeWide'}>{restaurantMsg}</div>}
+  </form>;
+
+  const activeModal = modalKind === 'restaurant'
+    ? { title: 'Добавить ресторан', text: 'Новый ресторан получит отдельные сотрудники, чек-листы, базу знаний и данные. Вход владельца останется тем же.', details: restaurantCreateForm, actions: [] }
+    : modal;
 
   const managerMode = user.role === 'manager';
   const showMobileWorkspace = true;
@@ -1048,6 +1095,7 @@ function RestaurantWorkspace({
           onLogout={onLogout}
           onNotifications={openNotifications}
           notificationCount={notificationCount}
+          extraActions={user.role === 'owner' ? <Button type="button" kind="soft" icon="plus" onClick={openRestaurantCreate}>Добавить ресторан</Button> : null}
         />
         <div className="workspaceSubline">{restaurant?.name}</div>
         {showRestaurantTabs && <RestaurantSwitcher restaurants={ownerRestaurants} activeRestaurantId={restaurant?.id} onSelect={onRestaurantSwitch} />}
@@ -1061,7 +1109,7 @@ function RestaurantWorkspace({
         <div className="workspaceContent">{children}</div>
       </div>
     </section>
-    {modal && <WorkspaceInfoModal title={modal.title} text={modal.text} details={modal.details} actions={modal.actions} onClose={closeModal} />}
+    {activeModal && <WorkspaceInfoModal title={activeModal.title} text={activeModal.text} details={activeModal.details} actions={activeModal.actions} onClose={closeModal} />}
     {showMobileWorkspace && <>
       <BottomNavigation items={mobileNavItems} onCreate={() => setSheet('create')} />
       <BottomSheet open={sheet === 'menu'} title="Разделы кабинета" items={mobileMenuItems} onClose={() => setSheet(null)} />
@@ -1344,7 +1392,7 @@ function SuperAdmin({ user, onLogout }: any) {
   </BasicWorkspace>;
 }
 
-function RestaurantAdmin({ user, restaurant, restaurants = [], onRestaurantSwitch, onLogout }: any) {
+function RestaurantAdmin({ user, restaurant, restaurants = [], onRestaurantSwitch, onRestaurantCreated, onLogout }: any) {
   const [tab, setTab] = useState<Tab>(() => initialTabFromUrl('overview', ['overview', 'users', 'checklists', 'inventory', 'bookings', 'tasks', 'knowledge', 'integrations', 'billing']));
   const [preferredBillingPlan, setPreferredBillingPlan] = useState('');
   const isManager = user.role === 'manager';
@@ -1379,6 +1427,7 @@ function RestaurantAdmin({ user, restaurant, restaurants = [], onRestaurantSwitc
     active={tab}
     setActive={setTab}
     onRestaurantSwitch={onRestaurantSwitch}
+    onRestaurantCreated={onRestaurantCreated}
     onLogout={onLogout}
     onBillingPlanSelect={setPreferredBillingPlan}
     banner={(openBilling) => user.role === 'owner' ? <SubscriptionBanner restaurant={restaurant} openBilling={openBilling} /> : null}

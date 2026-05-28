@@ -389,7 +389,7 @@ function createUser(db, restaurant_id, data) {
     restaurant_id: restaurant_id || null,
     name: data.name,
     login: data.login,
-    password_hash: hashPassword(data.password),
+    password_hash: data.password_hash || hashPassword(data.password),
     access_password: data.role === 'owner' ? '' : String(data.access_password ?? data.password ?? ''),
     role: data.role,
     department: data.department || roleToDepartment(data.role),
@@ -475,7 +475,8 @@ function addKnowledge(db, restaurant_id, title, allowed_roles, docs) {
 export function createRestaurantWithDefaults(db, data) {
   const ownerLogin = String(data.login || '').trim();
   const ownerPassword = String(data.password || '');
-  if (!ownerLogin || !ownerPassword) {
+  const ownerPasswordHash = String(data.password_hash || '').trim();
+  if (!ownerLogin || (!ownerPassword && !ownerPasswordHash)) {
     throw new Error('Нужны логин и пароль владельца');
   }
 
@@ -484,6 +485,7 @@ export function createRestaurantWithDefaults(db, data) {
     name: data.owner_name || 'Владелец ресторана',
     login: ownerLogin,
     password: ownerPassword,
+    password_hash: ownerPasswordHash,
     role: 'owner'
   });
 

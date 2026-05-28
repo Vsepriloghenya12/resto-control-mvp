@@ -2269,6 +2269,31 @@ app.post('/api/auth/switch-restaurant', auth, (req, res) => {
   res.json(sessionPayload(targetUser));
 });
 
+app.post('/api/owner/restaurants', auth, ensureRestaurantActive, runAsync(async (req, res) => {
+  if (req.user.role !== 'owner' || req.user.is_super_admin) return res.status(403).json({ error: 'Добавлять рестораны может только владелец' });
+  const name = String(req.body?.name || '').trim();
+  const city = String(req.body?.city || req.restaurant?.city || '').trim();
+  const phone = String(req.body?.phone || req.restaurant?.phone || '').trim();
+  const email = String(req.body?.email || req.restaurant?.email || '').trim();
+  if (!name) return res.status(400).json({ error: 'Укажите название ресторана' });
+
+  const restaurant = createRestaurantWithDefaults(db, {
+    name,
+    city,
+    phone,
+    email,
+    owner_name: req.user.name,
+    login: req.user.login,
+    password_hash: req.user.password_hash,
+    subscription_status: req.restaurant?.subscription_status || 'trial',
+    trial_ends_at: req.restaurant?.trial_ends_at || addDays(process.env.TRIAL_DAYS || 14),
+    plan: req.restaurant?.plan || 'trial'
+  });
+  await persist();
+  const owner = db.users.find(user => user.restaurant_id === restaurant.id && user.login === req.user.login && user.role === 'owner');
+  res.status(201).json(sessionPayload(owner));
+}));
+
 // SUPER ADMIN
 app.get('/api/super/restaurants', auth, superOnly, (req, res) => {
   const rows = db.restaurants.map(r => {
