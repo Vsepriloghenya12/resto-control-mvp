@@ -1689,6 +1689,7 @@ function AdminOverview({ user, mode = 'owner' }: { user: any; mode?: 'owner' | '
   const [taskRange, setTaskRange] = useState({ from: today, to: today });
   const [updatingProblemId, setUpdatingProblemId] = useState('');
   const [overviewMsg, setOverviewMsg] = useState('');
+  const [overviewMsgKind, setOverviewMsgKind] = useState<'notice' | 'error'>('notice');
   const [taskForm, setTaskForm] = useState<any>({ title: '', description: '', target_type: 'all', target_role: 'waiter', target_user_id: '', due_at: '', require_photo: false });
   function loadOverview() {
     const query = new URLSearchParams({ task_from: taskRange.from, task_to: taskRange.to });
@@ -1700,12 +1701,15 @@ function AdminOverview({ user, mode = 'owner' }: { user: any; mode?: 'owner' | '
   async function updateOverviewProblemStatus(problem: any, status: string) {
     if (!problem?.id || status === problem.status) return;
     setOverviewMsg('');
+    setOverviewMsgKind('notice');
     setUpdatingProblemId(problem.id);
     try {
       await api(`/api/tech-requests/${problem.id}`, { method: 'PATCH', body: JSON.stringify({ status, manager_comment: problem.manager_comment || '' }) });
+      setOverviewMsgKind('notice');
       setOverviewMsg('Статус проблемы обновлён');
       await loadOverview();
     } catch (error: any) {
+      setOverviewMsgKind('error');
       setOverviewMsg(error.message || 'Не удалось обновить проблему');
     } finally {
       setUpdatingProblemId('');
@@ -1714,13 +1718,16 @@ function AdminOverview({ user, mode = 'owner' }: { user: any; mode?: 'owner' | '
   async function createOverviewTask(e: FormEvent) {
     e.preventDefault();
     setOverviewMsg('');
+    setOverviewMsgKind('notice');
     try {
       const result = await api('/api/tasks', { method: 'POST', body: JSON.stringify(taskForm) });
       setTaskForm((current: any) => ({ ...current, title: '', description: '', target_user_id: '', due_at: '', require_photo: false }));
+      setOverviewMsgKind('notice');
       setOverviewMsg(result?.offline ? 'Задача сохранена офлайн' : 'Задача создана');
       await loadOverview();
       setActivePanel('tasks');
     } catch (error: any) {
+      setOverviewMsgKind('error');
       setOverviewMsg(error.message || 'Не удалось создать задачу');
     }
   }
@@ -1763,7 +1770,7 @@ function AdminOverview({ user, mode = 'owner' }: { user: any; mode?: 'owner' | '
       <StatCard icon="inventory" title="Инвентаризации" value={statNumbers({ value: inventorySummary.ready, tone: 'done' }, { value: inventorySummary.not_ready, tone: 'todo' })} active={activePanel === 'inventory'} onClick={() => setActivePanel('inventory')} />
     </div>
 
-    {overviewMsg && <div className={overviewMsg.includes('обновл') ? 'notice' : 'error'}>{overviewMsg}</div>}
+    {overviewMsg && <div className={overviewMsgKind}>{overviewMsg}</div>}
     <AdminOverviewDetailPanel activePanel={activePanel} user={user} employees={employees} rows={employeeMetrics} shifts={openShiftsToday} taskRange={taskRange} onTaskRangeChange={setTaskRange} taskForm={taskForm} onTaskFormChange={setTaskForm} onTaskCreate={createOverviewTask} problems={problemSummary.details || []} updatingProblemId={updatingProblemId} onProblemStatusChange={updateOverviewProblemStatus} inventoryAssignments={data.inventory_assignments_today || []} />
   </>;
 }
