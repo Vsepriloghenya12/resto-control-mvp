@@ -273,11 +273,12 @@ function taskRecipientRolesForUser(user) {
   if (user.role === 'senior_bartender') return ['bartender'];
   if (user.role === 'senior_cook') return ['cook'];
   if (user.role === 'senior_waiter') return ['waiter', 'hostess'];
-  return STAFF_ROLES.filter(role => role !== 'manager' && !SENIOR_ROLES.includes(role));
+  if (user.is_super_admin || MANAGER_ROLES.includes(user.role)) return STAFF_ROLES;
+  return [];
 }
 
 function canAssignTaskToRole(user, role) {
-  if (user?.is_super_admin || MANAGER_ROLES.includes(user?.role)) return STAFF_ROLES.includes(role) && role !== 'manager';
+  if (user?.is_super_admin || MANAGER_ROLES.includes(user?.role)) return STAFF_ROLES.includes(role);
   return taskRecipientRolesForUser(user).includes(role);
 }
 
@@ -1355,11 +1356,16 @@ function sanitizeTtkDocumentForResponse(doc) {
     .join('\n');
   return { ...doc, title: normalizeTtkTitle(doc.title || ''), ingredients: cleanIngredients, content: cleanContent };
 }
-function makeAssignmentsForTask(task) {
+function taskAssigneesForTask(task) {
   const creator = db.users.find(user => user.id === task.created_by && user.restaurant_id === task.restaurant_id);
   const seniorRecipientRoles = SENIOR_ROLES.includes(creator?.role) ? taskRecipientRolesForUser(creator) : null;
-  const candidates = db.users.filter(u => u.restaurant_id === task.restaurant_id && u.active && STAFF_ROLES.includes(u.role));
-  const selected = candidates.filter(u => {
+  const candidates = db.users.filter(u => (
+    u.restaurant_id === task.restaurant_id
+    && u.active
+    && u.id !== task.created_by
+    && STAFF_ROLES.includes(u.role)
+  ));
+  return candidates.filter(u => {
     if (task.target_department && u.department !== task.target_department) return false;
     if (seniorRecipientRoles && !seniorRecipientRoles.includes(u.role)) return false;
     if (task.target_type === 'all') return true;
@@ -1367,6 +1373,10 @@ function makeAssignmentsForTask(task) {
     if (task.target_type === 'user') return u.id === task.target_user_id;
     return false;
   });
+}
+
+function makeAssignmentsForTask(task, assignees = taskAssigneesForTask(task)) {
+  const selected = Array.isArray(assignees) ? assignees : [];
   selected.forEach(u => {
     const exists = db.task_assignments.some(a => a.task_id === task.id && a.user_id === u.id);
     if (!exists) db.task_assignments.push({ id: uid('tasg'), restaurant_id: task.restaurant_id, task_id: task.id, user_id: u.id, done: false, comment: '', completed_at: null, photo_url: '' });
@@ -3340,26 +3350,29 @@ app.get('/api/tasks', auth, ensureRestaurantActive, (req, res) => {
 
 app.post('/api/tasks', auth, ensureRestaurantActive, operationalEditorOnly, runAsync(async (req, res) => {
   const { title, description, target_type, target_role, target_user_id, due_at, require_photo } = req.body;
-  if (!title || !target_type) return res.status(400).json({ error: 'Нужны название и получатель задачи' });
+  const cleanTitle = String(title || '').trim();
+  const cleanTargetType = String(target_type || '').trim();
+  if (!cleanTitle || !cleanTargetType) return res.status(400).json({ error: 'Нужны название и получатель задачи' });
+  if (!['all', 'role', 'user'].includes(cleanTargetType)) return res.status(400).json({ error: 'Некорректный получатель задачи' });
 
   let targetDepartment = null;
   if (SENIOR_ROLES.includes(req.user.role)) {
     targetDepartment = manageableDepartment(req.user);
     const recipientRoles = taskRecipientRolesForUser(req.user);
-    if (target_type === 'role' && !recipientRoles.includes(target_role)) {
+    if (cleanTargetType === 'role' && !recipientRoles.includes(target_role)) {
       return res.status(403).json({ error: 'Старший сотрудник может ставить задачи только сотрудникам своего подразделения' });
     }
-    if (target_type === 'user') {
+    if (cleanTargetType === 'user') {
       const targetUser = db.users.find(user => user.id === target_user_id && user.restaurant_id === req.user.restaurant_id && user.active);
       if (!targetUser || targetUser.department !== targetDepartment || !recipientRoles.includes(targetUser.role)) {
         return res.status(403).json({ error: 'Можно выбрать только сотрудника своего подразделения' });
       }
     }
-  } else if (target_type === 'role' && !canAssignTaskToRole(req.user, target_role)) {
+  } else if (cleanTargetType === 'role' && !canAssignTaskToRole(req.user, target_role)) {
     return res.status(403).json({ error: 'Нельзя назначить задачу этой роли' });
-  } else if (target_type === 'user') {
+  } else if (cleanTargetType === 'user') {
     const targetUser = db.users.find(user => user.id === target_user_id && user.restaurant_id === req.user.restaurant_id && user.active);
-    if (!targetUser || !canAssignTaskToRole(req.user, targetUser.role)) {
+    if (!targetUser || targetUser.id === req.user.id || !canAssignTaskToRole(req.user, targetUser.role)) {
       return res.status(400).json({ error: 'Выберите активного сотрудника для задачи' });
     }
   }
@@ -3367,11 +3380,11 @@ app.post('/api/tasks', auth, ensureRestaurantActive, operationalEditorOnly, runA
   const task = {
     id: uid('task'),
     restaurant_id: req.user.restaurant_id,
-    title: String(title || '').trim(),
+    title: cleanTitle,
     description: description || '',
-    target_type,
-    target_role: target_role || null,
-    target_user_id: target_user_id || null,
+    target_type: cleanTargetType,
+    target_role: cleanTargetType === 'role' ? target_role || null : null,
+    target_user_id: cleanTargetType === 'user' ? target_user_id || null : null,
     target_department: targetDepartment,
     due_at: due_at || null,
     require_photo: Boolean(require_photo),
@@ -3379,10 +3392,12 @@ app.post('/api/tasks', auth, ensureRestaurantActive, operationalEditorOnly, runA
     created_at: nowIso(),
     active: true
   };
+  const assignees = taskAssigneesForTask(task);
+  if (!assignees.length) return res.status(400).json({ error: 'Нет активных сотрудников для этой задачи' });
   db.tasks.push(task);
-  makeAssignmentsForTask(task);
-  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'task_created', title: `${req.user.name} создал задачу "${title}"`, entity_type: 'task', entity_id: task.id, metadata: { target_type, target_role, target_user_id, target_department: targetDepartment, require_photo: Boolean(require_photo) } });
-  notifyAssignees(task, { title: 'Новая задача', body: title, entity_type: 'task', entity_id: task.id });
+  makeAssignmentsForTask(task, assignees);
+  logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'task_created', title: `${req.user.name} создал задачу "${cleanTitle}"`, entity_type: 'task', entity_id: task.id, metadata: { target_type: cleanTargetType, target_role: task.target_role, target_user_id: task.target_user_id, target_department: targetDepartment, require_photo: Boolean(require_photo) } });
+  notifyAssignees(task, { title: 'Новая задача', body: cleanTitle, entity_type: 'task', entity_id: task.id });
   await persist();
   res.status(201).json(task);
 }));

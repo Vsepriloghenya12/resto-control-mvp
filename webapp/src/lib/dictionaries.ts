@@ -62,7 +62,8 @@ export function taskRecipientRolesFor(user: any) {
   if (user.role === 'senior_bartender') return ['bartender'];
   if (user.role === 'senior_cook') return ['cook'];
   if (user.role === 'senior_waiter') return ['waiter', 'hostess'];
-  return manageableRolesFor(user).filter((role) => role !== 'manager' && !seniorRoles.includes(role));
+  if (user.role === 'manager' || user.role === 'owner' || user.is_super_admin) return manageableRolesFor(user);
+  return [];
 }
 
 export const executableRoles = Object.entries(roles).filter(([key]) => key !== 'owner');
