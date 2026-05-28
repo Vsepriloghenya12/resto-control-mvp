@@ -527,6 +527,13 @@ export default function App() {
     setSession(null);
   }
 
+  async function switchRestaurant(restaurantId: string) {
+    if (!restaurantId || restaurantId === session?.restaurant?.id) return;
+    const data = await api('/api/auth/switch-restaurant', { method: 'POST', body: JSON.stringify({ restaurant_id: restaurantId }) });
+    setToken(data.token);
+    setSession(data);
+  }
+
   if (loading) return <>
     <div className="splash">
       <img className="splashLogo" src={brandLogoSrc} alt="Resto Control" />
@@ -545,7 +552,7 @@ export default function App() {
     {user.is_super_admin
       ? <SuperAdmin user={user} onLogout={onLogout} />
       : ['owner', 'manager'].includes(user.role)
-        ? <RestaurantAdmin user={user} restaurant={session.restaurant} onLogout={onLogout} />
+        ? <RestaurantAdmin user={user} restaurant={session.restaurant} restaurants={session.restaurants || []} onRestaurantSwitch={switchRestaurant} onLogout={onLogout} />
         : <EmployeeApp user={user} restaurant={session.restaurant} onLogout={onLogout} />}
     <AppUpdateBanner update={availableUpdate} onDismiss={() => setAvailableUpdate(null)} />
   </div>;
@@ -832,20 +839,24 @@ function BasicWorkspace({
 function RestaurantWorkspace({
   user,
   restaurant,
+  restaurants = [],
   tabs,
   active,
   setActive,
   onLogout,
+  onRestaurantSwitch,
   banner,
   onBillingPlanSelect,
   children
 }: {
   user: any;
   restaurant: any;
+  restaurants?: any[];
   tabs: NavTab[];
   active: string;
   setActive: (next: string) => void;
   onLogout: () => void;
+  onRestaurantSwitch?: (restaurantId: string) => void | Promise<void>;
   banner: (openBilling: () => void) => any;
   onBillingPlanSelect?: (planId: string) => void;
   children: any;
@@ -940,6 +951,8 @@ function RestaurantWorkspace({
 
   const managerMode = user.role === 'manager';
   const showMobileWorkspace = true;
+  const ownerRestaurants = user.role === 'owner' ? restaurants.filter(Boolean) : [];
+  const showRestaurantTabs = ownerRestaurants.length > 1;
 
   const mobileNavItems: MobileNavItem[] = [
     { id: 'overview', title: 'Обзор', icon: 'overview', active: active === 'overview', onClick: () => setActive('overview') },
@@ -1014,6 +1027,7 @@ function RestaurantWorkspace({
           onNotifications={() => setActive('tasks')}
           onAction={() => setSheet('profile')}
         />
+        {showRestaurantTabs && <RestaurantSwitcher restaurants={ownerRestaurants} activeRestaurantId={restaurant?.id} onSelect={onRestaurantSwitch} compact />}
       </div>}
 
       <div className="desktopWorkspaceChrome">
@@ -1025,6 +1039,7 @@ function RestaurantWorkspace({
           notificationCount={notificationCount}
         />
         <div className="workspaceSubline">{restaurant?.name}</div>
+        {showRestaurantTabs && <RestaurantSwitcher restaurants={ownerRestaurants} activeRestaurantId={restaurant?.id} onSelect={onRestaurantSwitch} />}
         <div className="mobileTabsWrap">
           <Nav tabs={tabs} active={active} setActive={setActive} />
         </div>
@@ -1043,6 +1058,25 @@ function RestaurantWorkspace({
       <BottomSheet open={sheet === 'profile'} title="Профиль и доступ" items={mobileProfileItems} onClose={() => setSheet(null)} />
     </>}
   </main>;
+}
+
+function RestaurantSwitcher({ restaurants, activeRestaurantId, onSelect, compact = false }: { restaurants: any[]; activeRestaurantId?: string; onSelect?: (restaurantId: string) => void | Promise<void>; compact?: boolean }) {
+  return <div className={cx('restaurantTabs', compact && 'compact')} role="tablist" aria-label="Рестораны владельца">
+    {restaurants.map((item) => {
+      const active = item.id === activeRestaurantId;
+      return <button
+        type="button"
+        role="tab"
+        aria-selected={active}
+        className={cx('restaurantTab', active && 'active')}
+        key={item.id}
+        onClick={() => !active && onSelect?.(item.id)}
+      >
+        <span>{item.name || 'Ресторан'}</span>
+        {!compact && <small>{item.city || item.owner_name || 'Отдельная база'}</small>}
+      </button>;
+    })}
+  </div>;
 }
 
 function SuperAdmin({ user, onLogout }: any) {
@@ -1299,7 +1333,7 @@ function SuperAdmin({ user, onLogout }: any) {
   </BasicWorkspace>;
 }
 
-function RestaurantAdmin({ user, restaurant, onLogout }: any) {
+function RestaurantAdmin({ user, restaurant, restaurants = [], onRestaurantSwitch, onLogout }: any) {
   const [tab, setTab] = useState<Tab>(() => initialTabFromUrl('overview', ['overview', 'users', 'checklists', 'inventory', 'bookings', 'tasks', 'knowledge', 'integrations', 'billing']));
   const [preferredBillingPlan, setPreferredBillingPlan] = useState('');
   const isManager = user.role === 'manager';
@@ -1329,9 +1363,11 @@ function RestaurantAdmin({ user, restaurant, onLogout }: any) {
   return <RestaurantWorkspace
     user={user}
     restaurant={restaurant}
+    restaurants={restaurants}
     tabs={tabs}
     active={tab}
     setActive={setTab}
+    onRestaurantSwitch={onRestaurantSwitch}
     onLogout={onLogout}
     onBillingPlanSelect={setPreferredBillingPlan}
     banner={(openBilling) => user.role === 'owner' ? <SubscriptionBanner restaurant={restaurant} openBilling={openBilling} /> : null}
@@ -3027,7 +3063,6 @@ function Inventory({ user, admin = false }: any) {
   const [employeeRuns, setEmployeeRuns] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [values, setValues] = useState<any>({});
-  const [valueComments, setValueComments] = useState<any>({});
   const [repeatingInventory, setRepeatingInventory] = useState<Record<string, boolean>>({});
   const [msg, setMsg] = useState('');
   const [productMsg, setProductMsg] = useState('');
@@ -3219,10 +3254,9 @@ function Inventory({ user, admin = false }: any) {
 
   async function submit(t: any) {
     const payload: any = {};
-    t.items.forEach((i: any) => { payload[i.product_id] = { qty: values[i.product_id] || '', comment: valueComments[i.product_id] || '' }; });
+    t.items.forEach((i: any) => { payload[i.product_id] = { qty: values[i.product_id] || '', comment: '' }; });
     const result = await api('/api/inventory/runs', { method: 'POST', body: JSON.stringify({ template_id: t.id, values: payload }) });
     setValues({});
-    setValueComments({});
     setRepeatingInventory((current) => ({ ...current, [t.id]: false }));
     setMsg(result?.offline ? 'Инвентаризация сохранена офлайн' : 'Инвентаризация сохранена');
     load().catch(() => undefined);
@@ -3318,7 +3352,6 @@ function Inventory({ user, admin = false }: any) {
                   />
                   {preview && <em>Итого: {preview}</em>}
                 </label>
-                <input className="inventoryPlainComment" value={valueComments[item.product_id] || ''} onChange={(e) => setValueComments({ ...valueComments, [item.product_id]: e.target.value })} placeholder="Комментарий" />
               </div>;
             })}
           </div>

@@ -23,7 +23,7 @@ create table if not exists users (
   id text primary key,
   restaurant_id text references restaurants(id) on delete cascade,
   name text not null,
-  login text not null unique,
+  login text not null,
   password_hash text not null,
   access_password text,
   role text not null,
@@ -32,6 +32,10 @@ create table if not exists users (
   is_super_admin boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+create unique index if not exists idx_users_restaurant_login
+  on users(restaurant_id, login)
+  where restaurant_id is not null;
 
 create table if not exists checklist_templates (
   id text primary key,

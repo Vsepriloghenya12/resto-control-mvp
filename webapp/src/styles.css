@@ -699,6 +699,66 @@ input[type='checkbox'] {
   font-size: 0.96rem;
 }
 
+.restaurantTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: -6px;
+}
+
+.restaurantTab {
+  display: grid;
+  gap: 2px;
+  min-height: 44px;
+  min-width: 128px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--card) 88%, transparent);
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.restaurantTab span {
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.restaurantTab small {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.restaurantTab.active {
+  border-color: color-mix(in oklch, var(--primary) 46%, var(--border));
+  background: color-mix(in oklch, var(--primary) 14%, var(--card));
+  color: var(--primary);
+}
+
+.restaurantTabs.compact {
+  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 0 var(--mobile-page-x, 14px) 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.restaurantTabs.compact::-webkit-scrollbar {
+  display: none;
+}
+
+.restaurantTabs.compact .restaurantTab {
+  min-width: max-content;
+  min-height: 38px;
+  padding: 7px 10px;
+}
+
 .workspaceActions {
   display: flex;
   align-items: center;
@@ -7722,23 +7782,6 @@ body {
   align-items: center;
   gap: 10px;
   width: 100%;
-}
-
-.inventoryPlainComment {
-  width: 100%;
-  border: 0;
-  border-top: 1px solid var(--border);
-  padding: 10px 0 0;
-  background: transparent;
-  color: var(--text);
-  font-size: 13px;
-  outline: 2px solid transparent;
-  outline-offset: 2px;
-}
-
-.inventoryPlainComment:focus-visible {
-  border-top-color: var(--primary);
-  outline-color: color-mix(in oklch, var(--primary) 72%, transparent);
 }
 
 .roleAccessPicker {

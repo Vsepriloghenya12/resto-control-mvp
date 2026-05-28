@@ -207,6 +207,51 @@ function sign(user) {
   return jwt.sign({ id: user.id, restaurant_id: user.restaurant_id, role: user.role, is_super_admin: user.is_super_admin }, JWT_SECRET, { expiresIn: '14d' });
 }
 
+function ownerAccountUsers(user) {
+  if (!user || user.role !== 'owner' || user.is_super_admin) return [];
+  return db.users.filter(candidate => (
+    candidate.active
+    && candidate.role === 'owner'
+    && !candidate.is_super_admin
+    && candidate.login === user.login
+    && candidate.password_hash === user.password_hash
+    && candidate.restaurant_id
+  ));
+}
+
+function ownerRestaurantsForUser(user) {
+  const ownerUsers = ownerAccountUsers(user);
+  return ownerUsers
+    .map(ownerUser => db.restaurants.find(restaurant => restaurant.id === ownerUser.restaurant_id))
+    .filter(Boolean)
+    .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ru'));
+}
+
+function sessionPayload(user) {
+  const restaurant = user.restaurant_id ? db.restaurants.find(r => r.id === user.restaurant_id) : null;
+  const restaurants = ownerRestaurantsForUser(user);
+  return {
+    token: sign(user),
+    user: publicUser(user),
+    restaurant,
+    restaurants,
+    restaurant_status: restaurantStatus(restaurant)
+  };
+}
+
+function ownerLoginConflict(login, password) {
+  const normalizedLogin = String(login || '').trim();
+  const passwordHash = hashPassword(String(password || ''));
+  const matches = db.users.filter(user => user.login === normalizedLogin && user.active);
+  if (!matches.length) return '';
+  const canReuseOwnerLogin = matches.every(user => (
+    user.role === 'owner'
+    && !user.is_super_admin
+    && user.password_hash === passwordHash
+  ));
+  return canReuseOwnerLogin ? '' : 'Логин уже занят';
+}
+
 function auth(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -2044,14 +2089,15 @@ app.post('/api/auth/login', (req, res) => {
   const { login, password } = req.body;
   const user = db.users.find(u => u.login === String(login || '').trim() && u.password_hash === hashPassword(String(password || '')) && u.active);
   if (!user) return res.status(401).json({ error: 'Неверный логин или пароль' });
-  const restaurant = user.restaurant_id ? db.restaurants.find(r => r.id === user.restaurant_id) : null;
-  res.json({ token: sign(user), user: publicUser(user), restaurant, restaurant_status: restaurantStatus(restaurant) });
+  res.json(sessionPayload(user));
 });
 
 app.post('/api/auth/register-restaurant', runAsync(async (req, res) => {
   const { restaurantName, ownerName, phone, email, city, login, password } = req.body;
   if (!restaurantName || !ownerName || !login || !password) return res.status(400).json({ error: 'Заполните ресторан, имя владельца, логин и пароль' });
-  if (db.users.some(u => u.login === login)) return res.status(409).json({ error: 'Такой логин уже занят' });
+  const ownerLogin = String(login || '').trim();
+  const conflict = ownerLoginConflict(login, password);
+  if (conflict) return res.status(409).json({ error: conflict });
   const restaurant = createRestaurantWithDefaults(db, {
     name: restaurantName,
     owner_name: ownerName,
@@ -2064,12 +2110,20 @@ app.post('/api/auth/register-restaurant', runAsync(async (req, res) => {
     trial_ends_at: addDays(process.env.TRIAL_DAYS || 14)
   });
   await persist();
-  const user = db.users.find(u => u.restaurant_id === restaurant.id && u.login === login);
-  res.status(201).json({ token: sign(user), user: publicUser(user), restaurant, trial_days: Number(process.env.TRIAL_DAYS || 14) });
+  const user = db.users.find(u => u.restaurant_id === restaurant.id && u.login === ownerLogin);
+  res.status(201).json({ ...sessionPayload(user), trial_days: Number(process.env.TRIAL_DAYS || 14) });
 }));
 
 app.get('/api/me', auth, (req, res) => {
-  res.json({ user: publicUser(req.user), restaurant: req.restaurant, restaurant_status: restaurantStatus(req.restaurant) });
+  res.json(sessionPayload(req.user));
+});
+
+app.post('/api/auth/switch-restaurant', auth, (req, res) => {
+  if (req.user.role !== 'owner' || req.user.is_super_admin) return res.status(403).json({ error: 'Переключение доступно владельцу ресторанов' });
+  const restaurantId = String(req.body?.restaurant_id || '').trim();
+  const targetUser = ownerAccountUsers(req.user).find(user => user.restaurant_id === restaurantId);
+  if (!targetUser) return res.status(404).json({ error: 'Ресторан не найден для этого владельца' });
+  res.json(sessionPayload(targetUser));
 });
 
 // SUPER ADMIN
@@ -2096,7 +2150,8 @@ app.get('/api/super/restaurants', auth, superOnly, (req, res) => {
 app.post('/api/super/restaurants', auth, superOnly, runAsync(async (req, res) => {
   const { name, owner_name, city, phone, email, login, password } = req.body;
   if (!name || !owner_name || !login || !password) return res.status(400).json({ error: 'Заполните ресторан, владельца, логин и пароль' });
-  if (db.users.some(u => u.login === login)) return res.status(409).json({ error: 'Логин уже занят' });
+  const conflict = ownerLoginConflict(login, password);
+  if (conflict) return res.status(409).json({ error: conflict });
   const restaurant = createRestaurantWithDefaults(db, { name, owner_name, city, phone, email, login, password });
   await persist();
   res.status(201).json(restaurant);

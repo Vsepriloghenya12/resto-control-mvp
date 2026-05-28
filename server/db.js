@@ -115,6 +115,8 @@ function hasMeaningfulData(db) {
 async function ensurePostgresSchema() {
   const sql = fs.readFileSync(SCHEMA_FILE, 'utf8');
   await getPool().query(sql);
+  await getPool().query('alter table if exists users drop constraint if exists users_login_key');
+  await getPool().query(`create unique index if not exists idx_users_restaurant_login on users(restaurant_id, login) where restaurant_id is not null`);
   await getPool().query(`alter table if exists users add column if not exists access_password text`);
   await getPool().query('alter table if exists knowledge_documents add column if not exists sort_order int not null default 0');
   await getPool().query(`alter table if exists products add column if not exists supplier text not null default 'Без поставщика'`);
