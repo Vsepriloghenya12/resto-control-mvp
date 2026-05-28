@@ -316,6 +316,18 @@ create table if not exists notifications (
   created_at timestamptz not null default now()
 );
 
+create table if not exists push_subscriptions (
+  id text primary key,
+  restaurant_id text not null references restaurants(id) on delete cascade,
+  user_id text not null references users(id) on delete cascade,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  user_agent text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists activity_events (
   id text primary key,
   restaurant_id text not null references restaurants(id) on delete cascade,

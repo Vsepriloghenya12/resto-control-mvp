@@ -28,6 +28,7 @@ import { Tasks } from './modules/tasks/Tasks';
 import { cx } from './lib/cx';
 import { APP_UPDATE_AVAILABLE_EVENT, applyAppUpdateNow, type AppVersionInfo } from './app-updates';
 import { initialTabFromUrl, requestPwaInstall } from './pwa-install';
+import { enablePushNotifications } from './push-notifications';
 import {
   checklistRunStatuses,
   checklistRoles,
@@ -495,6 +496,14 @@ function AppUpdateBanner({ update, onDismiss }: { update: AppVersionInfo | null;
 async function runPwaInstall(mode: 'app' | 'bookings') {
   const result = await requestPwaInstall(mode);
   if (result.message) window.alert(result.message);
+}
+
+async function runPushNotificationsEnable() {
+  try {
+    window.alert(await enablePushNotifications());
+  } catch (error: any) {
+    window.alert(error?.message || 'Не удалось включить уведомления');
+  }
 }
 
 export default function App() {
@@ -986,6 +995,7 @@ function RestaurantWorkspace({
       { id: 'support', title: 'База знаний', subtitle: 'Инструкции и документы', icon: 'knowledge', onClick: () => setActive('knowledge') },
       { id: 'billing', title: 'Оплата и документы', subtitle: 'Счета, реквизиты, акты', icon: 'trial', onClick: () => setActive('billing') },
       { id: 'install-app', title: 'Установить на телефон', subtitle: 'Добавить приложение на главный экран', icon: 'phone', onClick: () => void runPwaInstall('app') },
+      { id: 'push', title: 'Уведомления телефона', subtitle: 'Задачи и комментарии с текстом', icon: 'notification', onClick: () => void runPushNotificationsEnable() },
       { id: 'install-bookings', title: 'Установить план зала', subtitle: 'Ярлык сразу откроет брони и столы', icon: 'bookings', onClick: () => {
         setActive('bookings');
         void runPwaInstall('bookings');
@@ -996,6 +1006,7 @@ function RestaurantWorkspace({
       { id: 'support', title: 'База знаний', subtitle: 'Инструкции и документы', icon: 'knowledge', onClick: () => setActive('knowledge') },
       { id: 'billing', title: 'Оплата и документы', subtitle: 'Счета, реквизиты, акты', icon: 'trial', onClick: () => setActive('billing') },
       { id: 'install-app', title: 'Установить на телефон', subtitle: 'Добавить приложение на главный экран', icon: 'phone', onClick: () => void runPwaInstall('app') },
+      { id: 'push', title: 'Уведомления телефона', subtitle: 'Задачи и комментарии с текстом', icon: 'notification', onClick: () => void runPushNotificationsEnable() },
       { id: 'install-bookings', title: 'Установить план зала', subtitle: 'Ярлык сразу откроет брони и столы', icon: 'bookings', onClick: () => {
         setActive('bookings');
         void runPwaInstall('bookings');
@@ -2369,10 +2380,7 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     { id: 'profile', title: `${roles[user.role]} · ${restaurant?.name}`, subtitle: 'Ваш рабочий кабинет', icon: 'user', onClick: () => setTab('today') },
     { id: 'knowledge', title: 'База знаний', subtitle: 'Инструкции и сервис-бук', icon: 'knowledge', onClick: () => setTab('knowledge') },
     { id: 'install-app', title: 'Установить на телефон', subtitle: 'Добавить приложение на главный экран', icon: 'phone', onClick: () => void runPwaInstall('app') },
-    { id: 'install-bookings', title: 'Установить план зала', subtitle: 'Ярлык сразу откроет брони и столы', icon: 'bookings', onClick: () => {
-      setTab('bookings');
-      void runPwaInstall('bookings');
-    } },
+    { id: 'push', title: 'Уведомления телефона', subtitle: 'Задачи и комментарии с текстом', icon: 'notification', onClick: () => void runPushNotificationsEnable() },
     { id: 'logout', title: 'Выйти из аккаунта', subtitle: 'Завершить сессию', icon: 'logout', onClick: onLogout }
   ];
 

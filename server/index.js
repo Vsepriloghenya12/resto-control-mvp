@@ -28,6 +28,9 @@ import {
 const app = express();
 const PORT = Number(process.env.PORT || 8090);
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:support@resto-control.local';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1786,6 +1789,7 @@ function notifyUsers(restaurant_id, users, payload) {
     read_at: null,
     created_at: nowIso()
   }));
+  sendPushToUsers(restaurant_id, uniqueUsers, payload);
 }
 
 function notifyManagers(restaurant_id, payload) {
@@ -1794,6 +1798,89 @@ function notifyManagers(restaurant_id, payload) {
 
 function notifyAssignees(task, payload) {
   notifyUsers(task.restaurant_id, db.task_assignments.filter(a => a.task_id === task.id).map(a => db.users.find(u => u.id === a.user_id && u.active)), payload);
+}
+
+function webPushEnabled() {
+  return Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
+}
+
+let webPushLoader = null;
+
+async function loadWebPush() {
+  if (!webPushEnabled()) return null;
+  if (!webPushLoader) {
+    webPushLoader = import('web-push')
+      .then(module => {
+        const webPush = module.default || module;
+        webPush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+        return webPush;
+      })
+      .catch(error => {
+        console.warn(`Web Push disabled: ${error.message}`);
+        return null;
+      });
+  }
+  return webPushLoader;
+}
+
+function notificationTargetUrl(payload = {}) {
+  const type = payload.entity_type || '';
+  if (type === 'task' || type === 'tech_request') return '/?tab=tasks';
+  if (type === 'booking') return '/?tab=bookings';
+  if (type === 'checklist_run') return '/?tab=checklists';
+  if (type === 'inventory_assignment' || type === 'inventory_run') return '/?tab=inventory';
+  if (type === 'billing_invoice') return '/?tab=billing';
+  return '/?tab=overview';
+}
+
+function makePushPayload(payload = {}) {
+  return {
+    title: payload.title || 'Resto Control',
+    body: payload.body || '',
+    icon: '/resto-control-logo.png',
+    badge: '/icon.svg',
+    tag: [payload.entity_type, payload.entity_id].filter(Boolean).join(':') || 'resto-control',
+    data: {
+      entity_type: payload.entity_type || '',
+      entity_id: payload.entity_id || '',
+      url: notificationTargetUrl(payload)
+    }
+  };
+}
+
+function removePushSubscription(endpoint) {
+  const rows = collection('push_subscriptions');
+  const index = rows.findIndex(row => row.endpoint === endpoint);
+  if (index >= 0) rows.splice(index, 1);
+  return index >= 0;
+}
+
+function sendPushToUsers(restaurant_id, users, payload) {
+  if (!webPushEnabled() || !users.length) return;
+  const userIds = new Set(users.map(user => user.id));
+  const subscriptions = collection('push_subscriptions')
+    .filter(row => row.restaurant_id === restaurant_id && userIds.has(row.user_id));
+  if (!subscriptions.length) return;
+
+  void loadWebPush().then(async webPush => {
+    if (!webPush) return;
+    let removed = false;
+    await Promise.allSettled(subscriptions.map(async row => {
+      try {
+        await webPush.sendNotification({
+          endpoint: row.endpoint,
+          keys: { p256dh: row.p256dh, auth: row.auth }
+        }, JSON.stringify(makePushPayload(payload)));
+      } catch (error) {
+        if (error?.statusCode === 404 || error?.statusCode === 410) {
+          removed = removePushSubscription(row.endpoint) || removed;
+          return;
+        }
+        console.warn(`Web Push send failed: ${error.message}`);
+      }
+    }));
+    if (removed) await persist().catch(error => console.warn(`Web Push cleanup failed: ${error.message}`));
+  });
 }
 
 function currentOpenShiftFor(user) {
@@ -1853,6 +1940,50 @@ app.post('/api/notifications/read-all', auth, ensureRestaurantActive, runAsync(a
   res.json({ ok: true });
 }));
 
+app.get('/api/push/public-key', auth, ensureRestaurantActive, (req, res) => {
+  res.json({ enabled: webPushEnabled(), public_key: VAPID_PUBLIC_KEY });
+});
+
+app.post('/api/push/subscriptions', auth, ensureRestaurantActive, runAsync(async (req, res) => {
+  const endpoint = String(req.body?.endpoint || '').trim();
+  const p256dh = String(req.body?.keys?.p256dh || '').trim();
+  const authKey = String(req.body?.keys?.auth || '').trim();
+  if (!endpoint || !p256dh || !authKey) return res.status(400).json({ error: 'Некорректная push-подписка' });
+
+  const rows = collection('push_subscriptions');
+  const existing = rows.find(row => row.endpoint === endpoint);
+  const now = nowIso();
+  const payload = {
+    restaurant_id: req.user.restaurant_id,
+    user_id: req.user.id,
+    endpoint,
+    p256dh,
+    auth: authKey,
+    user_agent: String(req.headers['user-agent'] || '').slice(0, 500),
+    updated_at: now
+  };
+
+  if (existing) {
+    Object.assign(existing, payload);
+  } else {
+    rows.push({ id: uid('push'), ...payload, created_at: now });
+  }
+
+  await persist();
+  res.status(201).json({ ok: true });
+}));
+
+app.delete('/api/push/subscriptions', auth, ensureRestaurantActive, runAsync(async (req, res) => {
+  const endpoint = String(req.body?.endpoint || '').trim();
+  if (endpoint) {
+    const rows = collection('push_subscriptions');
+    const index = rows.findIndex(row => row.endpoint === endpoint && row.restaurant_id === req.user.restaurant_id && row.user_id === req.user.id);
+    if (index >= 0) rows.splice(index, 1);
+    await persist();
+  }
+  res.json({ ok: true });
+}));
+
 app.get('/api/activity', auth, ensureRestaurantActive, (req, res) => {
   const isManager = MANAGER_ROLES.includes(req.user.role);
   const limit = Math.min(100, Math.max(1, Number(req.query.limit || 40)));
@@ -1904,7 +2035,19 @@ app.post('/api/comments', auth, ensureRestaurantActive, runAsync(async (req, res
   const comment = { id: uid('cmt'), restaurant_id: req.user.restaurant_id, entity_type: entityType, entity_id: entityId, user_id: req.user.id, body, created_at: nowIso() };
   collection('comments').push(comment);
   logActivity({ restaurant_id: req.user.restaurant_id, actor_id: req.user.id, type: 'comment_created', title: `${req.user.name} оставил комментарий`, entity_type: entityType, entity_id: entityId, metadata: { body } });
-  notifyManagers(req.user.restaurant_id, { title: 'Новый комментарий', body: `${req.user.name}: ${body.slice(0,120)}`, entity_type: entityType, entity_id: entityId });
+  if (entityType === 'task') {
+    const task = db.tasks.find(item => item.id === entityId && item.restaurant_id === req.user.restaurant_id);
+    const recipients = [
+      db.users.find(user => user.id === task?.created_by && user.active),
+      ...collection('task_assignments')
+        .filter(item => item.task_id === entityId)
+        .map(item => db.users.find(user => user.id === item.user_id && user.active)),
+      ...db.users.filter(user => user.restaurant_id === req.user.restaurant_id && user.active && MANAGER_ROLES.includes(user.role))
+    ].filter(user => user && user.id !== req.user.id);
+    notifyUsers(req.user.restaurant_id, recipients, { title: 'Комментарий к задаче', body: `${task?.title || 'Задача'} · ${req.user.name}: ${body.slice(0,90)}`, entity_type: entityType, entity_id: entityId });
+  } else {
+    notifyManagers(req.user.restaurant_id, { title: 'Новый комментарий', body: `${req.user.name}: ${body.slice(0,120)}`, entity_type: entityType, entity_id: entityId });
+  }
   await persist();
   res.status(201).json({ ...comment, user: publicUser(req.user) });
 }));

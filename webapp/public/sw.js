@@ -24,6 +24,41 @@ self.addEventListener('message', (event) => {
   }
 });
 
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = { title: 'Resto Control', body: event.data ? event.data.text() : '' };
+  }
+
+  const title = payload.title || 'Resto Control';
+  event.waitUntil(self.registration.showNotification(title, {
+    body: payload.body || '',
+    icon: payload.icon || '/resto-control-logo.png',
+    badge: payload.badge || '/icon.svg',
+    tag: payload.tag || 'resto-control',
+    data: payload.data || { url: '/' }
+  }));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = new URL(event.notification.data?.url || '/', self.location.origin).href;
+
+  event.waitUntil((async () => {
+    const windows = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of windows) {
+      const clientUrl = new URL(client.url);
+      if (clientUrl.origin !== self.location.origin) continue;
+      await client.focus();
+      if ('navigate' in client) return client.navigate(targetUrl);
+      return undefined;
+    }
+    return clients.openWindow(targetUrl);
+  })());
+});
+
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (request.method !== 'GET') return;

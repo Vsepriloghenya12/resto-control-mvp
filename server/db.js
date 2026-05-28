@@ -43,6 +43,7 @@ const SNAPSHOT_TABLES = [
   { name: 'knowledge_views', columns: ['id', 'restaurant_id', 'document_id', 'user_id', 'viewed_at'] },
   { name: 'shifts', columns: ['id', 'restaurant_id', 'user_id', 'role', 'department', 'location', 'status', 'opened_at', 'closed_at', 'comment'] },
   { name: 'notifications', columns: ['id', 'restaurant_id', 'user_id', 'title', 'body', 'entity_type', 'entity_id', 'read_at', 'created_at'] },
+  { name: 'push_subscriptions', columns: ['id', 'restaurant_id', 'user_id', 'endpoint', 'p256dh', 'auth', 'user_agent', 'created_at', 'updated_at'] },
   { name: 'activity_events', columns: ['id', 'restaurant_id', 'actor_id', 'type', 'title', 'entity_type', 'entity_id', 'metadata', 'created_at'], jsonColumns: ['metadata'] },
   { name: 'comments', columns: ['id', 'restaurant_id', 'entity_type', 'entity_id', 'user_id', 'body', 'created_at'] },
   { name: 'support_tickets', columns: ['id', 'restaurant_id', 'created_by', 'subject', 'status', 'client_read_at', 'platform_read_at', 'created_at', 'updated_at', 'closed_at'] },
@@ -138,6 +139,17 @@ async function ensurePostgresSchema() {
   await getPool().query(`alter table if exists billing_invoices add column if not exists receipt_mime text`);
   await getPool().query(`alter table if exists billing_invoices add column if not exists receipt_uploaded_at timestamptz`);
   await getPool().query(`alter table if exists inventory_runs add column if not exists assignment_id text`);
+  await getPool().query(`create table if not exists push_subscriptions (
+    id text primary key,
+    restaurant_id text not null references restaurants(id) on delete cascade,
+    user_id text not null references users(id) on delete cascade,
+    endpoint text not null unique,
+    p256dh text not null,
+    auth text not null,
+    user_agent text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+  )`);
   await getPool().query(`create table if not exists upload_files (
     id text primary key,
     restaurant_id text not null references restaurants(id) on delete cascade,
@@ -251,6 +263,7 @@ function emptyDb() {
     knowledge_views: [],
     shifts: [],
     notifications: [],
+    push_subscriptions: [],
     activity_events: [],
     comments: [],
     support_tickets: [],
