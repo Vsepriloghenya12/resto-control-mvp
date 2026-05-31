@@ -117,6 +117,47 @@ async function ensurePostgresSchema() {
   const sql = fs.readFileSync(SCHEMA_FILE, 'utf8');
   await getPool().query(sql);
   await getPool().query('alter table if exists users drop constraint if exists users_login_key');
+  await getPool().query(`
+    do $$
+    declare item record;
+    begin
+      for item in
+        select conname
+        from pg_constraint c
+        join pg_class t on t.oid = c.conrelid
+        join pg_namespace n on n.oid = t.relnamespace
+        where n.nspname = current_schema()
+          and t.relname = 'users'
+          and c.contype = 'u'
+          and (
+            select array_agg(a.attname order by cols.ord)
+            from unnest(c.conkey) with ordinality as cols(attnum, ord)
+            join pg_attribute a on a.attrelid = t.oid and a.attnum = cols.attnum
+          ) = array['login']
+      loop
+        execute format('alter table users drop constraint %I', item.conname);
+      end loop;
+
+      for item in
+        select quote_ident(ns.nspname) || '.' || quote_ident(idx.relname) as index_name
+        from pg_index i
+        join pg_class tbl on tbl.oid = i.indrelid
+        join pg_class idx on idx.oid = i.indexrelid
+        join pg_namespace ns on ns.oid = idx.relnamespace
+        where tbl.relname = 'users'
+          and ns.nspname = current_schema()
+          and i.indisunique
+          and not i.indisprimary
+          and (
+            select array_agg(a.attname order by cols.ord)
+            from unnest(i.indkey) with ordinality as cols(attnum, ord)
+            join pg_attribute a on a.attrelid = tbl.oid and a.attnum = cols.attnum
+          ) = array['login']
+      loop
+        execute format('drop index if exists %s', item.index_name);
+      end loop;
+    end $$;
+  `);
   await getPool().query(`create unique index if not exists idx_users_restaurant_login on users(restaurant_id, login) where restaurant_id is not null`);
   await getPool().query(`alter table if exists users add column if not exists access_password text`);
   await getPool().query('alter table if exists knowledge_documents add column if not exists sort_order int not null default 0');

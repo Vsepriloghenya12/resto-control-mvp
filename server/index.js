@@ -2277,21 +2277,27 @@ app.post('/api/owner/restaurants', auth, ensureRestaurantActive, runAsync(async 
   const email = String(req.body?.email || req.restaurant?.email || '').trim();
   if (!name) return res.status(400).json({ error: 'Укажите название ресторана' });
 
-  const restaurant = createRestaurantWithDefaults(db, {
-    name,
-    city,
-    phone,
-    email,
-    owner_name: req.user.name,
-    login: req.user.login,
-    password_hash: req.user.password_hash,
-    subscription_status: req.restaurant?.subscription_status || 'trial',
-    trial_ends_at: req.restaurant?.trial_ends_at || addDays(process.env.TRIAL_DAYS || 14),
-    plan: req.restaurant?.plan || 'trial'
-  });
-  await persist();
-  const owner = db.users.find(user => user.restaurant_id === restaurant.id && user.login === req.user.login && user.role === 'owner');
-  res.status(201).json(sessionPayload(owner));
+  const before = JSON.parse(JSON.stringify(db));
+  try {
+    const restaurant = createRestaurantWithDefaults(db, {
+      name,
+      city,
+      phone,
+      email,
+      owner_name: req.user.name,
+      login: req.user.login,
+      password_hash: req.user.password_hash,
+      subscription_status: req.restaurant?.subscription_status || 'trial',
+      trial_ends_at: req.restaurant?.trial_ends_at || addDays(process.env.TRIAL_DAYS || 14),
+      plan: req.restaurant?.plan || 'trial'
+    });
+    await persist();
+    const owner = db.users.find(user => user.restaurant_id === restaurant.id && user.login === req.user.login && user.role === 'owner');
+    res.status(201).json(sessionPayload(owner));
+  } catch (error) {
+    db = before;
+    throw error;
+  }
 }));
 
 // SUPER ADMIN
