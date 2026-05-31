@@ -1448,6 +1448,70 @@ function collection(name) {
   return db[name];
 }
 
+const RESTAURANT_SCOPED_TABLES = [
+  'users',
+  'checklist_templates',
+  'checklist_items',
+  'checklist_runs',
+  'checklist_answers',
+  'products',
+  'product_requests',
+  'request_items',
+  'inventory_templates',
+  'inventory_template_items',
+  'inventory_assignments',
+  'inventory_runs',
+  'inventory_values',
+  'floor_tables',
+  'table_reservations',
+  'tasks',
+  'task_assignments',
+  'tech_requests',
+  'knowledge_categories',
+  'knowledge_documents',
+  'knowledge_acknowledgements',
+  'knowledge_views',
+  'shifts',
+  'notifications',
+  'push_subscriptions',
+  'activity_events',
+  'comments',
+  'support_tickets',
+  'support_messages',
+  'integrations',
+  'external_mappings',
+  'integration_events',
+  'billing_profiles',
+  'billing_invoices',
+  'payments',
+  'closing_documents',
+  'upload_files'
+];
+
+function removeRestaurantUploadFiles(restaurantId) {
+  const uploadsRoot = path.resolve(uploadsDir);
+  const files = collection('upload_files').filter(file => file.restaurant_id === restaurantId && String(file.path || '').startsWith('/uploads/'));
+  files.forEach(file => {
+    const relative = String(file.path).replace(/^\/uploads\/?/, '');
+    const absolute = path.resolve(uploadsRoot, relative);
+    if (!absolute.startsWith(uploadsRoot)) return;
+    try { fs.rmSync(absolute, { force: true }); } catch {}
+  });
+
+  ['checklists', 'tasks', 'knowledge', 'billing'].forEach(folder => {
+    const absolute = path.resolve(uploadsRoot, folder, restaurantId);
+    if (!absolute.startsWith(uploadsRoot)) return;
+    try { fs.rmSync(absolute, { recursive: true, force: true }); } catch {}
+  });
+}
+
+function deleteRestaurantCascade(restaurantId) {
+  db.restaurants = db.restaurants.filter(restaurant => restaurant.id !== restaurantId);
+  RESTAURANT_SCOPED_TABLES.forEach(table => {
+    db[table] = collection(table).filter(row => row.restaurant_id !== restaurantId);
+  });
+}
+
 function supportTicketDetails(ticket) {
   const messages = collection('support_messages')
     .filter(message => message.ticket_id === ticket.id)
@@ -2349,6 +2413,22 @@ app.post('/api/super/restaurants', auth, superOnly, runAsync(async (req, res) =>
   const restaurant = createRestaurantWithDefaults(db, { name, owner_name, city, phone, email, login, password });
   await persist();
   res.status(201).json(restaurant);
+}));
+
+app.delete('/api/super/restaurants/:id', auth, superOnly, runAsync(async (req, res) => {
+  const restaurant = db.restaurants.find(r => r.id === req.params.id);
+  if (!restaurant) return res.status(404).json({ error: 'Ресторан не найден' });
+  const before = JSON.parse(JSON.stringify(db));
+  try {
+    deleteRestaurantCascade(restaurant.id);
+    await persist();
+    removeRestaurantUploadFiles(restaurant.id);
+    res.json({ ok: true, deleted_id: restaurant.id });
+  } catch (error) {
+    db = before;
+    console.error(error);
+    res.status(400).json({ error: `Не удалось удалить ресторан: ${error?.message || 'ошибка сервера'}` });
+  }
 }));
 
 app.patch('/api/super/restaurants/:id/subscription', auth, superOnly, runAsync(async (req, res) => {

@@ -1188,6 +1188,20 @@ function SuperAdmin({ user, onLogout }: any) {
     load();
   }
 
+  async function deleteRestaurant(restaurant: any) {
+    const name = restaurant?.name || 'ресторан';
+    if (!window.confirm(`Удалить ресторан "${name}" и все его данные? Это действие нельзя отменить.`)) return;
+    setMsg('');
+    try {
+      await api(`/api/super/restaurants/${restaurant.id}`, { method: 'DELETE' });
+      setMsg('Ресторан удалён');
+      await load();
+      await loadBilling();
+    } catch (error: any) {
+      setMsg(error.message || 'Не удалось удалить ресторан');
+    }
+  }
+
   async function markPaid(id: string) {
     await api(`/api/super/billing/invoices/${id}/mark-paid`, { method: 'POST', body: JSON.stringify({}) });
     load();
@@ -1281,11 +1295,13 @@ function SuperAdmin({ user, onLogout }: any) {
               <div className="actions">
                 <Button type="button" kind="soft" onClick={() => extend(r.id, 30)}>+30 дней</Button>
                 <Button type="button" kind="danger" onClick={() => block(r.id)}>Блок</Button>
+                <Button type="button" kind="danger" onClick={() => deleteRestaurant(r)}>Удалить ресторан</Button>
               </div>
             </div>
           </details>;
         }) : <Empty text="Ресторанов пока нет" />}
       </div>
+      {msg && <div className={msg.includes('удал') || msg.includes('создан') ? 'notice compactNotice' : 'error compactNotice'}>{msg}</div>}
     </Card>}
     {tab === 'payments' && <div className="contentStack">
       <Card title="Выставить счёт ресторану">
