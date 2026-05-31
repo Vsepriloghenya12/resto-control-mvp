@@ -259,10 +259,15 @@ async function savePostgresSnapshot(db) {
         return `(${placeholders.join(', ')})`;
       });
 
-      await client.query(
-        `insert into ${table.name} (${columnList}) values ${tuples.join(', ')}`,
-        values
-      );
+      try {
+        await client.query(
+          `insert into ${table.name} (${columnList}) values ${tuples.join(', ')}`,
+          values
+        );
+      } catch (error) {
+        error.message = `Ошибка сохранения таблицы ${table.name}: ${error.message}`;
+        throw error;
+      }
     }
 
     await client.query('commit');

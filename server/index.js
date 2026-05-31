@@ -260,6 +260,13 @@ function registrationLoginConflict(login) {
   return db.users.some(user => user.login === normalizedLogin && user.active) ? 'Логин уже занят' : '';
 }
 
+function restaurantCreateErrorMessage(error) {
+  if (error?.code === '23505') return 'Логин уже занят';
+  if (error?.code === '23503') return `Не удалось сохранить ресторан: нарушена связь данных (${error.constraint || 'foreign key'})`;
+  if (error?.code === '42P01' || error?.code === '42703') return `База данных не обновлена: ${error.message}`;
+  return `Не удалось сохранить ресторан: ${error?.message || 'ошибка сервера'}`;
+}
+
 function auth(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -2264,8 +2271,8 @@ app.post('/api/auth/register-restaurant', runAsync(async (req, res) => {
     res.status(201).json({ ...sessionPayload(user), trial_days: Number(process.env.TRIAL_DAYS || 14) });
   } catch (error) {
     db = before;
-    if (error?.code === '23505') return res.status(409).json({ error: 'Логин уже занят' });
-    throw error;
+    console.error(error);
+    return res.status(error?.code === '23505' ? 409 : 400).json({ error: restaurantCreateErrorMessage(error) });
   }
 }));
 
@@ -2308,7 +2315,8 @@ app.post('/api/owner/restaurants', auth, ensureRestaurantActive, runAsync(async 
     res.status(201).json(sessionPayload(owner));
   } catch (error) {
     db = before;
-    throw error;
+    console.error(error);
+    return res.status(error?.code === '23505' ? 409 : 400).json({ error: restaurantCreateErrorMessage(error) });
   }
 }));
 
