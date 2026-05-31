@@ -138,16 +138,46 @@ function inventoryAssignmentDetails(assignment) {
     .filter(run => run.assignment_id === assignment.id || isoDateKey(run.created_at) === assignment.due_date)
     .filter(run => run.status === 'completed');
   const latestRun = runs.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))[0] || null;
-  const completed = Boolean(latestRun);
+  const totals = inventoryAssignmentTotals(assignment, runs);
   return {
     ...assignment,
-    status: completed ? 'completed' : assignment.status,
-    completed_at: latestRun?.completed_at || latestRun?.created_at || assignment.completed_at || null,
+    status: assignment.status,
+    completed_at: assignment.completed_at || null,
     template,
     completed_by: latestRun ? publicUser(db.users.find(user => user.id === latestRun.user_id)) : null,
     assigned_by_user: publicUser(db.users.find(user => user.id === assignment.assigned_by)),
-    runs_count: runs.length
+    runs_count: runs.length,
+    participants: runs.map(run => publicUser(db.users.find(user => user.id === run.user_id))).filter(Boolean),
+    totals
   };
+}
+
+function inventoryAssignmentTotals(assignment, sourceRuns = null) {
+  const runs = sourceRuns || sameRestaurant(db.inventory_runs, assignment.restaurant_id)
+    .filter(run => run.template_id === assignment.template_id)
+    .filter(run => run.assignment_id === assignment.id || isoDateKey(run.created_at) === assignment.due_date)
+    .filter(run => run.status === 'completed');
+  const runIds = new Set(runs.map(run => run.id));
+  const totals = new Map();
+
+  db.inventory_values
+    .filter(value => runIds.has(value.inventory_run_id))
+    .forEach(value => {
+      const product = db.products.find(product => product.id === value.product_id);
+      const current = totals.get(value.product_id) || { product, qty: 0, comments: [] };
+      current.qty += Number(value.qty || 0);
+      const sourceRun = runs.find(run => run.id === value.inventory_run_id);
+      const sourceUser = db.users.find(user => user.id === sourceRun?.user_id)?.name || 'Сотрудник';
+      if (value.comment) current.comments.push(`${sourceUser}: ${value.comment}`);
+      totals.set(value.product_id, current);
+    });
+
+  return Array.from(totals.entries()).map(([productId, item]) => ({
+    product_id: productId,
+    product: item.product || null,
+    qty: Math.round(item.qty * 1000) / 1000,
+    comments: item.comments
+  })).sort((a, b) => String(a.product?.name || '').localeCompare(String(b.product?.name || ''), 'ru'));
 }
 
 const billingPlans = [
@@ -3348,6 +3378,21 @@ app.post('/api/admin/inventory/assignments', auth, ensureRestaurantActive, opera
   res.status(201).json(inventoryAssignmentDetails(assignment));
 }));
 
+app.patch('/api/admin/inventory/assignments/:id/complete', auth, ensureRestaurantActive, operationalEditorOnly, runAsync(async (req, res) => {
+  const rid = req.user.restaurant_id;
+  const assignment = sameRestaurant(collection('inventory_assignments'), rid).find(item => item.id === req.params.id && item.status !== 'cancelled');
+  if (!assignment) return res.status(404).json({ error: 'Инвентаризация не найдена' });
+  const seniorDepartment = manageableDepartment(req.user);
+  if (seniorDepartment && assignment.department !== seniorDepartment) {
+    return res.status(403).json({ error: 'Старший может закрыть только инвентаризацию своего подразделения' });
+  }
+  assignment.status = 'completed';
+  assignment.completed_at = nowIso();
+  logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'inventory_assignment_completed', title: `${req.user.name} отметил инвентаризацию сданной`, entity_type: 'inventory_assignment', entity_id: assignment.id, metadata: { template_id: assignment.template_id, department: assignment.department, due_date: assignment.due_date } });
+  await persist();
+  res.json(inventoryAssignmentDetails(assignment));
+}));
+
 app.post('/api/inventory/runs', auth, ensureRestaurantActive, runAsync(async (req, res) => {
   const rid = req.user.restaurant_id;
   const { template_id, values, comment } = req.body;
@@ -3371,15 +3416,20 @@ app.post('/api/inventory/runs', auth, ensureRestaurantActive, runAsync(async (re
   }
 
   const run = { id: uid('invrun'), restaurant_id: rid, template_id, user_id: req.user.id, department: template.department, comment: comment || '', status: 'completed', created_at: nowIso(), assignment_id: assignment?.id || null };
+  if (assignment) {
+    const previousRunIds = db.inventory_runs
+      .filter(item => item.restaurant_id === rid && item.assignment_id === assignment.id && item.user_id === req.user.id)
+      .map(item => item.id);
+    if (previousRunIds.length) {
+      db.inventory_runs = db.inventory_runs.filter(item => !previousRunIds.includes(item.id));
+      db.inventory_values = db.inventory_values.filter(item => !previousRunIds.includes(item.inventory_run_id));
+    }
+  }
   db.inventory_runs.push(run);
   parsedValues.forEach(value => {
     const savedComment = [value.expression, value.comment].filter(Boolean).join(' · ');
     db.inventory_values.push({ id: uid('invv'), restaurant_id: rid, inventory_run_id: run.id, product_id: value.product_id, qty: value.qty, comment: savedComment });
   });
-  if (assignment) {
-    assignment.status = 'completed';
-    assignment.completed_at = run.created_at;
-  }
   logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'inventory_completed', title: `${req.user.name} отправил инвентаризацию "${template.title}"`, entity_type: 'inventory_run', entity_id: run.id, metadata: { template_id, department: template.department, assignment_id: assignment?.id || null } });
   notifyManagers(rid, { title: 'Инвентаризация отправлена', body: `${req.user.name}: ${template.title}`, entity_type: 'inventory_run', entity_id: run.id });
   await persist();

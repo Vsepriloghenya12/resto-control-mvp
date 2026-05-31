@@ -8671,6 +8671,52 @@ body {
   margin-top: 12px;
 }
 
+.inventoryAssignmentRow {
+  align-items: start;
+}
+
+.inventoryAssignmentActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.inventoryAssignmentTotals {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in oklch, var(--muted-foreground) 10%, transparent);
+}
+
+.inventoryAssignmentTotals span {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 9px;
+  border-radius: 10px;
+  background: color-mix(in oklch, var(--foreground) 3%, transparent);
+}
+
+.inventoryAssignmentTotals b,
+.inventoryAssignmentTotals em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inventoryAssignmentTotals em {
+  color: var(--text);
+  font-style: normal;
+  font-weight: 800;
+}
+
+.inventoryAssignmentTotals small {
+  color: var(--text-secondary);
+}
+
 .smartTaskFlag {
   display: inline-flex;
   align-items: center;

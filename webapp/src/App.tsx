@@ -2551,13 +2551,13 @@ function Today({
   const openTechRequests = (overview.techRequests || []).filter((request: any) => !['done', 'cancelled'].includes(request.status));
   const readyInventoryTemplates = overview.templates.filter((template: any) => template.items?.length);
   const pendingChecklists = overview.checklists.filter((template: any) => !completedChecklistTemplateIds.has(template.id));
-  const pendingInventoryTemplates = readyInventoryTemplates.filter((template: any) => !completedInventoryTemplateIds.has(template.id));
+  const pendingInventoryTemplates = readyInventoryTemplates;
   const priorityItems = [
     ...pendingChecklists.map((template: any) => ({ id: `checklist-${template.id}`, title: template.title, subtitle: `${checklistTypes[template.type] || 'Чек-лист'} · не выполнен сегодня`, onClick: onOpenChecklists, icon: 'checklists' as IconName })),
     ...openTasks.map((task: any) => ({ id: `task-${task.id}`, title: task.title, subtitle: `${task.description || 'Открыть задачу'}${task.due_at ? ` · срок: ${fmtDate(task.due_at)}` : ''}`, onClick: onOpenTasks, icon: 'tasks' as IconName })),
     ...openTechRequests.map((request: any) => ({ id: `tech-${request.id}`, title: request.title, subtitle: request.manager_comment || 'Проблема ожидает реакции менеджера', onClick: onOpenTasks, icon: 'support' as IconName })),
     ...upcomingBookings.map((booking: any) => ({ id: `booking-${booking.id}`, title: `${booking.guest_name || 'Гость'} · ${booking.guests_count} гост.`, subtitle: `${fmtDate(booking.reserved_for)} · ${booking.tables?.map((table: any) => table.label).join(', ') || 'стол не выбран'}`, onClick: onOpenBookings, icon: 'bookings' as IconName })),
-    ...pendingInventoryTemplates.map((template: any) => ({ id: `inventory-${template.id}`, title: template.title, subtitle: 'Инвентаризация не отправлена сегодня', onClick: onOpenInventory, icon: 'inventory' as IconName }))
+    ...pendingInventoryTemplates.map((template: any) => ({ id: `inventory-${template.id}`, title: template.title, subtitle: completedInventoryTemplateIds.has(template.id) ? 'Подсчёт отправлен, ждёт закрытия' : 'Инвентаризация назначена', onClick: onOpenInventory, icon: 'inventory' as IconName }))
   ];
 
   return <div className="mobileSectionStack">
@@ -3325,6 +3325,19 @@ function Inventory({ user, admin = false }: any) {
     }
   }
 
+  async function completeInventoryAssignment(assignment: any) {
+    if (!assignment?.id) return;
+    if (!window.confirm(`Отметить инвентаризацию "${assignment.template?.title || 'Инвентаризация'}" сданной? После этого она исчезнет из задач сотрудников.`)) return;
+    setAssignmentMsg('');
+    try {
+      const result = await api(`/api/admin/inventory/assignments/${assignment.id}/complete`, { method: 'PATCH', body: JSON.stringify({}) });
+      setAssignmentMsg(`Инвентаризация сдана: ${result.template?.title || 'бланк'}`);
+      await load();
+    } catch (error: any) {
+      setAssignmentMsg(error.message || 'Не удалось закрыть инвентаризацию');
+    }
+  }
+
   async function submit(t: any) {
     const payload: any = {};
     t.items.forEach((i: any) => { payload[i.product_id] = { qty: values[i.product_id] || '', comment: '' }; });
@@ -3355,11 +3368,24 @@ function Inventory({ user, admin = false }: any) {
       <Field label="Дата" type="date" value={assignmentForm.due_date} onChange={(e: any) => setAssignmentForm({ ...assignmentForm, due_date: e.target.value || inputDateKey() })} />
       <div className="actions adminFormActions"><Button type="submit">Назначить</Button></div>
     </form>
-    {assignmentMsg && <div className={assignmentMsg.includes('назначена') ? 'notice' : 'error'}>{assignmentMsg}</div>}
+    {assignmentMsg && <div className={assignmentMsg.includes('назначена') || assignmentMsg.includes('сдана') ? 'notice' : 'error'}>{assignmentMsg}</div>}
     <div className="compactAccordionList inventoryAssignmentList">
-      {inventoryAssignments.length === 0 ? <Empty text="На сегодня инвентаризации не назначены" /> : inventoryAssignments.map((assignment: any) => <div className="adminRowButton readonly" key={assignment.id}>
-        <span><b>{assignment.template?.title || 'Инвентаризация'}</b><small>{departments[assignment.department] || assignment.department} · {assignment.due_date}</small></span>
-        <em className={cx('badge', assignment.status === 'completed' ? 'active' : 'warning')}>{assignment.status === 'completed' ? 'готово' : 'назначено'}</em>
+      {inventoryAssignments.length === 0 ? <Empty text="На сегодня инвентаризации не назначены" /> : inventoryAssignments.map((assignment: any) => <div className="adminRowButton readonly inventoryAssignmentRow" key={assignment.id}>
+        <span>
+          <b>{assignment.template?.title || 'Инвентаризация'}</b>
+          <small>{departments[assignment.department] || assignment.department} · {assignment.due_date} · подсчётов: {assignment.runs_count || 0}</small>
+        </span>
+        <div className="inventoryAssignmentActions">
+          <em className={cx('badge', assignment.status === 'completed' ? 'active' : 'warning')}>{assignment.status === 'completed' ? 'сдано' : 'назначено'}</em>
+          {assignment.status !== 'completed' && <Button type="button" kind="soft" onClick={() => completeInventoryAssignment(assignment)}>Отметить сданной</Button>}
+        </div>
+        {!!assignment.totals?.length && <div className="inventoryAssignmentTotals">
+          {assignment.totals.slice(0, 8).map((item: any) => <span key={item.product_id}>
+            <b>{item.product?.name || 'Товар'}</b>
+            <em>{item.qty} {item.product?.unit || ''}</em>
+          </span>)}
+          {assignment.totals.length > 8 && <small>И ещё {assignment.totals.length - 8} позиций</small>}
+        </div>}
       </div>)}
     </div>
   </Card> : null;
@@ -3416,7 +3442,7 @@ function Inventory({ user, admin = false }: any) {
                   </div>
                   <input
                     type="text"
-                    inputMode="tel"
+                    inputMode="decimal"
                     pattern="[0-9+,.\s]*"
                     autoComplete="off"
                     value={rawValue}
