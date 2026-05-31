@@ -133,7 +133,7 @@ async function ensurePostgresSchema() {
             select array_agg(a.attname order by cols.ord)
             from unnest(c.conkey) with ordinality as cols(attnum, ord)
             join pg_attribute a on a.attrelid = t.oid and a.attnum = cols.attnum
-          ) = array['login']
+          ) = array['login']::name[]
       loop
         execute format('alter table users drop constraint %I', item.conname);
       end loop;
@@ -152,7 +152,7 @@ async function ensurePostgresSchema() {
             select array_agg(a.attname order by cols.ord)
             from unnest(i.indkey) with ordinality as cols(attnum, ord)
             join pg_attribute a on a.attrelid = tbl.oid and a.attnum = cols.attnum
-          ) = array['login']
+          ) = array['login']::name[]
       loop
         execute format('drop index if exists %s', item.index_name);
       end loop;
