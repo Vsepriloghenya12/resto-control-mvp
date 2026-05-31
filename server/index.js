@@ -3311,7 +3311,7 @@ app.get('/api/inventory/templates', auth, ensureRestaurantActive, (req, res) => 
 
   const assignmentByTemplateId = new Map(
     sameRestaurant(collection('inventory_assignments'), rid)
-      .filter(assignment => assignment.due_date === today && assignment.status !== 'cancelled')
+      .filter(assignment => assignment.due_date === today && assignment.status === 'open')
       .map(assignment => [assignment.template_id, inventoryAssignmentDetails(assignment)])
   );
   const rows = templates
@@ -3330,7 +3330,7 @@ app.get('/api/admin/inventory/assignments', auth, ensureRestaurantActive, operat
   const range = normalizeDateRange(req.query, 'from', 'to');
   const department = SENIOR_ROLES.includes(req.user.role) ? manageableDepartment(req.user) : String(req.query.department || '');
   const rows = sameRestaurant(collection('inventory_assignments'), rid)
-    .filter(assignment => assignment.status !== 'cancelled')
+    .filter(assignment => assignment.status === 'open')
     .filter(assignment => assignment.due_date >= range.from && assignment.due_date <= range.to)
     .filter(assignment => !department || assignment.department === department)
     .map(inventoryAssignmentDetails)
@@ -3353,7 +3353,7 @@ app.post('/api/admin/inventory/assignments', auth, ensureRestaurantActive, opera
     && item.template_id === template.id
     && item.department === template.department
     && item.due_date === dueDate
-    && item.status !== 'cancelled'
+    && item.status === 'open'
   ));
   if (!assignment) {
     assignment = {
@@ -3368,9 +3368,6 @@ app.post('/api/admin/inventory/assignments', auth, ensureRestaurantActive, opera
       completed_at: null
     };
     assignments.push(assignment);
-  } else if (assignment.status === 'completed') {
-    assignment.status = 'open';
-    assignment.completed_at = null;
   }
   logActivity({ restaurant_id: rid, actor_id: req.user.id, type: 'inventory_assigned', title: `${req.user.name} назначил инвентаризацию "${template.title}"`, entity_type: 'inventory_assignment', entity_id: assignment.id, metadata: { template_id: template.id, department: template.department, due_date: dueDate } });
   notifyUsers(rid, db.users.filter(user => user.active && user.department === template.department && !MANAGER_ROLES.includes(user.role)), { title: 'Назначена инвентаризация', body: `${template.title} · ${departments[template.department] || template.department}`, entity_type: 'inventory_assignment', entity_id: assignment.id });
@@ -3453,12 +3450,16 @@ app.get('/api/inventory/runs', auth, ensureRestaurantActive, (req, res) => {
 
 app.get('/api/admin/inventory/runs', auth, ensureRestaurantActive, adminOnly, (req, res) => {
   const rid = req.user.restaurant_id;
-  const rows = sameRestaurant(db.inventory_runs, rid).map(run => ({
-    ...run,
-    template: db.inventory_templates.find(t => t.id === run.template_id),
-    user: publicUser(db.users.find(u => u.id === run.user_id)),
-    values: db.inventory_values.filter(v => v.inventory_run_id === run.id).map(v => ({ ...v, product: db.products.find(p => p.id === v.product_id) }))
-  })).sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const rows = sameRestaurant(db.inventory_runs, rid).map(run => {
+    const assignment = run.assignment_id ? collection('inventory_assignments').find(item => item.id === run.assignment_id && item.restaurant_id === rid) : null;
+    return {
+      ...run,
+      template: db.inventory_templates.find(t => t.id === run.template_id),
+      assignment: assignment ? inventoryAssignmentDetails(assignment) : null,
+      user: publicUser(db.users.find(u => u.id === run.user_id)),
+      values: db.inventory_values.filter(v => v.inventory_run_id === run.id).map(v => ({ ...v, product: db.products.find(p => p.id === v.product_id) }))
+    };
+  }).sort((a, b) => b.created_at.localeCompare(a.created_at));
   res.json(rows);
 });
 
@@ -3469,7 +3470,8 @@ app.get('/api/admin/inventory/runs/:id/export.xlsx', auth, ensureRestaurantActiv
   const template = db.inventory_templates.find(t => t.id === run.template_id);
   const runDate = String(run.created_at || '').slice(0, 10);
   const sameDayRuns = sameRestaurant(db.inventory_runs, rid)
-    .filter(item => item.template_id === run.template_id && item.status === 'completed' && String(item.created_at || '').slice(0, 10) === runDate);
+    .filter(item => item.template_id === run.template_id && item.status === 'completed')
+    .filter(item => run.assignment_id ? item.assignment_id === run.assignment_id : String(item.created_at || '').slice(0, 10) === runDate);
   const runIds = new Set(sameDayRuns.map(item => item.id));
   const participants = sameDayRuns.map(item => db.users.find(u => u.id === item.user_id)?.name).filter(Boolean).join(', ');
   const totals = new Map();

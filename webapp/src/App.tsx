@@ -2548,6 +2548,7 @@ function Today({
     .slice(0, 3);
   const completedChecklistTemplateIds = new Set((overview.checklistRuns || []).filter((run: any) => String(run.created_at || '').slice(0, 10) === todayKey).map((run: any) => run.template_id));
   const completedInventoryTemplateIds = new Set((overview.inventoryRuns || []).filter((run: any) => String(run.created_at || '').slice(0, 10) === todayKey).map((run: any) => run.template_id));
+  const completedInventoryAssignmentIds = new Set((overview.inventoryRuns || []).filter((run: any) => String(run.created_at || '').slice(0, 10) === todayKey && run.assignment_id).map((run: any) => run.assignment_id));
   const openTechRequests = (overview.techRequests || []).filter((request: any) => !['done', 'cancelled'].includes(request.status));
   const readyInventoryTemplates = overview.templates.filter((template: any) => template.items?.length);
   const pendingChecklists = overview.checklists.filter((template: any) => !completedChecklistTemplateIds.has(template.id));
@@ -2557,7 +2558,7 @@ function Today({
     ...openTasks.map((task: any) => ({ id: `task-${task.id}`, title: task.title, subtitle: `${task.description || 'Открыть задачу'}${task.due_at ? ` · срок: ${fmtDate(task.due_at)}` : ''}`, onClick: onOpenTasks, icon: 'tasks' as IconName })),
     ...openTechRequests.map((request: any) => ({ id: `tech-${request.id}`, title: request.title, subtitle: request.manager_comment || 'Проблема ожидает реакции менеджера', onClick: onOpenTasks, icon: 'support' as IconName })),
     ...upcomingBookings.map((booking: any) => ({ id: `booking-${booking.id}`, title: `${booking.guest_name || 'Гость'} · ${booking.guests_count} гост.`, subtitle: `${fmtDate(booking.reserved_for)} · ${booking.tables?.map((table: any) => table.label).join(', ') || 'стол не выбран'}`, onClick: onOpenBookings, icon: 'bookings' as IconName })),
-    ...pendingInventoryTemplates.map((template: any) => ({ id: `inventory-${template.id}`, title: template.title, subtitle: completedInventoryTemplateIds.has(template.id) ? 'Подсчёт отправлен, ждёт закрытия' : 'Инвентаризация назначена', onClick: onOpenInventory, icon: 'inventory' as IconName }))
+    ...pendingInventoryTemplates.map((template: any) => ({ id: `inventory-${template.id}`, title: template.title, subtitle: completedInventoryAssignmentIds.has(template.assignment?.id) || (!template.assignment?.id && completedInventoryTemplateIds.has(template.id)) ? 'Подсчёт отправлен, ждёт закрытия' : 'Инвентаризация назначена', onClick: onOpenInventory, icon: 'inventory' as IconName }))
   ];
 
   return <div className="mobileSectionStack">
@@ -3375,17 +3376,7 @@ function Inventory({ user, admin = false }: any) {
           <b>{assignment.template?.title || 'Инвентаризация'}</b>
           <small>{departments[assignment.department] || assignment.department} · {assignment.due_date} · подсчётов: {assignment.runs_count || 0}</small>
         </span>
-        <div className="inventoryAssignmentActions">
-          <em className={cx('badge', assignment.status === 'completed' ? 'active' : 'warning')}>{assignment.status === 'completed' ? 'сдано' : 'назначено'}</em>
-          {assignment.status !== 'completed' && <Button type="button" kind="soft" onClick={() => completeInventoryAssignment(assignment)}>Отметить сданной</Button>}
-        </div>
-        {!!assignment.totals?.length && <div className="inventoryAssignmentTotals">
-          {assignment.totals.slice(0, 8).map((item: any) => <span key={item.product_id}>
-            <b>{item.product?.name || 'Товар'}</b>
-            <em>{item.qty} {item.product?.unit || ''}</em>
-          </span>)}
-          {assignment.totals.length > 8 && <small>И ещё {assignment.totals.length - 8} позиций</small>}
-        </div>}
+        <em className="badge warning">назначено</em>
       </div>)}
     </div>
   </Card> : null;
@@ -3396,7 +3387,7 @@ function Inventory({ user, admin = false }: any) {
       if (!inventoryFilter.trim()) return true;
       return String(item.product?.name || '').toLowerCase().includes(inventoryFilter.trim().toLowerCase());
     }) || [];
-    const selectedCompletedRun = selectedTemplate ? employeeRuns.find((run: any) => run.template_id === selectedTemplate.id) : null;
+    const selectedCompletedRun = selectedTemplate ? employeeRuns.find((run: any) => selectedTemplate.assignment?.id ? run.assignment_id === selectedTemplate.assignment.id : run.template_id === selectedTemplate.id) : null;
     const selectedTemplateCompleted = Boolean(selectedCompletedRun && !repeatingInventory[selectedTemplate?.id || '']);
 
     return <div className="mobileSectionStack mobileInventoryScreen">
@@ -3580,7 +3571,10 @@ function Inventory({ user, admin = false }: any) {
                 <span>{run.user?.name} · {roles[run.user?.role] || 'Сотрудник'} · {fmtDate(run.created_at)}</span>
                 <span>Строк в отправке: {run.values?.length || 0}</span>
               </div>
-              <Button type="button" kind="soft" onClick={() => download(`/api/admin/inventory/runs/${run.id}/export.xlsx`, `inventory-${run.id}.xlsx`)}>Скачать общий Excel</Button>
+              <div className="adminInlineActions">
+                {run.assignment && run.assignment.status !== 'completed' && <Button type="button" kind="soft" onClick={() => completeInventoryAssignment(run.assignment)}>Сдана</Button>}
+                <Button type="button" kind="soft" onClick={() => download(`/api/admin/inventory/runs/${run.id}/export.xlsx`, `inventory-${run.id}.xlsx`)}>Скачать общий Excel</Button>
+              </div>
             </div>)}
           </div>
         </Card>
