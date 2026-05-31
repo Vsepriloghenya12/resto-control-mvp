@@ -106,6 +106,7 @@ function encodeColumnValue(column, value) {
     return JSON.stringify(value || []);
   }
   if (column === 'supplier') return value || 'Без поставщика';
+  if (column === 'require_photo') return value ?? false;
   return value ?? null;
 }
 
