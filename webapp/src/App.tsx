@@ -3442,7 +3442,7 @@ function Inventory({ user, admin = false }: any) {
                   </div>
                   <input
                     type="text"
-                    inputMode="decimal"
+                    inputMode="tel"
                     pattern="[0-9+,.\s]*"
                     autoComplete="off"
                     value={rawValue}
