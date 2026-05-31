@@ -92,6 +92,31 @@ function shiftInputDate(dateKey: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
+function inventoryDraftKey(user: any, template: any) {
+  if (!user?.id || !template?.id) return '';
+  return `resto_inventory_draft:${user.restaurant_id || 'restaurant'}:${user.id}:${template.assignment?.id || template.id}`;
+}
+
+function readInventoryDraft(key: string) {
+  if (!key) return {};
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || '{}');
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeInventoryDraft(key: string, values: any) {
+  if (!key) return;
+  const hasValues = Object.values(values || {}).some((value) => String(value || '').trim());
+  if (!hasValues) {
+    localStorage.removeItem(key);
+    return;
+  }
+  localStorage.setItem(key, JSON.stringify(values || {}));
+}
+
 const brandLogoSrc = '/resto-control-logo.png';
 
 const subscriptionTariffs = [
@@ -3147,6 +3172,7 @@ function Inventory({ user, admin = false }: any) {
   const [editingProduct, setEditingProduct] = useState<any>(null);
   const [inventoryFilter, setInventoryFilter] = useState('');
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const inventoryDraftSkipSave = useRef(false);
   const [productForm, setProductForm] = useState<any>({
     section: 'bar',
     name: '',
@@ -3343,6 +3369,7 @@ function Inventory({ user, admin = false }: any) {
     const payload: any = {};
     t.items.forEach((i: any) => { payload[i.product_id] = { qty: values[i.product_id] || '', comment: '' }; });
     const result = await api('/api/inventory/runs', { method: 'POST', body: JSON.stringify({ template_id: t.id, values: payload }) });
+    localStorage.removeItem(inventoryDraftKey(user, t));
     setValues({});
     setRepeatingInventory((current) => ({ ...current, [t.id]: false }));
     setMsg(result?.offline ? 'Инвентаризация сохранена офлайн' : 'Инвентаризация сохранена');
@@ -3361,6 +3388,24 @@ function Inventory({ user, admin = false }: any) {
   }, [admin, templates, selectedTemplateId]);
 
   const canAssignInventory = admin || seniorRoles.includes(user.role);
+  const activeInventoryTemplate = !admin ? (templates.find((template) => template.id === selectedTemplateId) || templates[0]) : null;
+  const activeInventoryDraftKey = inventoryDraftKey(user, activeInventoryTemplate);
+
+  useEffect(() => {
+    if (admin) return;
+    inventoryDraftSkipSave.current = true;
+    setValues(readInventoryDraft(activeInventoryDraftKey));
+  }, [admin, activeInventoryDraftKey]);
+
+  useEffect(() => {
+    if (admin || !activeInventoryDraftKey) return;
+    if (inventoryDraftSkipSave.current) {
+      inventoryDraftSkipSave.current = false;
+      return;
+    }
+    writeInventoryDraft(activeInventoryDraftKey, values);
+  }, [admin, activeInventoryDraftKey, values]);
+
   const assignmentPanel = canAssignInventory ? <Card title="Назначить инвентаризацию" right={<span className="badge active">только после назначения</span>}>
     <form className="form two compactAdminForm inventoryAssignForm" onSubmit={assignInventory}>
       <Select label="Бланк" value={assignmentForm.template_id} onChange={(e: any) => setAssignmentForm({ ...assignmentForm, template_id: e.target.value })}>
@@ -3382,7 +3427,7 @@ function Inventory({ user, admin = false }: any) {
   </Card> : null;
 
   if (!admin) {
-    const selectedTemplate = templates.find((template) => template.id === selectedTemplateId) || templates[0];
+    const selectedTemplate = activeInventoryTemplate;
     const filteredItems = selectedTemplate?.items.filter((item: any) => {
       if (!inventoryFilter.trim()) return true;
       return String(item.product?.name || '').toLowerCase().includes(inventoryFilter.trim().toLowerCase());
