@@ -156,6 +156,22 @@ async function ensurePostgresSchema() {
       loop
         execute format('drop index if exists %s', item.index_name);
       end loop;
+
+      for item in
+        select quote_ident(ns.nspname) || '.' || quote_ident(idx.relname) as index_name
+        from pg_index i
+        join pg_class tbl on tbl.oid = i.indrelid
+        join pg_class idx on idx.oid = i.indexrelid
+        join pg_namespace ns on ns.oid = idx.relnamespace
+        where tbl.relname = 'users'
+          and ns.nspname = current_schema()
+          and i.indisunique
+          and not i.indisprimary
+          and pg_get_indexdef(i.indexrelid) ilike '%login%'
+          and pg_get_indexdef(i.indexrelid) not ilike '%restaurant_id%'
+      loop
+        execute format('drop index if exists %s', item.index_name);
+      end loop;
     end $$;
   `);
   await getPool().query(`create unique index if not exists idx_users_restaurant_login on users(restaurant_id, login) where restaurant_id is not null`);

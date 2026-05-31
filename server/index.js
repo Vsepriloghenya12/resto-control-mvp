@@ -255,6 +255,11 @@ function ownerLoginConflict(login, password) {
   return canReuseOwnerLogin ? '' : 'Логин уже занят';
 }
 
+function registrationLoginConflict(login) {
+  const normalizedLogin = String(login || '').trim();
+  return db.users.some(user => user.login === normalizedLogin && user.active) ? 'Логин уже занят' : '';
+}
+
 function auth(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -2239,22 +2244,29 @@ app.post('/api/auth/register-restaurant', runAsync(async (req, res) => {
   const { restaurantName, ownerName, phone, email, city, login, password } = req.body;
   if (!restaurantName || !ownerName || !login || !password) return res.status(400).json({ error: 'Заполните ресторан, имя владельца, логин и пароль' });
   const ownerLogin = String(login || '').trim();
-  const conflict = ownerLoginConflict(login, password);
+  const conflict = registrationLoginConflict(login);
   if (conflict) return res.status(409).json({ error: conflict });
-  const restaurant = createRestaurantWithDefaults(db, {
-    name: restaurantName,
-    owner_name: ownerName,
-    phone,
-    email,
-    city,
-    login,
-    password,
-    subscription_status: 'trial',
-    trial_ends_at: addDays(process.env.TRIAL_DAYS || 14)
-  });
-  await persist();
-  const user = db.users.find(u => u.restaurant_id === restaurant.id && u.login === ownerLogin);
-  res.status(201).json({ ...sessionPayload(user), trial_days: Number(process.env.TRIAL_DAYS || 14) });
+  const before = JSON.parse(JSON.stringify(db));
+  try {
+    const restaurant = createRestaurantWithDefaults(db, {
+      name: restaurantName,
+      owner_name: ownerName,
+      phone,
+      email,
+      city,
+      login,
+      password,
+      subscription_status: 'trial',
+      trial_ends_at: addDays(process.env.TRIAL_DAYS || 14)
+    });
+    await persist();
+    const user = db.users.find(u => u.restaurant_id === restaurant.id && u.login === ownerLogin);
+    res.status(201).json({ ...sessionPayload(user), trial_days: Number(process.env.TRIAL_DAYS || 14) });
+  } catch (error) {
+    db = before;
+    if (error?.code === '23505') return res.status(409).json({ error: 'Логин уже занят' });
+    throw error;
+  }
 }));
 
 app.get('/api/me', auth, (req, res) => {
