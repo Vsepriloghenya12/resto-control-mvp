@@ -8611,6 +8611,400 @@ body {
   border-radius: 8px;
 }
 
+.lossControlPanel {
+  --surface: color-mix(in oklch, var(--muted) 78%, var(--card) 22%);
+  --text-primary: var(--foreground);
+  --text-secondary: var(--muted-foreground);
+  --loss-success: oklch(0.62 0.16 145);
+  --loss-warning: oklch(0.72 0.15 78);
+  --loss-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 6%, transparent), 0 8px 28px color-mix(in oklch, var(--foreground) 4%, transparent);
+  display: grid;
+  gap: 14px;
+  margin: 0;
+}
+
+.lossControlHead {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: linear-gradient(180deg, color-mix(in oklch, var(--card) 96%, var(--muted) 4%), var(--card));
+  box-shadow: var(--loss-shadow);
+}
+
+.lossControlHead p {
+  max-width: 760px;
+  margin-top: 5px;
+  line-height: 1.45;
+}
+
+.lossPeriodTools {
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 2px;
+  justify-content: flex-end;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--muted);
+}
+
+.lossPeriodButton {
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color .16s ease, color .16s ease, box-shadow .16s ease;
+}
+
+.lossPeriodButton:hover,
+.lossPeriodButton.active {
+  color: var(--text-primary);
+  background: var(--card);
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 9%, transparent);
+}
+
+.lossPeriodButton:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--ring) 72%, transparent);
+  outline-offset: 2px;
+}
+
+.lossMetricGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.lossMetricCard,
+.lossChartCard,
+.lossListPanel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: var(--loss-shadow);
+}
+
+.lossMetricCard {
+  display: grid;
+  gap: 0;
+  min-height: 116px;
+  padding: 16px;
+  align-content: start;
+  overflow: hidden;
+  transition: box-shadow .16s ease, transform .16s ease, border-color .16s ease;
+}
+
+.lossMetricCard:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in oklch, var(--border) 62%, var(--foreground) 38%);
+  box-shadow: 0 1px 2px color-mix(in oklch, var(--foreground) 7%, transparent), 0 10px 32px color-mix(in oklch, var(--foreground) 7%, transparent);
+}
+
+.lossMetricTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.lossMetricTop span {
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  font-weight: 680;
+  line-height: 1.25;
+}
+
+.lossMetricTop em {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-style: normal;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity .16s ease;
+}
+
+.lossMetricCard:hover .lossMetricTop em {
+  opacity: 1;
+}
+
+.lossMetricValue {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  margin-top: 12px;
+  font-size: clamp(1.45rem, 1.8vw, 1.9rem);
+  font-weight: 760;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.lossMetricCard.tone-danger .lossMetricValue {
+  color: var(--destructive);
+}
+
+.lossMetricCard.tone-warning .lossMetricValue {
+  color: var(--warning);
+}
+
+.lossMetricCard.tone-success .lossMetricValue {
+  color: var(--success);
+}
+
+.lossMetricValue.compact {
+  max-width: 210px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.28;
+}
+
+.lossMetricCard p {
+  margin: 6px 0 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lossMetricValue.compact + p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.lossChartsGrid,
+.lossListsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.lossChartCard {
+  display: grid;
+  gap: 12px;
+  min-height: 230px;
+  padding: 14px;
+  align-content: start;
+}
+
+.lossChartHead {
+  display: grid;
+  gap: 4px;
+}
+
+.lossChartHead strong {
+  color: var(--text-primary);
+  font-size: 0.84rem;
+  font-weight: 760;
+  line-height: 1.2;
+}
+
+.lossChartHead span {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.lossLineChart {
+  display: grid;
+  gap: 8px;
+}
+
+.lossLineChart svg {
+  width: 100%;
+  min-height: 126px;
+  color: var(--primary);
+}
+
+.lossLineChart path {
+  fill: none;
+  stroke: color-mix(in oklch, var(--border) 72%, var(--foreground) 28%);
+  stroke-width: 1;
+}
+
+.lossLineChart polyline {
+  fill: none;
+  stroke: color-mix(in oklch, var(--primary) 82%, var(--chart-2) 18%);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.lossLineChart circle {
+  fill: var(--card);
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.lossChartFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+}
+
+.lossChartFoot b {
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.lossBarList {
+  display: grid;
+  gap: 10px;
+}
+
+.lossBarRow {
+  display: grid;
+  grid-template-columns: minmax(82px, 1fr) minmax(86px, 1.4fr) 34px;
+  gap: 8px;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+}
+
+.lossBarRow > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lossBarRow > div {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--muted) 84%, var(--foreground) 6%);
+}
+
+.lossBarRow i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--primary), var(--chart-2));
+}
+
+.lossBarRow b {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.lossListPanel {
+  overflow: hidden;
+}
+
+.lossListPanel .compactAccordionSummary {
+  min-height: 42px;
+  padding: 10px 14px;
+  background: color-mix(in oklch, var(--muted) 42%, transparent);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 760;
+}
+
+.lossListBody {
+  display: grid;
+  gap: 0;
+  padding: 0 14px 10px;
+}
+
+.lossListRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 48px;
+  padding: 9px 0;
+  border-top: 1px solid color-mix(in oklch, var(--border) 72%, transparent);
+}
+
+.lossListRow:first-child {
+  border-top: 0;
+}
+
+.lossListRow div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.lossListRow strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 0.76rem;
+  font-weight: 720;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lossListRow span {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lossListRow > b {
+  min-width: 28px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+@media (max-width: 1180px) {
+  .lossChartsGrid,
+  .lossListsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .lossMetricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .lossControlHead {
+    display: grid;
+    gap: 12px;
+  }
+
+  .lossPeriodTools {
+    width: 100%;
+  }
+
+  .lossPeriodButton {
+    flex: 1 1 0;
+  }
+
+  .lossMetricGrid,
+  .lossChartsGrid,
+  .lossListsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .lossMetricCard {
+    min-height: 104px;
+  }
+}
+
 .overviewProblemActions {
   max-width: 220px;
 }

@@ -1,0 +1,477 @@
+
+> resto-control-mvp@0.1.0 dev
+> concurrently "npm run dev --workspace server" "npm run dev --workspace webapp"
+
+[1] 
+[1] > resto-control-webapp@0.1.0 dev
+[1] > vite --host 0.0.0.0
+[1] 
+[0] 
+[0] > resto-control-server@0.1.0 dev
+[0] > node --watch index.js
+[0] 
+[1] 
+[1]   [32m[1mVITE[22m v5.2.8[39m  [2mready in [0m[1m680[22m[2m[0m ms[22m
+[1] 
+[1]   [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m4173[22m/[39m
+[1]   [32m➜[39m  [1mNetwork[22m: [36mhttp://172.18.0.1:[1m4173[22m/[39m
+[1]   [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.1.89:[1m4173[22m/[39m
+[0] ✅ Resto Control MVP started on port 8090
+[0] Local API: http://localhost:8090
+[0] Trial days: 14
+[0] Super admin: admin
+[0] GET /api/health 200 71 - 4.206 ms
+[0] POST /api/auth/login 200 560 - 7.434 ms
+[0] GET /api/admin/overview 200 640 - 6.784 ms
+[0] GET /api/admin/loss-control?period=7d 200 1575 - 8.182 ms
+[0] GET /api/me 200 1323 - 10.056 ms
+[0] GET /api/me 304 - - 3.842 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 2.660 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 30.394 ms
+[0] GET /api/support/tickets 304 - - 15.812 ms
+[0] GET /api/notifications 304 - - 2.655 ms
+[0] GET /api/me 200 1323 - 3.510 ms
+[0] GET /api/me 304 - - 24.571 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 200 1032 - 5.016 ms
+[0] GET /api/admin/loss-control?period=7d 200 1575 - 11.978 ms
+[0] GET /api/support/tickets 200 2 - 1.888 ms
+[0] GET /api/notifications 200 2 - 5.825 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 12.164 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 26.708 ms
+[0] GET /api/support/tickets 304 - - 6.640 ms
+[0] GET /api/notifications 304 - - 7.704 ms
+[0] GET /api/me 200 1323 - 7.167 ms
+[0] GET /api/me 304 - - 8.005 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 7.391 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 14.819 ms
+[0] GET /api/support/tickets 304 - - 43.595 ms
+[0] GET /api/notifications 304 - - 27.508 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 5.095 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 13.408 ms
+[0] GET /api/support/tickets 304 - - 2.731 ms
+[0] GET /api/notifications 304 - - 3.156 ms
+[0] GET /api/support/tickets 304 - - 2.956 ms
+[0] GET /api/support/tickets 304 - - 3.088 ms
+[0] GET /api/support/tickets 304 - - 6.361 ms
+[0] GET /api/support/tickets 304 - - 2.557 ms
+[0] GET /api/support/tickets 304 - - 2.988 ms
+[0] GET /api/support/tickets 304 - - 4.753 ms
+[0] GET /api/support/tickets 304 - - 3.785 ms
+[0] GET /api/support/tickets 304 - - 3.032 ms
+[0] GET /api/support/tickets 304 - - 2.375 ms
+[0] GET /api/support/tickets 304 - - 2.436 ms
+[0] GET /api/support/tickets 304 - - 1.700 ms
+[0] GET /api/support/tickets 304 - - 2.450 ms
+[0] GET /api/support/tickets 304 - - 2.373 ms
+[0] GET /api/support/tickets 304 - - 4.548 ms
+[0] GET /api/support/tickets 304 - - 2.505 ms
+[0] GET /api/support/tickets 304 - - 2.895 ms
+[0] GET /api/support/tickets 304 - - 2.514 ms
+[0] GET /api/support/tickets 304 - - 3.641 ms
+[0] GET /api/support/tickets 304 - - 4.252 ms
+[0] GET /api/support/tickets 304 - - 2.374 ms
+[0] GET /api/support/tickets 304 - - 2.960 ms
+[0] GET /api/support/tickets 304 - - 2.458 ms
+[0] GET /api/support/tickets 304 - - 2.711 ms
+[0] GET /api/support/tickets 304 - - 2.576 ms
+[0] GET /api/support/tickets 304 - - 2.823 ms
+[0] GET /api/support/tickets 304 - - 1.692 ms
+[0] GET /api/support/tickets 304 - - 2.692 ms
+[0] GET /api/support/tickets 304 - - 2.510 ms
+[0] GET /api/support/tickets 304 - - 2.671 ms
+[0] GET /api/support/tickets 304 - - 2.046 ms
+[0] GET /api/support/tickets 304 - - 2.247 ms
+[0] GET /api/support/tickets 304 - - 1.803 ms
+[0] GET /api/support/tickets 304 - - 2.548 ms
+[0] GET /api/support/tickets 304 - - 1.903 ms
+[0] GET /api/support/tickets 304 - - 1.690 ms
+[0] GET /api/support/tickets 304 - - 3.660 ms
+[0] GET /api/support/tickets 304 - - 1.763 ms
+[0] GET /api/support/tickets 304 - - 2.429 ms
+[0] GET /api/support/tickets 304 - - 1.476 ms
+[0] GET /api/me 200 1323 - 3.560 ms
+[0] GET /api/me 304 - - 4.008 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 4.557 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 5.423 ms
+[0] GET /api/support/tickets 304 - - 6.259 ms
+[0] GET /api/notifications 304 - - 28.721 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 3.283 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 9.134 ms
+[0] GET /api/support/tickets 304 - - 3.991 ms
+[0] GET /api/notifications 304 - - 2.257 ms
+[0] Restarting 'index.js'
+[0] Restarting 'index.js'
+[0] ✅ Resto Control MVP started on port 8090
+[0] Local API: http://localhost:8090
+[0] Trial days: 14
+[0] Super admin: admin
+[0] GET /api/support/tickets 304 - - 7.768 ms
+[0] GET /api/support/tickets 304 - - 3.393 ms
+[0] GET /api/support/tickets 304 - - 3.294 ms
+[0] GET /api/me 200 1323 - 13.125 ms
+[0] GET /api/me 304 - - 4.183 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 28.948 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 19.318 ms
+[0] GET /api/notifications 304 - - 5.837 ms
+[0] GET /api/support/tickets 304 - - 58.465 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 3.610 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 6.495 ms
+[0] GET /api/notifications 304 - - 7.593 ms
+[0] GET /api/support/tickets 304 - - 3.433 ms
+[0] GET /api/support/tickets 304 - - 3.424 ms
+[0] GET /api/support/tickets 304 - - 10.980 ms
+[0] GET /api/support/tickets 304 - - 2.798 ms
+[0] GET /api/support/tickets 304 - - 4.807 ms
+[0] GET /api/support/tickets 304 - - 2.559 ms
+[0] GET /api/support/tickets 304 - - 1.987 ms
+[0] GET /api/support/tickets 304 - - 1.776 ms
+[0] GET /api/support/tickets 304 - - 2.684 ms
+[0] GET /api/support/tickets 304 - - 2.552 ms
+[0] GET /api/support/tickets 304 - - 2.316 ms
+[0] GET /api/support/tickets 304 - - 6.239 ms
+[0] GET /api/support/tickets 304 - - 2.502 ms
+[0] GET /api/support/tickets 304 - - 2.445 ms
+[0] GET /api/support/tickets 304 - - 2.454 ms
+[0] GET /api/support/tickets 304 - - 2.770 ms
+[0] GET /api/support/tickets 304 - - 1.504 ms
+[0] GET /api/support/tickets 304 - - 3.030 ms
+[0] GET /api/support/tickets 304 - - 2.077 ms
+[0] GET /api/support/tickets 304 - - 1.642 ms
+[0] GET /api/support/tickets 304 - - 2.814 ms
+[0] GET /api/support/tickets 304 - - 2.780 ms
+[0] GET /api/support/tickets 304 - - 2.788 ms
+[0] GET /api/support/tickets 304 - - 1.108 ms
+[0] GET /api/support/tickets 304 - - 1.216 ms
+[0] GET /api/support/tickets 304 - - 1.101 ms
+[0] GET /api/support/tickets 304 - - 1.015 ms
+[0] GET /api/support/tickets 304 - - 1.060 ms
+[0] GET /api/support/tickets 304 - - 1.441 ms
+[0] GET /api/support/tickets 304 - - 1.516 ms
+[0] GET /api/support/tickets 304 - - 0.948 ms
+[0] GET /api/support/tickets 304 - - 1.093 ms
+[0] GET /api/support/tickets 304 - - 1.080 ms
+[0] GET /api/support/tickets 304 - - 3.701 ms
+[0] GET /api/support/tickets 304 - - 1.021 ms
+[0] GET /api/support/tickets 304 - - 0.998 ms
+[0] GET /api/support/tickets 304 - - 2.045 ms
+[0] GET /api/support/tickets 304 - - 1.110 ms
+[0] GET /api/support/tickets 304 - - 1.697 ms
+[0] GET /api/support/tickets 304 - - 3.738 ms
+[0] GET /api/support/tickets 304 - - 2.127 ms
+[1] [2m21:10:19[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.tsx[22m
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 2.618 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 3.378 ms
+[0] GET /api/support/tickets 304 - - 3.654 ms
+[0] GET /api/notifications 304 - - 2.194 ms
+[0] GET /api/me 200 1323 - 5.423 ms
+[0] GET /api/support/tickets 304 - - 2.484 ms
+[0] GET /api/support/tickets 304 - - 2.693 ms
+[0] GET /api/support/tickets 304 - - 2.502 ms
+[1] [2m21:12:17[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
+[0] GET /api/support/tickets 304 - - 2.360 ms
+[0] GET /api/support/tickets 304 - - 1.829 ms
+[0] GET /api/health 200 71 - 0.745 ms
+[0] GET /api/support/tickets 304 - - 2.088 ms
+[0] GET /api/me 200 1323 - 7.342 ms
+[0] GET /api/me 304 - - 5.590 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 7.171 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 24.348 ms
+[0] GET /api/support/tickets 304 - - 40.094 ms
+[0] GET /api/notifications 304 - - 8.984 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 2.812 ms
+[0] GET /api/support/tickets 200 2 - 2.609 ms
+[0] GET /api/me 304 - - 8.311 ms
+[0] GET /api/me 304 - - 5.421 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 200 1032 - 8.445 ms
+[0] GET /api/admin/loss-control?period=7d 200 1575 - 8.198 ms
+[0] GET /api/support/tickets 200 2 - 5.447 ms
+[0] GET /api/notifications 200 2 - 7.273 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 2.882 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 5.961 ms
+[0] GET /api/support/tickets 304 - - 4.746 ms
+[0] GET /api/notifications 304 - - 1.914 ms
+[0] GET /api/support/tickets 304 - - 2.535 ms
+[0] GET /api/support/tickets 304 - - 3.032 ms
+[0] GET /api/support/tickets 304 - - 2.471 ms
+[0] GET /api/support/tickets 304 - - 2.448 ms
+[0] GET /api/support/tickets 304 - - 2.993 ms
+[0] GET /api/support/tickets 304 - - 2.570 ms
+[0] GET /api/support/tickets 304 - - 2.670 ms
+[0] GET /api/support/tickets 304 - - 4.411 ms
+[1] [2m21:18:00[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
+[0] GET /api/support/tickets 304 - - 1.682 ms
+[0] GET /api/support/tickets 304 - - 2.723 ms
+[0] GET /api/health 200 71 - 0.405 ms
+[0] GET /api/support/tickets 304 - - 2.625 ms
+[0] GET /api/support/tickets 304 - - 2.518 ms
+[0] GET /api/support/tickets 304 - - 2.653 ms
+[0] GET /api/support/tickets 304 - - 2.585 ms
+[0] GET /api/support/tickets 304 - - 9.455 ms
+[0] GET /api/me 200 1323 - 5.407 ms
+[0] GET /api/me 304 - - 3.750 ms
+[0] GET /api/notifications 304 - - 2.421 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 2.386 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 5.320 ms
+[0] GET /api/support/tickets 304 - - 5.319 ms
+[0] GET /api/notifications 304 - - 4.388 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 14.593 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 4.188 ms
+[0] GET /api/support/tickets 304 - - 4.567 ms
+[0] GET /api/support/tickets 304 - - 3.212 ms
+[0] GET /api/support/tickets 304 - - 4.128 ms
+[0] GET /api/support/tickets 304 - - 2.852 ms
+[0] GET /api/support/tickets 304 - - 3.260 ms
+[0] GET /api/support/tickets 304 - - 1.838 ms
+[1] [2m21:26:03[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.tsx[22m
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 4.273 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 5.704 ms
+[0] GET /api/support/tickets 304 - - 3.513 ms
+[0] GET /api/notifications 304 - - 3.232 ms
+[0] GET /api/me 200 1323 - 3.959 ms
+[1] [2m21:26:32[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
+[0] GET /api/support/tickets 304 - - 1.922 ms
+[1] [2m21:26:48[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
+[0] GET /api/support/tickets 304 - - 2.431 ms
+[0] GET /api/health 200 71 - 0.424 ms
+[0] GET /api/me 200 1323 - 3.820 ms
+[0] GET /api/me 304 - - 7.786 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 4.399 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 14.289 ms
+[0] GET /api/support/tickets 304 - - 13.468 ms
+[0] GET /api/notifications 304 - - 18.200 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 9.733 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 14.667 ms
+[0] GET /api/support/tickets 304 - - 6.377 ms
+[0] GET /api/notifications 304 - - 15.218 ms
+[0] GET /api/support/tickets 304 - - 2.565 ms
+[0] GET /api/support/tickets 304 - - 1.571 ms
+[0] GET /api/support/tickets 304 - - 2.500 ms
+[0] GET /api/support/tickets 304 - - 2.383 ms
+[0] GET /api/support/tickets 304 - - 2.472 ms
+[0] GET /api/admin/users 304 - - 4.807 ms
+[0] GET /api/notifications 304 - - 6.234 ms
+[0] GET /api/admin/users 304 - - 2.839 ms
+[0] GET /api/checklists/templates 200 8431 - 6.470 ms
+[0] GET /api/notifications 304 - - 4.094 ms
+[0] GET /api/checklists/templates 304 - - 3.693 ms
+[0] GET /api/admin/checklists/runs 200 2 - 9.292 ms
+[0] GET /api/admin/checklists/runs 304 - - 3.044 ms
+[0] GET /api/support/tickets 304 - - 1.774 ms
+[0] GET /api/inventory/templates 200 7103 - 4.189 ms
+[0] GET /api/inventory/templates?assignable=1 200 7103 - 7.510 ms
+[0] GET /api/admin/inventory/assignments?from=2026-06-07&to=2026-06-07 200 2 - 3.408 ms
+[0] GET /api/products 200 3724 - 4.895 ms
+[0] GET /api/admin/inventory/runs 200 2 - 3.130 ms
+[0] GET /api/notifications 304 - - 3.893 ms
+[0] GET /api/inventory/templates 304 - - 5.109 ms
+[0] GET /api/inventory/templates?assignable=1 304 - - 3.101 ms
+[0] GET /api/admin/inventory/assignments?from=2026-06-07&to=2026-06-07 304 - - 2.533 ms
+[0] GET /api/products 304 - - 4.533 ms
+[0] GET /api/admin/inventory/runs 304 - - 3.400 ms
+[0] GET /api/support/tickets 304 - - 1.619 ms
+[0] GET /api/support/tickets 304 - - 3.734 ms
+[0] GET /api/support/tickets 304 - - 2.003 ms
+[0] GET /api/support/tickets 304 - - 2.682 ms
+[0] GET /api/support/tickets 304 - - 1.482 ms
+[0] GET /api/support/tickets 304 - - 3.908 ms
+[0] GET /api/support/tickets 304 - - 1.706 ms
+[0] GET /api/support/tickets 304 - - 2.450 ms
+[0] Restarting 'index.js'
+[0] ✅ Resto Control MVP started on port 8090
+[0] Local API: http://localhost:8090
+[0] Trial days: 14
+[0] Super admin: admin
+[0] Restarting 'index.js'
+[1] [2m21:36:18[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07[39m
+[1] AggregateError [EACCES]: 
+[1]     at internalConnectMultiple (node:net:1122:18)
+[1]     at afterConnectMultiple (node:net:1689:7)
+[1] [2m21:36:18[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07[39m
+[1] AggregateError [EACCES]: 
+[1]     at internalConnectMultiple (node:net:1122:18)
+[1]     at afterConnectMultiple (node:net:1689:7)
+[1] [2m21:36:18[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/loss-control?period=7d[39m
+[1] AggregateError [EACCES]: 
+[1]     at internalConnectMultiple (node:net:1122:18)
+[1]     at afterConnectMultiple (node:net:1689:7)
+[1] [2m21:36:18[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/notifications[39m
+[1] AggregateError [EACCES]: 
+[1]     at internalConnectMultiple (node:net:1122:18)
+[1]     at afterConnectMultiple (node:net:1689:7)
+[1] [2m21:36:18[22m [31m[1m[vite][22m[39m [31mhttp proxy error: /api/admin/loss-control?period=7d[39m
+[1] AggregateError [EACCES]: 
+[1]     at internalConnectMultiple (node:net:1122:18)
+[1]     at afterConnectMultiple (node:net:1689:7)
+[0] ✅ Resto Control MVP started on port 8090
+[0] Local API: http://localhost:8090
+[0] Trial days: 14
+[0] Super admin: admin
+[0] GET /api/me 200 1323 - 21.603 ms
+[0] GET /api/me 304 - - 9.633 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 200 1032 - 7.590 ms
+[0] GET /api/admin/loss-control?period=7d 200 1575 - 14.029 ms
+[0] GET /api/support/tickets 304 - - 7.003 ms
+[0] GET /api/notifications 200 2 - 10.844 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 3.278 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 7.918 ms
+[0] GET /api/support/tickets 304 - - 2.505 ms
+[0] GET /api/notifications 304 - - 4.631 ms
+[0] GET /api/support/tickets 304 - - 3.131 ms
+[0] GET /api/support/tickets 304 - - 5.110 ms
+[0] GET /api/support/tickets 304 - - 3.845 ms
+[0] GET /api/support/tickets 304 - - 1.945 ms
+[0] GET /api/support/tickets 304 - - 2.588 ms
+[0] GET /api/support/tickets 304 - - 1.940 ms
+[0] GET /api/support/tickets 304 - - 1.821 ms
+[0] GET /api/support/tickets 304 - - 2.705 ms
+[0] GET /api/support/tickets 304 - - 1.824 ms
+[0] GET /api/support/tickets 304 - - 2.120 ms
+[0] GET /api/support/tickets 304 - - 1.961 ms
+[1] [2m21:44:49[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.tsx[22m
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 3.905 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 3.281 ms
+[0] GET /api/support/tickets 304 - - 2.406 ms
+[0] GET /api/notifications 304 - - 5.154 ms
+[0] GET /api/me 200 1323 - 4.501 ms
+[0] GET /api/support/tickets 304 - - 4.976 ms
+[0] GET /api/support/tickets 304 - - 5.998 ms
+[0] GET /api/me 200 1323 - 6.051 ms
+[0] GET /api/me 304 - - 4.292 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 2.948 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 3.490 ms
+[0] GET /api/support/tickets 304 - - 3.470 ms
+[0] GET /api/notifications 304 - - 14.810 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 3.739 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 7.275 ms
+[0] GET /api/support/tickets 304 - - 2.962 ms
+[0] GET /api/notifications 304 - - 2.522 ms
+[0] GET /api/support/tickets 304 - - 2.252 ms
+[1] [2m21:46:57[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
+[0] GET /api/support/tickets 304 - - 1.883 ms
+[0] GET /api/support/tickets 304 - - 3.058 ms
+[0] GET /api/me 200 1323 - 19.793 ms
+[0] GET /api/me 304 - - 16.314 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 6.008 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 3.976 ms
+[0] GET /api/support/tickets 304 - - 5.239 ms
+[0] GET /api/notifications 304 - - 4.821 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 6.879 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 4.931 ms
+[0] GET /api/support/tickets 304 - - 3.019 ms
+[0] GET /api/notifications 304 - - 1.769 ms
+[0] GET /api/admin/users 304 - - 2.374 ms
+[0] GET /api/notifications 304 - - 7.345 ms
+[0] GET /api/admin/users 304 - - 2.687 ms
+[0] GET /api/checklists/templates 304 - - 4.003 ms
+[0] GET /api/notifications 304 - - 10.258 ms
+[0] GET /api/checklists/templates 304 - - 3.411 ms
+[0] GET /api/admin/checklists/runs 304 - - 8.709 ms
+[0] GET /api/admin/checklists/runs 304 - - 2.274 ms
+[0] GET /api/inventory/templates 304 - - 4.216 ms
+[0] GET /api/products 304 - - 8.120 ms
+[0] GET /api/admin/inventory/runs 304 - - 6.380 ms
+[0] GET /api/inventory/templates?assignable=1 304 - - 19.964 ms
+[0] GET /api/admin/inventory/assignments?from=2026-06-07&to=2026-06-07 304 - - 2.473 ms
+[0] GET /api/notifications 304 - - 4.292 ms
+[0] GET /api/inventory/templates 304 - - 3.026 ms
+[0] GET /api/products 304 - - 3.103 ms
+[0] GET /api/admin/inventory/runs 304 - - 3.105 ms
+[0] GET /api/inventory/templates?assignable=1 304 - - 9.180 ms
+[0] GET /api/admin/inventory/assignments?from=2026-06-07&to=2026-06-07 304 - - 2.847 ms
+[0] GET /api/checklists/templates 304 - - 2.700 ms
+[0] GET /api/notifications 304 - - 7.083 ms
+[0] GET /api/checklists/templates 304 - - 6.574 ms
+[0] GET /api/admin/checklists/runs 304 - - 2.539 ms
+[0] GET /api/admin/checklists/runs 304 - - 1.885 ms
+[0] GET /api/inventory/templates 304 - - 2.510 ms
+[0] GET /api/products 304 - - 3.972 ms
+[0] GET /api/admin/inventory/runs 304 - - 1.931 ms
+[0] GET /api/inventory/templates?assignable=1 304 - - 7.856 ms
+[0] GET /api/admin/inventory/assignments?from=2026-06-07&to=2026-06-07 304 - - 5.322 ms
+[0] GET /api/notifications 304 - - 1.984 ms
+[0] GET /api/inventory/templates 304 - - 3.944 ms
+[0] GET /api/products 304 - - 6.633 ms
+[0] GET /api/admin/inventory/runs 304 - - 5.915 ms
+[0] GET /api/inventory/templates?assignable=1 304 - - 4.398 ms
+[0] GET /api/admin/inventory/assignments?from=2026-06-07&to=2026-06-07 304 - - 1.604 ms
+[0] GET /api/health 200 71 - 0.430 ms
+[0] GET /api/bookings/tables 200 2 - 2.230 ms
+[0] GET /api/bookings 200 2 - 2.063 ms
+[0] GET /api/notifications 304 - - 1.827 ms
+[0] GET /api/bookings/tables 304 - - 1.999 ms
+[0] GET /api/bookings 304 - - 2.658 ms
+[0] GET /api/tasks?manage=1 200 919 - 3.272 ms
+[0] GET /api/admin/users 304 - - 6.511 ms
+[0] GET /api/tech-requests?from=2026-06-07&to=2026-06-07 200 2 - 3.920 ms
+[0] GET /api/notifications 304 - - 3.670 ms
+[0] GET /api/tasks?manage=1 304 - - 2.965 ms
+[0] GET /api/admin/users 304 - - 8.512 ms
+[0] GET /api/tech-requests?from=2026-06-07&to=2026-06-07 304 - - 3.495 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 3.036 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 5.225 ms
+[0] GET /api/notifications 304 - - 4.510 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 3.548 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 6.825 ms
+[0] GET /api/tasks?manage=1 304 - - 3.578 ms
+[0] GET /api/admin/users 304 - - 6.653 ms
+[0] GET /api/tech-requests?from=2026-06-07&to=2026-06-07 304 - - 22.395 ms
+[0] GET /api/notifications 304 - - 6.096 ms
+[0] GET /api/tasks?manage=1 304 - - 2.600 ms
+[0] GET /api/admin/users 304 - - 4.181 ms
+[0] GET /api/tech-requests?from=2026-06-07&to=2026-06-07 304 - - 5.051 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 2.359 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 8.371 ms
+[0] GET /api/notifications 304 - - 3.760 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 3.149 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 5.472 ms
+[0] POST /api/auth/login 200 560 - 1.671 ms
+[0] GET /api/admin/overview 200 640 - 1.547 ms
+[0] GET /api/admin/loss-control?period=7d 200 1575 - 1.932 ms
+[0] Restarting 'index.js'
+[0] ✅ Resto Control MVP started on port 8090
+[0] Local API: http://localhost:8090
+[0] Trial days: 14
+[0] Super admin: admin
+[0] GET /api/support/tickets 304 - - 7.542 ms
+[0] GET /api/me 200 1323 - 18.440 ms
+[0] GET /api/me 304 - - 17.957 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 4.762 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 13.177 ms
+[0] GET /api/support/tickets 304 - - 3.087 ms
+[0] GET /api/notifications 304 - - 8.115 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 6.602 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 7.513 ms
+[0] GET /api/support/tickets 304 - - 3.353 ms
+[0] GET /api/notifications 304 - - 1.948 ms
+[0] GET /api/support/tickets 304 - - 1.649 ms
+[1] [2m21:49:15[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/App.tsx[22m
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 3.440 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 2.738 ms
+[0] GET /api/notifications 304 - - 1.598 ms
+[0] GET /api/support/tickets 304 - - 1.715 ms
+[0] GET /api/me 200 1323 - 4.597 ms
+[0] GET /api/me 200 1323 - 12.381 ms
+[0] GET /api/me 304 - - 5.966 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 3.018 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 4.413 ms
+[0] GET /api/support/tickets 304 - - 5.344 ms
+[0] GET /api/notifications 304 - - 7.865 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 9.608 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 2.815 ms
+[0] GET /api/support/tickets 304 - - 2.624 ms
+[0] GET /api/notifications 304 - - 2.790 ms
+[1] [2m21:49:38[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/src/styles.css[22m
+[0] GET /api/support/tickets 304 - - 1.998 ms
+[0] GET /api/health 200 71 - 0.624 ms
+[0] GET /api/support/tickets 304 - - 3.483 ms
+[0] GET /api/me 200 1323 - 15.820 ms
+[0] GET /api/me 304 - - 10.500 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 2.929 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 3.837 ms
+[0] GET /api/support/tickets 304 - - 3.972 ms
+[0] GET /api/notifications 304 - - 8.169 ms
+[0] GET /api/admin/overview?task_from=2026-06-07&task_to=2026-06-07 304 - - 2.882 ms
+[0] GET /api/admin/loss-control?period=7d 304 - - 10.735 ms
+[0] GET /api/support/tickets 304 - - 8.819 ms
+[0] GET /api/notifications 304 - - 2.202 ms
+[0] GET /api/support/tickets 304 - - 1.986 ms

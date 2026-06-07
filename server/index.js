@@ -4385,6 +4385,422 @@ app.post('/api/super/billing/invoices/:id/no-payment', auth, superOnly, runAsync
 }));
 
 
+// LOSS CONTROL
+const LOSS_PERIOD_DAYS = { today: 1, '7d': 7, '30d': 30 };
+const LOSS_TECH_OVERDUE_MS = 3 * 24 * 60 * 60 * 1000;
+const LOSS_SHIFT_OVERDUE_MS = 12 * 60 * 60 * 1000;
+const LOSS_SOURCE_LABELS = {
+  tasks: 'Задачи',
+  checklists: 'Чек-листы',
+  inventories: 'Инвентаризации',
+  tech_requests: 'Тех. обращения',
+  bookings: 'Брони',
+  shifts: 'Смены',
+  photo: 'Фото-подтверждения'
+};
+
+function normalizeLossPeriod(value) {
+  const key = String(value || '7d').toLowerCase();
+  return LOSS_PERIOD_DAYS[key] ? key : '7d';
+}
+
+function lossPeriodRange(period) {
+  const today = todayKey();
+  const days = LOSS_PERIOD_DAYS[period];
+  if (days === 1) {
+    const prev = addDaysToDateKey(today, -1);
+    return { period, from: today, to: today, prevFrom: prev, prevTo: prev, days };
+  }
+  const from = addDaysToDateKey(today, -(days - 1));
+  const prevTo = addDaysToDateKey(from, -1);
+  const prevFrom = addDaysToDateKey(prevTo, -(days - 1));
+  return { period, from, to: today, prevFrom, prevTo, days };
+}
+
+function inLossRange(dateKey, range) {
+  return isDateKey(String(dateKey || '')) && dateKey >= range.from && dateKey <= range.to;
+}
+
+function inPrevLossRange(dateKey, range) {
+  return isDateKey(String(dateKey || '')) && dateKey >= range.prevFrom && dateKey <= range.prevTo;
+}
+
+function buildLossEvents(restaurantId, range) {
+  const now = Date.now();
+  const events = [];
+  const staffUsers = sameRestaurant(db.users, restaurantId).filter(user => !user.is_super_admin && user.role !== 'owner' && user.active);
+  const activeChecklistTemplates = sameRestaurant(db.checklist_templates, restaurantId).filter(template => template.active);
+  const activeTasks = sameRestaurant(db.tasks, restaurantId).filter(task => task.active);
+  const taskById = new Map(activeTasks.map(task => [task.id, task]));
+  const userById = new Map(staffUsers.map(user => [user.id, user]));
+
+  sameRestaurant(db.task_assignments, restaurantId)
+    .filter(assignment => taskById.has(assignment.task_id))
+    .forEach(assignment => {
+      const task = taskById.get(assignment.task_id);
+      const refDate = isoDateKey(task.due_at || task.created_at);
+      const dueTime = task.due_at ? new Date(task.due_at).getTime() : null;
+      const overdue = !assignment.done && Number.isFinite(dueTime) && dueTime < now;
+      if (!assignment.done) {
+        if (!inLossRange(refDate, range)) return;
+        events.push({
+          date: refDate,
+          type: 'tasks',
+          sub_type: overdue ? 'overdue' : 'open',
+          user_id: assignment.user_id,
+          target_role: task.target_role,
+          target_department: task.target_department,
+          title: task.title,
+          overdue
+        });
+        if (task.require_photo) {
+          const photoClosedAt = null;
+          if (!photoClosedAt) {
+            events.push({
+              date: refDate,
+              type: 'photo',
+              sub_type: overdue ? 'overdue_photo' : 'pending_photo',
+              user_id: assignment.user_id,
+              target_role: task.target_role,
+              target_department: task.target_department,
+              title: task.title,
+              overdue
+            });
+          }
+        }
+      } else if (task.require_photo && !assignment.photo_url) {
+        const doneKey = isoDateKey(assignment.completed_at || task.due_at || task.created_at);
+        if (!inLossRange(doneKey, range)) return;
+        events.push({
+          date: doneKey,
+          type: 'photo',
+          sub_type: 'closed_without_photo',
+          user_id: assignment.user_id,
+          target_role: task.target_role,
+          target_department: task.target_department,
+          title: task.title
+        });
+      }
+    });
+
+  const checklistRuns = sameRestaurant(db.checklist_runs, restaurantId);
+  const completedByDay = new Map();
+  checklistRuns.filter(run => ['completed', 'done'].includes(run.status)).forEach(run => {
+    const key = isoDateKey(run.created_at);
+    if (!completedByDay.has(key)) completedByDay.set(key, new Set());
+    completedByDay.get(key).add(`${run.user_id}:${run.template_id}`);
+  });
+  for (let cursor = range.from; cursor <= range.to; cursor = addDaysToDateKey(cursor, 1)) {
+    const completed = completedByDay.get(cursor) || new Set();
+    staffUsers.forEach(user => {
+      activeChecklistTemplates.forEach(template => {
+        if (!checklistRoleMatchesUser(template.role, user.role)) return;
+        if (completed.has(`${user.id}:${template.id}`)) return;
+        events.push({
+          date: cursor,
+          type: 'checklists',
+          sub_type: cursor < todayKey() ? 'overdue' : 'not_done',
+          user_id: user.id,
+          target_role: user.role,
+          target_department: user.department,
+          title: template.title,
+          overdue: cursor < todayKey()
+        });
+      });
+    });
+  }
+
+  const activeInventoryTemplateIds = new Set(
+    sameRestaurant(db.inventory_templates, restaurantId).filter(template => template.active).map(template => template.id)
+  );
+  sameRestaurant(collection('inventory_assignments'), restaurantId)
+    .filter(assignment => assignment.status !== 'cancelled')
+    .filter(assignment => activeInventoryTemplateIds.has(assignment.template_id))
+    .forEach(assignment => {
+      if (!inLossRange(assignment.due_date, range)) return;
+      if (assignment.status === 'completed') return;
+      const template = db.inventory_templates.find(item => item.id === assignment.template_id);
+      events.push({
+        date: assignment.due_date,
+        type: 'inventories',
+        sub_type: assignment.due_date < todayKey() ? 'overdue' : 'open',
+        target_department: assignment.department,
+        title: template?.title || 'Инвентаризация',
+        overdue: assignment.due_date < todayKey()
+      });
+    });
+
+  sameRestaurant(db.tech_requests, restaurantId).forEach(request => {
+    if (['done', 'cancelled'].includes(request.status)) return;
+    const createdMs = new Date(request.created_at).getTime();
+    const createdKey = isoDateKey(request.created_at);
+    const overdue = Number.isFinite(createdMs) && (now - createdMs) > LOSS_TECH_OVERDUE_MS;
+    if (!inLossRange(createdKey, range)) return;
+    events.push({
+      date: createdKey,
+      type: 'tech_requests',
+      sub_type: overdue ? 'overdue' : 'open',
+      title: request.title,
+      category: request.category || 'other',
+      overdue
+    });
+  });
+
+  sameRestaurant(db.table_reservations, restaurantId).forEach(reservation => {
+    if (!['booked', 'seated'].includes(reservation.status)) return;
+    const reservedKey = isoDateKey(reservation.reserved_for);
+    if (!inLossRange(reservedKey, range)) return;
+    const reservedMs = new Date(reservation.reserved_for).getTime();
+    const stale = Number.isFinite(reservedMs) && reservation.status === 'seated' && (now - reservedMs) > LOSS_SHIFT_OVERDUE_MS;
+    events.push({
+      date: reservedKey,
+      type: 'bookings',
+      sub_type: stale ? 'overdue' : reservation.status,
+      title: `${reservation.guests_count || 0} гостей`,
+      overdue: stale
+    });
+  });
+
+  sameRestaurant(collection('shifts'), restaurantId).forEach(shift => {
+    if (shift.status !== 'open') return;
+    const openKey = isoDateKey(shift.opened_at);
+    if (!inLossRange(openKey, range)) return;
+    const openedMs = new Date(shift.opened_at).getTime();
+    const overdue = Number.isFinite(openedMs) && (now - openedMs) > LOSS_SHIFT_OVERDUE_MS;
+    const user = userById.get(shift.user_id);
+    events.push({
+      date: openKey,
+      type: 'shifts',
+      sub_type: overdue ? 'overdue' : 'open',
+      user_id: shift.user_id,
+      target_role: shift.role || user?.role,
+      target_department: shift.department || user?.department,
+      title: `Смена ${shift.role || user?.role || 'сотрудника'}`,
+      overdue
+    });
+  });
+
+  return events;
+}
+
+function lossDepartmentKey(event) {
+  return event.target_department || '';
+}
+
+function lossDepartmentLabel(key) {
+  if (!key) return '';
+  return departments[key] || key;
+}
+
+const LOSS_ROLE_LABELS = {
+  owner: 'Владелец',
+  manager: 'Менеджер',
+  senior_waiter: 'Старший официант',
+  senior_bartender: 'Старший бармен',
+  senior_cook: 'Старший повар',
+  hostess: 'Хостес',
+  waiter: 'Официант',
+  bartender: 'Бармен',
+  cook: 'Повар',
+  cleaning: 'Клининг'
+};
+
+function lossRoleLabel(role) {
+  return LOSS_ROLE_LABELS[role] || role || '';
+}
+
+function lossScopeKey(event) {
+  if (event.user_id) return `user:${event.user_id}`;
+  if (event.target_role) return `role:${event.target_role}`;
+  if (event.target_department) return `dept:${event.target_department}`;
+  if (event.category) return `cat:${event.category}`;
+  if (event.type === 'checklists' && event.title) return `tpl:${event.title}`;
+  if (event.type === 'tasks' && event.title) return `task:${event.title}`;
+  if (event.type === 'tech_requests' && event.category) return `techcat:${event.category}`;
+  return `type:${event.type}`;
+}
+
+function lossScopeLabel(event, userById) {
+  if (event.user_id) {
+    const user = userById ? userById.get(event.user_id) : null;
+    if (user) return user.name;
+  }
+  if (event.target_department) return lossDepartmentLabel(event.target_department);
+  if (event.target_role) return lossRoleLabel(event.target_role);
+  if (event.category) return event.category;
+  if (event.title) return event.title;
+  return event.type;
+}
+
+function aggregateLoss(restaurantId, range, events) {
+  const sources = { tasks: 0, checklists: 0, inventories: 0, tech_requests: 0, bookings: 0, shifts: 0, photo: 0 };
+  let overdue = 0;
+  const recurringGroups = new Map();
+  const departmentCounts = new Map();
+  const userById = new Map(sameRestaurant(db.users, restaurantId).map(user => [user.id, user]));
+
+  events.forEach(event => {
+    if (sources[event.type] === undefined) return;
+    sources[event.type] += 1;
+    if (event.overdue) overdue += 1;
+
+    const scope = lossScopeKey(event);
+    const typeKey = `${event.type}::${scope}`;
+    recurringGroups.set(typeKey, (recurringGroups.get(typeKey) || 0) + 1);
+
+    const dept = lossDepartmentKey(event);
+    const deptKey = dept || `__${event.type}`;
+    departmentCounts.set(deptKey, (departmentCounts.get(deptKey) || 0) + 1);
+  });
+
+  const totalPotential = sources.tasks + sources.checklists + sources.inventories + sources.tech_requests + sources.bookings + sources.shifts + sources.photo;
+  const recurringCount = Array.from(recurringGroups.values()).filter(count => count >= 3).length;
+
+  const trendKeys = [];
+  for (let cursor = range.from; cursor <= range.to; cursor = addDaysToDateKey(cursor, 1)) trendKeys.push(cursor);
+  const trendBuckets = new Map(trendKeys.map(key => [key, { date: key, tasks: 0, checklists: 0, inventories: 0, tech_requests: 0, bookings: 0, shifts: 0, photo: 0 }]));
+  events.forEach(event => {
+    const bucket = trendBuckets.get(event.date);
+    if (!bucket) return;
+    if (bucket[event.type] === undefined) return;
+    bucket[event.type] += 1;
+  });
+
+  const sourcesByType = [
+    { type: 'tasks', label: LOSS_SOURCE_LABELS.tasks, value: sources.tasks },
+    { type: 'checklists', label: LOSS_SOURCE_LABELS.checklists, value: sources.checklists },
+    { type: 'inventories', label: LOSS_SOURCE_LABELS.inventories, value: sources.inventories },
+    { type: 'tech_requests', label: LOSS_SOURCE_LABELS.tech_requests, value: sources.tech_requests },
+    { type: 'bookings', label: LOSS_SOURCE_LABELS.bookings, value: sources.bookings },
+    { type: 'shifts', label: LOSS_SOURCE_LABELS.shifts, value: sources.shifts },
+    { type: 'photo', label: LOSS_SOURCE_LABELS.photo, value: sources.photo }
+  ];
+
+  const departmentViolations = Array.from(departmentCounts.entries())
+    .map(([key, value]) => ({
+      key,
+      label: key.startsWith('__') ? (LOSS_SOURCE_LABELS[key.replace('__', '')] || key.replace('__', '')) : lossDepartmentLabel(key),
+      fallback: key.startsWith('__') ? key.replace('__', '') : '',
+      value
+    }))
+    .filter(item => item.value > 0)
+    .sort((a, b) => b.value - a.value);
+
+  const attentionNow = events
+    .filter(event => event.overdue || ['open', 'not_done', 'booked', 'seated'].includes(event.sub_type))
+    .map(event => {
+      const user = event.user_id ? userById.get(event.user_id) : null;
+      return {
+        type: event.type,
+        sub_type: event.sub_type,
+        title: event.title,
+        assignee_name: user ? user.name : '',
+        department: event.target_department ? lossDepartmentLabel(event.target_department) : '',
+        date: event.date,
+        status: event.overdue ? 'Просрочено' : (event.sub_type === 'not_done' ? 'Не выполнено' : event.sub_type === 'closed_without_photo' ? 'Без фото' : 'Открыто'),
+        overdue: Boolean(event.overdue)
+      };
+    })
+    .sort((a, b) => Number(b.overdue) - Number(a.overdue) || String(b.date).localeCompare(String(a.date)))
+    .slice(0, 20);
+
+  const recurringItems = Array.from(recurringGroups.entries())
+    .filter(([key, count]) => count >= 3)
+    .map(([key, count]) => {
+      const [type, scope] = key.split('::');
+      const sample = events.find(event => `${event.type}::${lossScopeKey(event)}` === key);
+      const user = sample?.user_id ? userById.get(sample.user_id) : null;
+      const lastEvent = events.filter(event => `${event.type}::${lossScopeKey(event)}` === key).sort((a, b) => String(b.date).localeCompare(String(a.date)))[0];
+      return {
+        type,
+        scope,
+        scope_label: user ? user.name : (sample?.target_department ? lossDepartmentLabel(sample.target_department) : (sample?.target_role ? (roles[sample.target_role] || sample.target_role) : (sample?.title || type))),
+        count,
+        last_at: lastEvent?.date || null
+      };
+    })
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
+
+  return { sources, totalPotential, overdue, recurringCount, trend: Array.from(trendBuckets.values()), sourcesByType, departmentViolations, attentionNow, recurringItems };
+}
+
+function lossPhotoMetrics(restaurantId, range) {
+  const activeTasks = sameRestaurant(db.tasks, restaurantId).filter(task => task.active && task.require_photo);
+  const taskById = new Map(activeTasks.map(task => [task.id, task]));
+  const closed = { total: 0, with_photo: 0 };
+  const closedPrev = { total: 0, with_photo: 0 };
+  sameRestaurant(db.task_assignments, restaurantId)
+    .filter(assignment => taskById.has(assignment.task_id))
+    .forEach(assignment => {
+      const task = taskById.get(assignment.task_id);
+      const refKey = isoDateKey(assignment.completed_at || task.due_at || task.created_at);
+      if (inLossRange(refKey, range)) {
+        closed.total += 1;
+        if (assignment.done && assignment.photo_url) closed.with_photo += 1;
+      } else if (inPrevLossRange(refKey, range)) {
+        closedPrev.total += 1;
+        if (assignment.done && assignment.photo_url) closedPrev.with_photo += 1;
+      }
+    });
+  return { closed, closedPrev };
+}
+
+function buildLossControlPayload(restaurantId, period) {
+  const range = lossPeriodRange(period);
+  const currentEvents = buildLossEvents(restaurantId, range);
+  const prevEvents = buildLossEvents(restaurantId, { ...range, from: range.prevFrom, to: range.prevTo });
+  const current = aggregateLoss(restaurantId, range, currentEvents);
+  const prev = aggregateLoss(restaurantId, range, prevEvents);
+  const photo = lossPhotoMetrics(restaurantId, range);
+  const photoRate = (total) => total > 0 ? Math.round((total.with_photo / total) * 1000) / 10 : null;
+  const currentRate = photoRate(photo.closed);
+  const prevRate = photoRate(photo.closedPrev);
+
+  const compareField = (label, type) => {
+    const before = prev.sources[type] || 0;
+    const after = current.sources[type] || 0;
+    return { label, type, before, after, change: after - before };
+  };
+  const improvements = [
+    compareField('Просроченных задач', 'tasks'),
+    compareField('Невыполненных чек-листов', 'checklists'),
+    compareField('Несданных инвентаризаций', 'inventories'),
+    compareField('Открытых тех. обращений', 'tech_requests'),
+    compareField('Задач без фото', 'photo'),
+    compareField('Броней, требующих действия', 'bookings'),
+    compareField('Открытых смен', 'shifts')
+  ].filter(item => item.before > item.after);
+
+  const photoChange = currentRate === null || prevRate === null ? null : Math.round((currentRate - prevRate) * 10) / 10;
+  if (currentRate !== null && prevRate !== null && currentRate > prevRate) {
+    improvements.push({ label: 'Фото-подтверждение, %', type: 'photo_rate', before: prevRate ?? 0, after: currentRate, change: photoChange ?? 0 });
+  }
+
+  return {
+    period,
+    range: { from: range.from, to: range.to, prev_from: range.prevFrom, prev_to: range.prevTo },
+    summary: {
+      potential_loss_sources: current.totalPotential,
+      overdue_processes: current.overdue,
+      recurring_violations: current.recurringCount,
+      photo_confirmation_rate: currentRate
+    },
+    trend: current.trend,
+    sources_by_type: current.sourcesByType,
+    department_violations: current.departmentViolations,
+    attention_now: current.attentionNow,
+    recurring_items: current.recurringItems,
+    improvements
+  };
+}
+
+app.get('/api/admin/loss-control', auth, ensureRestaurantActive, adminOnly, (req, res) => {
+  const rid = req.user.is_super_admin ? req.query.restaurant_id : req.user.restaurant_id;
+  const period = normalizeLossPeriod(req.query.period);
+  res.json(buildLossControlPayload(rid, period));
+});
+
 app.use((error, req, res, next) => {
   console.error(error);
   if (res.headersSent) return next(error);

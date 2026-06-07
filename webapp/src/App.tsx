@@ -59,6 +59,7 @@ import {
 
 type View = 'login' | 'register';
 type Tab = string;
+type LossPeriod = 'today' | '7d' | '30d';
 type WorkspaceModalKind = 'notifications' | 'support' | 'billing' | 'restaurant' | null;
 type MobileSheetKind = 'menu' | 'create' | 'profile' | null;
 type MobileWorkspaceConfig = {
@@ -78,6 +79,22 @@ type MobileWorkspaceConfig = {
 };
 
 type AdminOverviewPanelKey = 'employees' | 'shifts' | 'checklists' | 'tasks' | 'problems' | 'documents' | 'inventory';
+
+const lossPeriodOptions: Array<{ value: LossPeriod; label: string }> = [
+  { value: 'today', label: 'Сегодня' },
+  { value: '7d', label: '7 дней' },
+  { value: '30d', label: '30 дней' }
+];
+
+const lossTypeLabels: Record<string, string> = {
+  tasks: 'Задачи',
+  checklists: 'Чек-листы',
+  inventories: 'Инвентаризации',
+  tech_requests: 'Тех. обращения',
+  bookings: 'Брони',
+  shifts: 'Смены',
+  photo: 'Фото-подтверждения'
+};
 
 
 function inputDateKey(value?: string | Date) {
@@ -1819,9 +1836,12 @@ function SubscriptionBanner({ restaurant, openBilling }: any) {
   return <TrialBanner headline={headline} subline={subline} onAction={openBilling} />;
 }
 
-function AdminOverview({ user, mode = 'owner' }: { user: any; mode?: 'owner' | 'manager'; onNavigate?: (tab: string) => void }) {
+function AdminOverview({ user, mode = 'owner', onNavigate }: { user: any; mode?: 'owner' | 'manager'; onNavigate?: (tab: string) => void }) {
   const today = inputDateKey();
   const [data, setData] = useState<any>(null);
+  const [lossData, setLossData] = useState<any>(null);
+  const [lossPeriod, setLossPeriod] = useState<LossPeriod>('7d');
+  const [lossLoading, setLossLoading] = useState(false);
   const [activePanel, setActivePanel] = useState<AdminOverviewPanelKey>('employees');
   const [taskRange, setTaskRange] = useState({ from: today, to: today });
   const [updatingProblemId, setUpdatingProblemId] = useState('');
@@ -1832,9 +1852,19 @@ function AdminOverview({ user, mode = 'owner' }: { user: any; mode?: 'owner' | '
     const query = new URLSearchParams({ task_from: taskRange.from, task_to: taskRange.to });
     return api(`/api/admin/overview?${query.toString()}`).then(setData);
   }
+  function loadLossControl(period: LossPeriod) {
+    setLossLoading(true);
+    return api(`/api/admin/loss-control?period=${period}`)
+      .then(setLossData)
+      .catch(() => setLossData(null))
+      .finally(() => setLossLoading(false));
+  }
   useEffect(() => {
     loadOverview().catch(() => setData(null));
   }, [taskRange.from, taskRange.to]);
+  useEffect(() => {
+    loadLossControl(lossPeriod);
+  }, [lossPeriod]);
   async function updateOverviewProblemStatus(problem: any, status: string) {
     if (!problem?.id || status === problem.status) return;
     setOverviewMsg('');
@@ -1909,7 +1939,162 @@ function AdminOverview({ user, mode = 'owner' }: { user: any; mode?: 'owner' | '
 
     {overviewMsg && <div className={overviewMsgKind}>{overviewMsg}</div>}
     <AdminOverviewDetailPanel activePanel={activePanel} user={user} employees={employees} rows={employeeMetrics} shifts={openShiftsToday} taskRange={taskRange} onTaskRangeChange={setTaskRange} taskForm={taskForm} onTaskFormChange={setTaskForm} onTaskCreate={createOverviewTask} problems={problemSummary.details || []} updatingProblemId={updatingProblemId} onProblemStatusChange={updateOverviewProblemStatus} inventoryAssignments={data.inventory_assignments_today || []} />
+    <LossControlBlock data={lossData} period={lossPeriod} loading={lossLoading} onPeriodChange={setLossPeriod} />
   </>;
+}
+
+function safeArray(value: any) {
+  return Array.isArray(value) ? value : [];
+}
+
+function LossControlBlock({ data, period, loading, onPeriodChange }: { data: any; period: LossPeriod; loading: boolean; onPeriodChange: (period: LossPeriod) => void }) {
+  const summary = data?.summary || {};
+  const trend = safeArray(data?.trend);
+  const sources = safeArray(data?.sources_by_type);
+  const departmentsList = safeArray(data?.department_violations);
+  const attention = safeArray(data?.attention_now);
+  const recurring = safeArray(data?.recurring_items);
+  const improvements = safeArray(data?.improvements);
+  const photoRate = summary.photo_confirmation_rate;
+
+  return <section className="lossControlPanel">
+    <div className="overviewPanelHead lossControlHead">
+      <div>
+        <h3>Контроль потерь</h3>
+        <p>Показываем процессы, которые не выполнены вовремя: задачи, чек-листы, инвентаризации, тех. обращения, брони, смены и фото-подтверждения.</p>
+      </div>
+      <div className="lossPeriodTools" role="group" aria-label="Период контроля потерь">
+        {lossPeriodOptions.map(option => <button type="button" className={cx('lossPeriodButton', period === option.value && 'active')} aria-pressed={period === option.value} onClick={() => onPeriodChange(option.value)} key={option.value}>{option.label}</button>)}
+      </div>
+    </div>
+
+    {loading && !data ? <Empty text="Загружаем контроль потерь…" /> : <>
+      <div className="lossMetricGrid">
+        <LossMetricCard title="Источники возможных потерь" value={summary.potential_loss_sources ?? 0} caption="Процессы, которые не выполнены вовремя" tone="primary" />
+        <LossMetricCard title="Просроченные процессы" value={summary.overdue_processes ?? 0} caption="То, что не закрыто в срок" tone="danger" />
+        <LossMetricCard title="Повторяющиеся нарушения" value={summary.recurring_violations ?? 0} caption="Проблемы, которые повторяются несколько раз" tone="warning" />
+        <LossMetricCard title="Фото-подтверждение" value={photoRate === null || photoRate === undefined ? 'Нет задач с обязательным фото' : `${photoRate}%`} caption="Задачи, закрытые с доказательством выполнения" compact={photoRate === null || photoRate === undefined} tone="success" />
+      </div>
+
+      <div className="lossChartsGrid">
+        <LossLineChart title="Динамика источников возможных потерь" description="Сколько процессов не было выполнено вовремя по дням" rows={trend} />
+        <LossBarChart title="Источники по типам процессов" description="Какие процессы чаще всего требуют внимания" rows={sources} empty="Нет проблем по типам процессов" />
+        <LossBarChart title="Нарушения по подразделениям" description="Где чаще всего появляются невыполненные процессы" rows={departmentsList} empty="Нет данных по подразделениям" />
+      </div>
+
+      <div className="lossListsGrid">
+        <LossList title="Что требует внимания сейчас" empty="Актуальных проблем за период нет">
+          {attention.slice(0, 8).map((item: any, index: number) => <LossAttentionRow item={item} key={`${item.type}-${item.date}-${index}`} />)}
+        </LossList>
+        <LossList title="Повторяющиеся нарушения" empty="Повторяющихся нарушений за период нет">
+          {recurring.slice(0, 8).map((item: any, index: number) => <LossRecurringRow item={item} key={`${item.type}-${item.scope}-${index}`} />)}
+        </LossList>
+        <LossList title="Что улучшилось" empty="Пока недостаточно данных для сравнения. Динамика появится после накопления истории.">
+          {improvements.slice(0, 8).map((item: any, index: number) => <LossImprovementRow item={item} key={`${item.type}-${index}`} />)}
+        </LossList>
+      </div>
+    </>}
+  </section>;
+}
+
+function LossMetricCard({ title, value, caption, compact, tone }: { title: string; value: ReactNode; caption: string; compact?: boolean; tone: 'primary' | 'danger' | 'warning' | 'success' }) {
+  return <article className={cx('lossMetricCard', `tone-${tone}`)}>
+    <div className="lossMetricTop">
+      <span>{title}</span>
+      <em aria-hidden="true">↗</em>
+    </div>
+    <strong className={cx('lossMetricValue', compact && 'compact')}>{value}</strong>
+    <p>{caption}</p>
+  </article>;
+}
+
+function LossChartShell({ title, description, children }: { title: string; description: string; children: ReactNode }) {
+  return <article className="lossChartCard">
+    <div className="lossChartHead">
+      <strong>{title}</strong>
+      <span>{description}</span>
+    </div>
+    {children}
+  </article>;
+}
+
+function LossLineChart({ title, description, rows }: { title: string; description: string; rows: any[] }) {
+  const totals = rows.map(row => ({
+    date: row.date,
+    total: ['tasks', 'checklists', 'inventories', 'tech_requests', 'bookings', 'shifts', 'photo'].reduce((sum, key) => sum + Number(row[key] || 0), 0)
+  }));
+  const max = Math.max(1, ...totals.map(row => row.total));
+  const width = 320;
+  const height = 118;
+  const pad = 12;
+  const points = totals.map((row, index) => {
+    const x = totals.length <= 1 ? width / 2 : pad + (index * (width - pad * 2)) / (totals.length - 1);
+    const y = height - pad - (row.total / max) * (height - pad * 2);
+    return `${x},${y}`;
+  }).join(' ');
+  const last = totals[totals.length - 1];
+
+  return <LossChartShell title={title} description={description}>
+    {totals.length ? <div className="lossLineChart">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={title}>
+        <path d={`M ${pad} ${height - pad} H ${width - pad}`} />
+        <path d={`M ${pad} ${pad} V ${height - pad}`} />
+        <polyline points={points} />
+        {totals.map((row, index) => {
+          const x = totals.length <= 1 ? width / 2 : pad + (index * (width - pad * 2)) / (totals.length - 1);
+          const y = height - pad - (row.total / max) * (height - pad * 2);
+          return <circle cx={x} cy={y} r="3" key={`${row.date}-${index}`} />;
+        })}
+      </svg>
+      <div className="lossChartFoot"><span>{totals[0]?.date}</span><b>{last?.total || 0}</b><span>{last?.date}</span></div>
+    </div> : <Empty text="Нет данных для динамики" />}
+  </LossChartShell>;
+}
+
+function LossBarChart({ title, description, rows, empty }: { title: string; description: string; rows: any[]; empty: string }) {
+  const visibleRows = rows.filter(row => Number(row.value || 0) > 0).slice(0, 7);
+  const max = Math.max(1, ...visibleRows.map(row => Number(row.value || 0)));
+  return <LossChartShell title={title} description={description}>
+    {visibleRows.length ? <div className="lossBarList">
+      {visibleRows.map(row => <div className="lossBarRow" key={row.type || row.key || row.label}>
+        <span>{row.label || lossTypeLabels[row.type] || row.type || 'Процесс'}</span>
+        <div><i style={{ width: `${Math.max(6, (Number(row.value || 0) / max) * 100)}%` }} /></div>
+        <b>{row.value}</b>
+      </div>)}
+    </div> : <Empty text={empty} />}
+  </LossChartShell>;
+}
+
+function LossList({ title, empty, children }: { title: string; empty: string; children: ReactNode }) {
+  const hasChildren = Array.isArray(children) ? children.length > 0 : Boolean(children);
+  return <details className="compactAccordion lossListPanel" open>
+    <summary className="compactAccordionSummary"><span>{title}</span></summary>
+    <div className="compactAccordionBody lossListBody">
+      {hasChildren ? children : <Empty text={empty} />}
+    </div>
+  </details>;
+}
+
+function LossAttentionRow({ item }: { item: any }) {
+  return <article className="lossListRow">
+    <div><strong>{lossTypeLabels[item.type] || item.type || 'Процесс'} · {item.title || 'Без названия'}</strong><span>{[item.assignee_name, item.department, item.date ? fmtDate(item.date) : ''].filter(Boolean).join(' · ')}</span></div>
+    <em className={cx('badge', item.overdue ? 'cancelled' : 'warning')}>{item.status || (item.overdue ? 'Просрочено' : 'Открыто')}</em>
+  </article>;
+}
+
+function LossRecurringRow({ item }: { item: any }) {
+  return <article className="lossListRow">
+    <div><strong>{lossTypeLabels[item.type] || item.type || 'Процесс'} · {item.scope_label || 'Повтор'}</strong><span>Последний случай: {item.last_at ? fmtDate(item.last_at) : 'дата не указана'}</span></div>
+    <b>{item.count}</b>
+  </article>;
+}
+
+function LossImprovementRow({ item }: { item: any }) {
+  const improvedBy = Math.abs(Number(item.change || 0));
+  return <article className="lossListRow">
+    <div><strong>{item.label}</strong><span>{item.before} → {item.after}</span></div>
+    <em className="badge active">{item.type === 'photo_rate' ? `+${improvedBy}%` : `-${improvedBy}`}</em>
+  </article>;
 }
 
 function AdminOverviewDetailPanel({ activePanel, user, employees, rows, shifts, taskRange, onTaskRangeChange, taskForm, onTaskFormChange, onTaskCreate, problems, updatingProblemId, onProblemStatusChange, inventoryAssignments }: { activePanel: AdminOverviewPanelKey; user: any; employees: any[]; rows: any[]; shifts: any[]; taskRange: any; onTaskRangeChange: (range: any) => void; taskForm: any; onTaskFormChange: (next: any) => void; onTaskCreate: (e: FormEvent) => void; problems: any[]; updatingProblemId: string; onProblemStatusChange: (problem: any, status: string) => void; inventoryAssignments: any[] }) {
