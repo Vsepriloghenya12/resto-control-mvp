@@ -60,6 +60,7 @@ import {
 type View = 'login' | 'register';
 type Tab = string;
 type LossPeriod = 'today' | '7d' | '30d';
+type LossMetricKey = 'sources' | 'overdue' | 'recurring' | 'photo';
 type WorkspaceModalKind = 'notifications' | 'support' | 'billing' | 'restaurant' | null;
 type MobileSheetKind = 'menu' | 'create' | 'profile' | null;
 type MobileWorkspaceConfig = {
@@ -1948,6 +1949,7 @@ function safeArray(value: any) {
 }
 
 function LossControlBlock({ data, period, loading, onPeriodChange }: { data: any; period: LossPeriod; loading: boolean; onPeriodChange: (period: LossPeriod) => void }) {
+  const [activeMetric, setActiveMetric] = useState<LossMetricKey>('sources');
   const summary = data?.summary || {};
   const trend = safeArray(data?.trend);
   const sources = safeArray(data?.sources_by_type);
@@ -1956,6 +1958,24 @@ function LossControlBlock({ data, period, loading, onPeriodChange }: { data: any
   const recurring = safeArray(data?.recurring_items);
   const improvements = safeArray(data?.improvements);
   const photoRate = summary.photo_confirmation_rate;
+  const metricItems = {
+    sources: attention,
+    overdue: attention.filter((item: any) => item.overdue),
+    recurring,
+    photo: attention.filter((item: any) => item.type === 'photo')
+  };
+  const activeMetricTitle = {
+    sources: 'Источники возможных потерь',
+    overdue: 'Просроченные процессы',
+    recurring: 'Повторяющиеся нарушения',
+    photo: 'Фото-подтверждение'
+  }[activeMetric];
+  const activeMetricEmpty = {
+    sources: 'Процессов, требующих внимания, за период нет',
+    overdue: 'Просроченных процессов за период нет',
+    recurring: 'Повторяющихся нарушений за период нет',
+    photo: 'Нет задач с обязательным фото без подтверждения за период'
+  }[activeMetric];
 
   return <section className="lossControlPanel">
     <div className="overviewPanelHead lossControlHead">
@@ -1970,11 +1990,13 @@ function LossControlBlock({ data, period, loading, onPeriodChange }: { data: any
 
     {loading && !data ? <Empty text="Загружаем контроль потерь…" /> : <>
       <div className="lossMetricGrid">
-        <LossMetricCard title="Источники возможных потерь" value={summary.potential_loss_sources ?? 0} caption="Процессы, которые не выполнены вовремя" tone="primary" />
-        <LossMetricCard title="Просроченные процессы" value={summary.overdue_processes ?? 0} caption="То, что не закрыто в срок" tone="danger" />
-        <LossMetricCard title="Повторяющиеся нарушения" value={summary.recurring_violations ?? 0} caption="Проблемы, которые повторяются несколько раз" tone="warning" />
-        <LossMetricCard title="Фото-подтверждение" value={photoRate === null || photoRate === undefined ? 'Нет задач с обязательным фото' : `${photoRate}%`} caption="Задачи, закрытые с доказательством выполнения" compact={photoRate === null || photoRate === undefined} tone="success" />
+        <LossMetricCard title="Источники возможных потерь" value={summary.potential_loss_sources ?? 0} caption="Процессы, которые не выполнены вовремя" tone="primary" active={activeMetric === 'sources'} onClick={() => setActiveMetric('sources')} />
+        <LossMetricCard title="Просроченные процессы" value={summary.overdue_processes ?? 0} caption="То, что не закрыто в срок" tone="danger" active={activeMetric === 'overdue'} onClick={() => setActiveMetric('overdue')} />
+        <LossMetricCard title="Повторяющиеся нарушения" value={summary.recurring_violations ?? 0} caption="Проблемы, которые повторяются несколько раз" tone="warning" active={activeMetric === 'recurring'} onClick={() => setActiveMetric('recurring')} />
+        <LossMetricCard title="Фото-подтверждение" value={photoRate === null || photoRate === undefined ? 'Нет задач с обязательным фото' : `${photoRate}%`} caption="Задачи, закрытые с доказательством выполнения" compact={photoRate === null || photoRate === undefined} tone="success" active={activeMetric === 'photo'} onClick={() => setActiveMetric('photo')} />
       </div>
+
+      <LossMetricDetails title={activeMetricTitle} metric={activeMetric} items={metricItems[activeMetric]} empty={activeMetricEmpty} />
 
       <div className="lossChartsGrid">
         <LossLineChart title="Динамика источников возможных потерь" description="Сколько процессов не было выполнено вовремя по дням" rows={trend} />
@@ -1997,15 +2019,32 @@ function LossControlBlock({ data, period, loading, onPeriodChange }: { data: any
   </section>;
 }
 
-function LossMetricCard({ title, value, caption, compact, tone }: { title: string; value: ReactNode; caption: string; compact?: boolean; tone: 'primary' | 'danger' | 'warning' | 'success' }) {
-  return <article className={cx('lossMetricCard', `tone-${tone}`)}>
+function LossMetricCard({ title, value, caption, compact, tone, active, onClick }: { title: string; value: ReactNode; caption: string; compact?: boolean; tone: 'primary' | 'danger' | 'warning' | 'success'; active?: boolean; onClick: () => void }) {
+  return <button type="button" className={cx('lossMetricCard', `tone-${tone}`, active && 'active')} aria-pressed={Boolean(active)} onClick={onClick}>
     <div className="lossMetricTop">
       <span>{title}</span>
       <em aria-hidden="true">↗</em>
     </div>
     <strong className={cx('lossMetricValue', compact && 'compact')}>{value}</strong>
     <p>{caption}</p>
-  </article>;
+  </button>;
+}
+
+function LossMetricDetails({ title, metric, items, empty }: { title: string; metric: LossMetricKey; items: any[]; empty: string }) {
+  const visibleItems = safeArray(items).slice(0, 10);
+  return <section className="lossMetricDetails">
+    <div className="lossMetricDetailsHead">
+      <strong>{title}</strong>
+      <span>{visibleItems.length}</span>
+    </div>
+    <div className="lossMetricDetailsBody">
+      {visibleItems.length ? visibleItems.map((item: any, index: number) => (
+        metric === 'recurring'
+          ? <LossRecurringRow item={item} key={`${item.type}-${item.scope}-${index}`} />
+          : <LossAttentionRow item={item} key={`${item.type}-${item.date}-${index}`} />
+      )) : <Empty text={empty} />}
+    </div>
+  </section>;
 }
 
 function LossChartShell({ title, description, children }: { title: string; description: string; children: ReactNode }) {
