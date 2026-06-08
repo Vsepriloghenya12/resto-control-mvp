@@ -69,5 +69,8 @@ export function Textarea({ label, icon, ...props }: any) {
 }
 
 export function Empty({ text }: { text: string }) {
-  return <div className="empty">{text}</div>;
+  return <div className="empty">
+    <span className="emptyIcon"><AppIcon name="spark" className="navIcon" /></span>
+    <strong>{text}</strong>
+  </div>;
 }

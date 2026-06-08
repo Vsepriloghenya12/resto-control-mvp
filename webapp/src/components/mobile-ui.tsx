@@ -132,6 +132,17 @@ export function BottomNavigation({
   items: MobileNavItem[];
   onCreate: () => void;
 }) {
+  if (items.length >= 5) {
+    return <nav className="bottomNavigation" aria-label="Основная навигация">
+      <div className="bottomNavigationRail fiveItems">
+        {items.slice(0, 5).map(item => <button key={item.id} type="button" className={cn('bottomNavItem', item.active && 'active')} onClick={item.onClick}>
+          <AppIcon name={item.icon} className="navIcon" />
+          <span>{item.title}</span>
+        </button>)}
+      </div>
+    </nav>;
+  }
+
   const leftItems = items.slice(0, 2);
   const rightItems = items.slice(2, 4);
 

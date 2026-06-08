@@ -2677,6 +2677,29 @@ input[type='checkbox'] {
   gap: 16px;
 }
 
+.modalHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.modalHead h2 {
+  margin: 0;
+}
+
+.modalHead p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .infoModalText {
   margin: 0;
   color: var(--text-secondary);
@@ -5389,7 +5412,8 @@ textarea {
   }
 
   .card.adminCreateCard {
-    background: color-mix(in oklch, var(--foreground) 38%, transparent);
+    background: var(--card);
+    border-color: var(--border);
   }
 
   .card:has(.list),
@@ -8446,170 +8470,12 @@ body {
   align-items: center;
 }
 
-.reportPage {
-  gap: 14px;
+.problemPeriodPicker {
+  display: flex;
+  align-items: end;
+  gap: 8px;
 }
 
-.reportPage .statsGrid {
-  grid-template-columns: repeat(auto-fit, minmax(158px, 1fr));
-  gap: 12px;
-  margin-bottom: 0;
-}
-
-.reportPage .statCard {
-  position: relative;
-  min-height: 118px;
-  align-content: space-between;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 10px;
-  background: color-mix(in oklch, var(--card) 88%, var(--background) 12%);
-  border-color: color-mix(in oklch, var(--border) 86%, var(--foreground) 14%);
-  box-shadow: none;
-}
-
-.reportPage .statCard:hover,
-.reportPage .statCard.active {
-  transform: none;
-  background: color-mix(in oklch, var(--card) 82%, var(--primary) 10%);
-  border-color: color-mix(in oklch, var(--primary) 46%, var(--border) 54%);
-}
-
-.reportPage .statBadge {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  background: color-mix(in oklch, var(--primary) 14%, transparent);
-}
-
-.reportPage .statCopy {
-  gap: 5px;
-}
-
-.reportPage .statLabel {
-  color: var(--text-secondary);
-  font-size: 0.78rem;
-  font-weight: 760;
-}
-
-.reportPage .statValue {
-  font-size: clamp(1.55rem, 2vw, 2rem);
-}
-
-.reportPage .statNumberSet,
-.reportPage .statNumberGroup {
-  gap: 6px;
-}
-
-.reportPage .overviewListPanel,
-.reportPage .employeeMetricsPlain,
-.reportPage .openShiftPanel {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.reportPage .overviewPanelHead {
-  align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid color-mix(in oklch, var(--border) 86%, transparent);
-}
-
-.reportPage .openShiftPanel h3,
-.reportPage .employeeMetricsPlain h3,
-.reportPage .overviewPanelHead h3 {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 0.98rem;
-  font-weight: 880;
-  line-height: 1.2;
-  text-align: left;
-}
-
-.reportPage .overviewPanelHead p {
-  color: var(--text-secondary);
-  font-size: 0.78rem;
-}
-
-.reportPage .employeeDetailColumns {
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 12px;
-}
-
-.reportPage .employeeDetailSection {
-  padding: 12px;
-  border-radius: 9px;
-  background: color-mix(in oklch, var(--card) 88%, var(--background) 12%);
-  border-color: color-mix(in oklch, var(--border) 78%, var(--foreground) 22%);
-}
-
-.reportPage .employeeDetailSectionHead {
-  margin-bottom: 9px;
-}
-
-.reportPage .employeeDetailSectionHead strong {
-  font-size: 0.82rem;
-}
-
-.reportPage .employeeDetailSectionHead span {
-  min-width: 24px;
-  height: 24px;
-  background: color-mix(in oklch, var(--foreground) 7%, transparent);
-}
-
-.reportPage .employeeDetailCard {
-  padding: 9px 0;
-  border-width: 1px 0 0;
-  border-radius: 0;
-  background: transparent;
-  border-color: color-mix(in oklch, var(--border) 74%, transparent);
-}
-
-.reportPage .employeeDetailCard:first-child {
-  padding-top: 0;
-  border-top: 0;
-}
-
-.reportPage .employeeDetailCardHead strong {
-  font-size: 0.82rem;
-}
-
-.reportPage .employeeDetailCard p,
-.reportPage .employeeDetailBullets li {
-  font-size: 0.74rem;
-}
-
-.reportPage .employeeMetricsList,
-.reportPage .openShiftList {
-  border: 1px solid color-mix(in oklch, var(--border) 76%, var(--foreground) 24%);
-  border-radius: 9px;
-  overflow: hidden;
-  background: color-mix(in oklch, var(--foreground) 3%, transparent);
-}
-
-.reportPage .employeeMetricsEntry,
-.reportPage .openShiftEntry {
-  border-color: color-mix(in oklch, var(--border) 76%, transparent);
-}
-
-.reportPage .employeeMetricsRow,
-.reportPage .openShiftRow {
-  min-height: 50px;
-  padding: 10px 12px;
-}
-
-.reportPage .overviewDateTools button,
-.reportPage .overviewDateTools input {
-  min-height: 32px;
-  border-radius: 8px;
-}
-
-.reportPage .badge {
-  border-radius: 8px;
-}
 
 .lossControlPanel {
   --surface: color-mix(in oklch, var(--muted) 78%, var(--card) 22%);
@@ -9447,5 +9313,1674 @@ body {
   .mobileChecklistPicker::-webkit-scrollbar,
   .mobileChecklistRail::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/* Desktop SaaS visual system for owner and manager workspaces */
+@media (min-width: 981px) {
+  body:has(.ownerDesktopWorkspace),
+  body:has(.managerWorkspace) {
+    background:
+      radial-gradient(circle at 85% 22%, rgba(34, 197, 94, 0.10), transparent 24%),
+      radial-gradient(circle at 18% 98%, rgba(124, 58, 237, 0.10), transparent 26%),
+      radial-gradient(circle at 0% 0%, rgba(11, 132, 255, 0.06), transparent 24%),
+      linear-gradient(180deg, #f7fafc 0%, #eef5fb 100%);
+  }
+
+  .ownerDesktopWorkspace,
+  .managerWorkspace {
+    --dash-text: #0f172a;
+    --dash-muted: #64748b;
+    --dash-border: rgba(148, 163, 184, 0.16);
+    --dash-border-strong: rgba(148, 163, 184, 0.24);
+    --dash-card: rgba(255, 255, 255, 0.95);
+    --dash-soft: rgba(248, 250, 252, 0.76);
+    --dash-blue: #0b84ff;
+    --dash-green: #22c55e;
+    --dash-purple: #7c3aed;
+    --dash-orange: #f59e0b;
+    --dash-red: #f43f5e;
+    --dash-shadow: 0 18px 50px rgba(15, 23, 42, 0.05);
+    --foreground: #0f172a;
+    --card: #ffffff;
+    --popover: #ffffff;
+    --muted: #f1f5f9;
+    --muted-foreground: #64748b;
+    --border: #e2e8f0;
+    --input: #e2e8f0;
+    --surface: rgba(248, 250, 252, 0.82);
+    --surface-soft: rgba(241, 245, 249, 0.72);
+    --surface-2: rgba(248, 250, 252, 0.92);
+    --bg-elevated: #ffffff;
+    --text: #0f172a;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+    --text-soft: #334155;
+    width: 100%;
+    max-width: none;
+    grid-template-columns: 264px minmax(0, 1fr);
+    gap: 26px;
+    margin: 0;
+    color: var(--dash-text);
+  }
+
+  .ownerDesktopWorkspace .workspaceMain,
+  .managerWorkspace .workspaceMain,
+  .ownerDesktopWorkspace .contentStack,
+  .managerWorkspace .contentStack {
+    min-width: 0;
+  }
+
+  .ownerDesktopWorkspace .dashboardSidebar,
+  .managerWorkspace .dashboardSidebar {
+    top: 24px;
+    min-height: calc(100vh - 48px);
+    padding: 22px 18px;
+    border: 0;
+    border-right: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .ownerDesktopWorkspace .sidebarBrand,
+  .managerWorkspace .sidebarBrand {
+    padding: 0 6px 22px;
+    border-bottom: 0;
+  }
+
+  .ownerDesktopWorkspace .sidebarLogo,
+  .managerWorkspace .sidebarLogo {
+    width: 176px;
+  }
+
+  .ownerDesktopWorkspace .sidebarNav,
+  .managerWorkspace .sidebarNav {
+    gap: 8px;
+  }
+
+  .ownerDesktopWorkspace .sidebarNavItem,
+  .managerWorkspace .sidebarNavItem {
+    min-height: 48px;
+    padding: 0 14px;
+    border: 1px solid transparent;
+    border-radius: 17px;
+    color: var(--dash-muted);
+    background: transparent;
+    box-shadow: none;
+    font-size: 14px;
+    font-weight: 650;
+    transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, transform 160ms ease;
+  }
+
+  .ownerDesktopWorkspace .sidebarNavItem:hover,
+  .managerWorkspace .sidebarNavItem:hover {
+    color: var(--dash-text);
+    background: rgba(255, 255, 255, 0.58);
+  }
+
+  .ownerDesktopWorkspace .sidebarNavItem.active,
+  .managerWorkspace .sidebarNavItem.active {
+    color: var(--dash-blue);
+    border-color: rgba(11, 132, 255, 0.22);
+    background: rgba(11, 132, 255, 0.10);
+    box-shadow: none;
+  }
+
+  .ownerDesktopWorkspace .sidebarPromo,
+  .managerWorkspace .sidebarPromo {
+    margin: 10px 0 0;
+    padding: 16px;
+    border: 1px solid var(--dash-border);
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.62);
+    box-shadow: none;
+  }
+
+  .ownerDesktopWorkspace .sidebarSupport,
+  .managerWorkspace .sidebarSupport {
+    min-height: 46px;
+    margin-top: auto;
+    border: 0;
+    border-radius: 16px;
+    color: var(--dash-muted);
+    background: rgba(255, 255, 255, 0.46);
+  }
+
+  .ownerDesktopWorkspace .desktopWorkspaceChrome,
+  .managerWorkspace .desktopWorkspaceChrome {
+    gap: 12px;
+  }
+
+  .ownerDesktopWorkspace .workspaceHeader,
+  .managerWorkspace .workspaceHeader {
+    min-height: 54px;
+    align-items: center;
+  }
+
+  .ownerDesktopWorkspace .workspaceGreeting h1,
+  .managerWorkspace .workspaceGreeting h1 {
+    margin: 0;
+    color: var(--dash-text);
+    font-size: 24px;
+    line-height: 32px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .ownerDesktopWorkspace .workspaceGreeting p,
+  .managerWorkspace .workspaceGreeting p,
+  .ownerDesktopWorkspace .workspaceSubline,
+  .managerWorkspace .workspaceSubline {
+    color: var(--dash-muted);
+    font-size: 14px;
+  }
+
+  .ownerDesktopWorkspace .workspaceActions,
+  .managerWorkspace .workspaceActions {
+    gap: 10px;
+  }
+
+  .ownerDesktopWorkspace .workspaceActions .btn,
+  .managerWorkspace .workspaceActions .btn,
+  .ownerDesktopWorkspace .iconGhost,
+  .managerWorkspace .iconGhost {
+    min-height: 44px;
+    border: 0;
+    border-radius: 17px;
+    color: var(--dash-text);
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+  }
+
+  .ownerDesktopWorkspace .workspaceActions .btn:hover,
+  .managerWorkspace .workspaceActions .btn:hover,
+  .ownerDesktopWorkspace .iconGhost:hover,
+  .managerWorkspace .iconGhost:hover {
+    background: #fff;
+    transform: translateY(-1px);
+  }
+
+  .ownerDesktopWorkspace .workspacePageContainer,
+  .managerWorkspace .workspacePageContainer {
+    gap: 22px;
+  }
+
+  .ownerDesktopWorkspace .contentStack,
+  .managerWorkspace .contentStack,
+  .adminOverviewDashboard,
+  .adminUsersDesktopPage {
+    display: grid;
+    gap: 22px;
+  }
+
+  .ownerDesktopWorkspace .trialBanner,
+  .managerWorkspace .trialBanner {
+    min-height: 86px;
+    padding: 20px 22px;
+    border: 1px solid rgba(11, 132, 255, 0.14);
+    border-radius: 24px;
+    background:
+      radial-gradient(circle at 88% 18%, rgba(34, 197, 94, 0.13), transparent 28%),
+      linear-gradient(90deg, rgba(11, 132, 255, 0.10), rgba(255, 255, 255, 0.90));
+    box-shadow: var(--dash-shadow);
+  }
+
+  .adminOverviewTitle {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px;
+  }
+
+  .adminOverviewTitle h2 {
+    margin: 0;
+    color: var(--dash-text);
+    font-size: 34px;
+    line-height: 40px;
+    font-weight: 760;
+    letter-spacing: -0.03em;
+  }
+
+  .adminOverviewTitle p {
+    margin: 6px 0 0;
+    color: var(--dash-muted);
+    font-size: 15px;
+    line-height: 22px;
+  }
+
+  .adminOverviewTitle span {
+    min-height: 34px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 14px;
+    border-radius: 999px;
+    color: var(--dash-blue);
+    background: rgba(11, 132, 255, 0.09);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .adminOverviewDashboard .statsGrid {
+    grid-template-columns: repeat(7, minmax(128px, 1fr));
+    gap: 16px;
+    margin: 0;
+  }
+
+  .adminOverviewDashboard .statCard {
+    min-height: 142px;
+    align-content: space-between;
+    gap: 14px;
+    padding: 19px;
+    border: 1px solid var(--dash-border);
+    border-radius: 22px;
+    background: var(--dash-card);
+    box-shadow: var(--dash-shadow);
+    color: var(--dash-text);
+  }
+
+  .adminOverviewDashboard .statCard:hover,
+  .adminOverviewDashboard .statCard.active {
+    transform: translateY(-2px);
+    border-color: rgba(11, 132, 255, 0.26);
+    background: #fff;
+    box-shadow: 0 22px 56px rgba(15, 23, 42, 0.07);
+  }
+
+  .adminOverviewDashboard .statBadge {
+    width: 40px;
+    height: 40px;
+    margin-left: auto;
+    border: 0;
+    border-radius: 15px;
+  }
+
+  .adminOverviewDashboard .statLabel {
+    color: var(--dash-muted);
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  .adminOverviewDashboard .statValue {
+    color: var(--dash-text);
+    font-size: clamp(28px, 2.2vw, 36px);
+    line-height: 1;
+    font-weight: 760;
+    letter-spacing: -0.035em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .adminOverviewDashboard .statNumberPart.done {
+    color: var(--dash-green);
+  }
+
+  .adminOverviewDashboard .statNumberPart.todo {
+    color: var(--dash-red);
+  }
+
+  .adminOverviewDashboard .statNumberPart.zero,
+  .adminOverviewDashboard .statNumberPart.neutral {
+    color: var(--dash-text);
+  }
+
+  .overviewInsightGrid {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr 1fr;
+    gap: 18px;
+  }
+
+  .overviewInsightCard,
+  .adminOverviewDashboard .overviewListPanel,
+  .adminOverviewDashboard .lossControlHead,
+  .adminOverviewDashboard .lossMetricCard,
+  .adminOverviewDashboard .lossChartCard,
+  .adminOverviewDashboard .lossListPanel,
+  .adminOverviewDashboard .lossMetricDetails,
+  .adminUsersDesktopPage > .card,
+  .ownerDesktopWorkspace .card,
+  .managerWorkspace .card {
+    border: 1px solid var(--dash-border);
+    border-radius: 24px;
+    background: var(--dash-card);
+    box-shadow: var(--dash-shadow);
+  }
+
+  .adminOverviewDashboard .lossControlPanel {
+    display: grid;
+    gap: 18px;
+    padding: 24px;
+    border: 1px solid var(--dash-border);
+    border-radius: 24px;
+    background: var(--dash-card);
+    box-shadow: var(--dash-shadow);
+  }
+
+  .adminOverviewDashboard .lossControlPanel > .lossControlHead,
+  .adminOverviewDashboard .lossControlPanel > .lossMetricDetails,
+  .adminOverviewDashboard .lossControlPanel .lossChartCard,
+  .adminOverviewDashboard .lossControlPanel .lossListPanel {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .adminOverviewDashboard .lossControlPanel .lossMetricCard {
+    box-shadow: none;
+  }
+
+  .overviewInsightCard,
+  .adminOverviewDashboard .overviewListPanel,
+  .adminUsersDesktopPage > .card {
+    padding: 24px;
+  }
+
+  .overviewInsightCard {
+    min-height: 258px;
+    display: grid;
+    gap: 18px;
+    align-content: start;
+  }
+
+  .overviewInsightHead,
+  .adminOverviewDashboard .overviewPanelHead,
+  .adminOverviewDashboard .lossControlHead,
+  .adminOverviewDashboard .lossChartHead,
+  .adminOverviewDashboard .lossMetricDetailsHead,
+  .cardHead {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .overviewInsightHead h3,
+  .adminOverviewDashboard .overviewListPanel > h3,
+  .adminOverviewDashboard .overviewPanelHead h3,
+  .adminOverviewDashboard .lossControlHead h3,
+  .adminOverviewDashboard .lossChartHead strong,
+  .adminOverviewDashboard .lossMetricDetailsHead strong,
+  .adminOverviewDashboard .lossListPanel .compactAccordionSummary span,
+  .ownerDesktopWorkspace .cardHead h3,
+  .managerWorkspace .cardHead h3,
+  .adminUsersDesktopPage .cardHead h3 {
+    margin: 0;
+    color: var(--dash-text);
+    font-size: 17px;
+    line-height: 24px;
+    font-weight: 720;
+  }
+
+  .overviewInsightHead p,
+  .adminOverviewDashboard .overviewPanelHead p,
+  .adminOverviewDashboard .lossControlHead p,
+  .adminOverviewDashboard .lossChartHead span,
+  .adminOverviewDashboard .employeeDetailCard p,
+  .adminOverviewDashboard .employeeDetailEmpty,
+  .adminOverviewDashboard .employeeMetricsPerson span,
+  .adminOverviewDashboard .openShiftRow span,
+  .ownerDesktopWorkspace .cardHead span,
+  .managerWorkspace .cardHead span,
+  .ownerDesktopWorkspace .card p,
+  .managerWorkspace .card p,
+  .adminUsersDesktopPage .adminRowMain span {
+    color: #475569;
+    font-size: 13px;
+  }
+
+  .adminOverviewDashboard .lossControlHead {
+    align-items: center;
+    margin: 0;
+    padding: 0 0 16px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 0;
+  }
+
+  .adminOverviewDashboard .lossControlHead p {
+    max-width: 760px;
+    margin-top: 5px;
+    line-height: 1.45;
+  }
+
+  .adminOverviewDashboard .lossPeriodTools {
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 999px;
+    background: rgba(248, 250, 252, 0.86);
+  }
+
+  .adminOverviewDashboard .lossPeriodButton {
+    min-height: 34px;
+    padding: 0 13px;
+    border: 0;
+    border-radius: 999px;
+    color: #64748b;
+    background: transparent;
+    box-shadow: none;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .adminOverviewDashboard .lossPeriodButton:hover,
+  .adminOverviewDashboard .lossPeriodButton.active {
+    color: var(--dash-blue);
+    background: #fff;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+  }
+
+  .overviewInsightHead strong {
+    color: var(--dash-text);
+    font-size: 34px;
+    line-height: 1;
+    font-weight: 760;
+    letter-spacing: -0.035em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .overviewAttentionList,
+  .overviewProcessBars {
+    display: grid;
+    gap: 11px;
+  }
+
+  .overviewAttentionRow {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr) 18px;
+    align-items: center;
+    gap: 12px;
+    min-height: 56px;
+    padding: 9px 12px;
+    border: 1px solid rgba(148, 163, 184, 0.13);
+    border-radius: 18px;
+    background: rgba(248, 250, 252, 0.72);
+    color: var(--dash-text);
+    text-align: left;
+  }
+
+  .overviewAttentionRow:hover {
+    border-color: rgba(11, 132, 255, 0.22);
+    background: #fff;
+  }
+
+  .overviewAttentionRow span {
+    display: inline-grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 14px;
+    font-weight: 760;
+  }
+
+  .overviewAttentionRow.blue span {
+    color: var(--dash-blue);
+    background: rgba(11, 132, 255, 0.10);
+  }
+
+  .overviewAttentionRow.rose span {
+    color: var(--dash-red);
+    background: rgba(244, 63, 94, 0.10);
+  }
+
+  .overviewAttentionRow.violet span {
+    color: var(--dash-purple);
+    background: rgba(124, 58, 237, 0.10);
+  }
+
+  .overviewAttentionRow.green span {
+    color: var(--dash-green);
+    background: rgba(34, 197, 94, 0.10);
+  }
+
+  .overviewAttentionRow b {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--dash-text);
+    font-size: 14px;
+    font-weight: 680;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .overviewAttentionRow em {
+    color: var(--dash-muted);
+    font-style: normal;
+    font-size: 22px;
+  }
+
+  .overviewMiniTrend {
+    display: grid;
+    gap: 12px;
+  }
+
+  .overviewMiniTrend svg {
+    width: 100%;
+    min-height: 118px;
+  }
+
+  .overviewMiniTrend path {
+    fill: none;
+    stroke: rgba(148, 163, 184, 0.34);
+    stroke-width: 1;
+  }
+
+  .overviewMiniTrend polyline {
+    fill: none;
+    stroke: var(--dash-blue);
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 5;
+  }
+
+  .overviewMiniTrend circle {
+    fill: #fff;
+    stroke: var(--dash-blue);
+    stroke-width: 3;
+  }
+
+  .overviewMiniTrend div {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--dash-muted);
+    font-size: 12px;
+  }
+
+  .overviewMiniTrend b {
+    color: var(--dash-text);
+    font-size: 24px;
+    font-weight: 760;
+  }
+
+  .overviewProcessRow {
+    display: grid;
+    grid-template-columns: minmax(88px, 1fr) 1.35fr 34px;
+    align-items: center;
+    gap: 10px;
+    color: var(--dash-muted);
+    font-size: 13px;
+  }
+
+  .overviewProcessRow span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .overviewProcessRow div {
+    height: 9px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(226, 232, 240, 0.9);
+  }
+
+  .overviewProcessRow i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--dash-blue), var(--dash-purple));
+  }
+
+  .overviewProcessRow b {
+    color: var(--dash-text);
+    font-size: 13px;
+    font-weight: 760;
+    text-align: right;
+  }
+
+  .adminOverviewDashboard .overviewPanelHead {
+    align-items: center;
+    margin: 0 0 16px;
+    padding: 0 0 14px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.13);
+  }
+
+  .adminOverviewDashboard .employeeMetricsList,
+  .adminOverviewDashboard .openShiftList,
+  .adminUsersDesktopPage .adminCompactList {
+    overflow: hidden;
+    border: 1px solid rgba(148, 163, 184, 0.13);
+    border-radius: 20px;
+    background: rgba(248, 250, 252, 0.64);
+  }
+
+  .adminOverviewDashboard .employeeMetricsEntry,
+  .adminOverviewDashboard .openShiftEntry {
+    border-color: rgba(148, 163, 184, 0.12);
+  }
+
+  .adminOverviewDashboard .employeeMetricsRow,
+  .adminOverviewDashboard .openShiftRow,
+  .adminUsersDesktopPage .adminRowButton {
+    min-height: 62px;
+    padding: 13px 15px;
+    border: 0;
+    background: transparent;
+  }
+
+  .adminOverviewDashboard .employeeDetailColumns {
+    grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+    gap: 14px;
+  }
+
+  .adminOverviewDashboard .employeeDetailSection,
+  .adminOverviewDashboard .overviewTaskCreateForm {
+    border: 1px solid rgba(148, 163, 184, 0.13);
+    border-radius: 20px;
+    background: rgba(248, 250, 252, 0.64);
+    box-shadow: none;
+  }
+
+  .adminOverviewDashboard .employeeDetailSection {
+    padding: 15px;
+  }
+
+  .adminOverviewDashboard .employeeDetailSectionHead {
+    min-height: 34px;
+    margin: 0 0 10px;
+    padding: 0;
+    border: 0;
+  }
+
+  .adminOverviewDashboard .employeeDetailSectionHead strong {
+    color: var(--dash-text);
+    font-size: 14px;
+    font-weight: 720;
+  }
+
+  .adminOverviewDashboard .employeeDetailSectionHead span,
+  .adminOverviewDashboard .lossMetricDetailsHead span {
+    min-width: 28px;
+    height: 26px;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 999px;
+    color: var(--dash-blue);
+    background: rgba(11, 132, 255, 0.08);
+    font-size: 12px;
+    font-weight: 760;
+  }
+
+  .adminOverviewDashboard .employeeDetailCard {
+    padding: 12px 0;
+    border-width: 1px 0 0;
+    border-color: rgba(148, 163, 184, 0.13);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .adminOverviewDashboard .employeeDetailCard:first-child {
+    border-top: 0;
+  }
+
+  .adminOverviewDashboard .employeeMetricsPerson strong,
+  .adminOverviewDashboard .openShiftRow strong,
+  .adminOverviewDashboard .employeeDetailCardHead strong,
+  .adminUsersDesktopPage .adminRowMain b {
+    color: var(--dash-text);
+    font-size: 14px;
+  }
+
+  .adminUsersDesktopPage {
+    grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.2fr);
+    align-items: start;
+  }
+
+  .adminUsersDesktopPage .adminCreateCard {
+    position: sticky;
+    top: 24px;
+  }
+
+  .adminUsersDesktopPage .compactAdminForm {
+    gap: 14px;
+  }
+
+  .adminUsersDesktopPage .field label,
+  .adminOverviewDashboard .field label {
+    color: var(--dash-muted);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .ownerDesktopWorkspace input,
+  .ownerDesktopWorkspace select,
+  .ownerDesktopWorkspace textarea,
+  .managerWorkspace input,
+  .managerWorkspace select,
+  .managerWorkspace textarea {
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 16px;
+    background: rgba(248, 250, 252, 0.82);
+    color: var(--dash-text);
+  }
+
+  .ownerDesktopWorkspace input::placeholder,
+  .ownerDesktopWorkspace textarea::placeholder,
+  .managerWorkspace input::placeholder,
+  .managerWorkspace textarea::placeholder {
+    color: #94a3b8;
+    opacity: 1;
+  }
+
+  .ownerDesktopWorkspace input:focus-visible,
+  .ownerDesktopWorkspace select:focus-visible,
+  .ownerDesktopWorkspace textarea:focus-visible,
+  .managerWorkspace input:focus-visible,
+  .managerWorkspace select:focus-visible,
+  .managerWorkspace textarea:focus-visible {
+    border-color: rgba(11, 132, 255, 0.38);
+    outline: 3px solid rgba(11, 132, 255, 0.12);
+  }
+
+  .ownerDesktopWorkspace .btn:not(.iconGhost),
+  .managerWorkspace .btn:not(.iconGhost) {
+    border-radius: 16px;
+  }
+
+  .ownerDesktopWorkspace .btn.primary,
+  .ownerDesktopWorkspace .btn:not(.ghost):not(.soft):not(.danger),
+  .managerWorkspace .btn.primary,
+  .managerWorkspace .btn:not(.ghost):not(.soft):not(.danger) {
+    border-color: transparent;
+    background: var(--dash-blue);
+    color: #fff;
+    box-shadow: 0 14px 30px rgba(11, 132, 255, 0.18);
+  }
+
+  .adminUsersDesktopPage .adminEditableRow {
+    border-bottom: 1px solid rgba(148, 163, 184, 0.13);
+  }
+
+  .adminUsersDesktopPage .adminEditableRow:last-child {
+    border-bottom: 0;
+  }
+
+  .adminUsersDesktopPage .adminInlineEditor {
+    margin: 12px;
+    padding: 16px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 18px;
+    background: #fff;
+  }
+
+  .adminOverviewDashboard .lossMetricGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .adminOverviewDashboard .lossMetricCard {
+    min-height: 126px;
+    padding: 18px;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.9);
+  }
+
+  .adminOverviewDashboard .lossMetricCard:hover,
+  .adminOverviewDashboard .lossMetricCard.active {
+    transform: translateY(-2px);
+    border-color: rgba(11, 132, 255, 0.26);
+    background: #fff;
+  }
+
+  .adminOverviewDashboard .lossMetricTop span,
+  .adminOverviewDashboard .lossMetricCard p {
+    color: #64748b;
+  }
+
+  .adminOverviewDashboard .lossMetricValue {
+    color: var(--dash-text);
+    letter-spacing: -0.035em;
+  }
+
+  .adminOverviewDashboard .lossMetricDetails {
+    overflow: hidden;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 20px;
+    background: rgba(248, 250, 252, 0.64);
+  }
+
+  .adminOverviewDashboard .lossMetricDetailsHead {
+    min-height: 52px;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  }
+
+  .adminOverviewDashboard .lossMetricDetailsBody {
+    display: grid;
+    padding: 0 16px 12px;
+  }
+
+  .adminOverviewDashboard .lossChartsGrid,
+  .adminOverviewDashboard .lossListsGrid {
+    gap: 16px;
+  }
+
+  .adminOverviewDashboard .lossChartCard,
+  .adminOverviewDashboard .lossListPanel {
+    min-height: 238px;
+    padding: 18px;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 20px;
+    background: rgba(248, 250, 252, 0.64);
+  }
+
+  .adminOverviewDashboard .lossListPanel {
+    min-height: 0;
+  }
+
+  .adminOverviewDashboard .lossChartHead {
+    display: grid;
+    gap: 4px;
+  }
+
+  .adminOverviewDashboard .lossLineChart svg {
+    min-height: 128px;
+  }
+
+  .adminOverviewDashboard .lossLineChart path {
+    stroke: rgba(148, 163, 184, 0.36);
+  }
+
+  .adminOverviewDashboard .lossLineChart polyline {
+    stroke: var(--dash-blue);
+    stroke-width: 4;
+  }
+
+  .adminOverviewDashboard .lossLineChart circle {
+    fill: #fff;
+    stroke: var(--dash-blue);
+  }
+
+  .adminOverviewDashboard .lossBarRow {
+    grid-template-columns: minmax(100px, 1fr) 1.5fr 34px;
+    gap: 10px;
+    color: #64748b;
+  }
+
+  .adminOverviewDashboard .lossBarRow div {
+    height: 9px;
+    border-radius: 999px;
+    background: rgba(226, 232, 240, 0.9);
+  }
+
+  .adminOverviewDashboard .lossBarRow i {
+    background: linear-gradient(90deg, var(--dash-blue), var(--dash-purple));
+  }
+
+  .adminOverviewDashboard .lossListPanel .compactAccordionSummary {
+    min-height: 34px;
+    padding: 0 0 12px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  }
+
+  .adminOverviewDashboard .lossListBody,
+  .adminOverviewDashboard .lossMetricDetailsBody {
+    gap: 0;
+  }
+
+  .adminOverviewDashboard .lossListRow {
+    min-height: 56px;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  }
+
+  .adminOverviewDashboard .lossListRow:last-child {
+    border-bottom: 0;
+  }
+
+  .adminOverviewDashboard .lossListRow strong {
+    color: var(--dash-text);
+    font-size: 13px;
+  }
+
+  .adminOverviewDashboard .lossListRow span {
+    color: #64748b;
+    font-size: 12px;
+  }
+
+  .ownerDesktopWorkspace .badge,
+  .managerWorkspace .badge {
+    border-radius: 999px;
+  }
+
+  .ownerDesktopWorkspace .empty,
+  .managerWorkspace .empty {
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+    min-height: 132px;
+    padding: 26px 18px;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.66);
+    color: var(--dash-text);
+    text-align: center;
+    box-shadow: none;
+  }
+
+  .ownerDesktopWorkspace .emptyIcon,
+  .managerWorkspace .emptyIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 15px;
+    color: var(--dash-blue);
+    background: rgba(11, 132, 255, 0.09);
+  }
+
+  .ownerDesktopWorkspace .emptyIcon .navIcon,
+  .managerWorkspace .emptyIcon .navIcon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .ownerDesktopWorkspace .empty strong,
+  .managerWorkspace .empty strong {
+    max-width: 420px;
+    color: var(--dash-text);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 700;
+  }
+
+  .ownerDesktopWorkspace .modal {
+    background: rgba(15, 23, 42, 0.36);
+    backdrop-filter: blur(10px);
+  }
+
+  .managerWorkspace .modal {
+    background: rgba(15, 23, 42, 0.36);
+    backdrop-filter: blur(10px);
+  }
+
+  .ownerDesktopWorkspace .modalCard,
+  .managerWorkspace .modalCard,
+  .ownerDesktopWorkspace .infoModalCard,
+  .managerWorkspace .infoModalCard {
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 26px;
+    background: rgba(255, 255, 255, 0.96);
+    color: var(--dash-text);
+    box-shadow: 0 28px 80px rgba(15, 23, 42, 0.18);
+  }
+
+  .ownerDesktopWorkspace .modalHead h2,
+  .managerWorkspace .modalHead h2,
+  .ownerDesktopWorkspace .infoModalCard h2,
+  .managerWorkspace .infoModalCard h2 {
+    color: var(--dash-text);
+  }
+
+  .ownerDesktopWorkspace .modalHead p,
+  .managerWorkspace .modalHead p,
+  .ownerDesktopWorkspace .infoModalText,
+  .managerWorkspace .infoModalText {
+    color: #475569;
+  }
+
+  .ownerDesktopWorkspace .supportCreateForm,
+  .managerWorkspace .supportCreateForm,
+  .ownerDesktopWorkspace .supportTicketList,
+  .managerWorkspace .supportTicketList,
+  .ownerDesktopWorkspace .supportThread,
+  .managerWorkspace .supportThread {
+    border-color: rgba(148, 163, 184, 0.16);
+    background: rgba(248, 250, 252, 0.66);
+    color: var(--dash-text);
+  }
+
+  .ownerDesktopWorkspace .supportMessage,
+  .managerWorkspace .supportMessage {
+    border-color: rgba(148, 163, 184, 0.16);
+    background: #fff;
+    color: var(--dash-text);
+  }
+}
+
+@media (min-width: 981px) and (max-width: 1360px) {
+  .adminOverviewDashboard .statsGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .overviewInsightGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .adminOverviewDashboard .lossMetricGrid,
+  .adminOverviewDashboard .lossChartsGrid,
+  .adminOverviewDashboard .lossListsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .adminUsersDesktopPage {
+    grid-template-columns: 1fr;
+  }
+
+  .adminUsersDesktopPage .adminCreateCard {
+    position: static;
+  }
+}
+
+/* Employee mobile unified visual system */
+@media (max-width: 980px) {
+  .employeeMobileOnly {
+    --employee-bg: #f7fafc;
+    --employee-card: rgba(255, 255, 255, 0.94);
+    --employee-text: #0f172a;
+    --employee-muted: #64748b;
+    --employee-border: rgba(148, 163, 184, 0.16);
+    --employee-soft: rgba(248, 250, 252, 0.86);
+    --employee-blue: #0b84ff;
+    --employee-green: #22c55e;
+    --employee-purple: #7c3aed;
+    --employee-orange: #f59e0b;
+    --employee-red: #f43f5e;
+    --background: #f7fafc;
+    --foreground: #0f172a;
+    --card: #ffffff;
+    --popover: #ffffff;
+    --muted: #f1f5f9;
+    --muted-foreground: #64748b;
+    --text: #0f172a;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #64748b;
+    --surface: rgba(248, 250, 252, 0.86);
+    --surface-soft: rgba(241, 245, 249, 0.78);
+    min-height: 100dvh;
+    color: var(--employee-text);
+    background:
+      radial-gradient(circle at 88% 12%, rgba(34, 197, 94, 0.12), transparent 26%),
+      radial-gradient(circle at 10% 92%, rgba(124, 58, 237, 0.10), transparent 28%),
+      radial-gradient(circle at 0 0, rgba(11, 132, 255, 0.07), transparent 26%),
+      linear-gradient(180deg, #f7fafc 0%, #eef5fb 100%);
+  }
+
+  .employeeMobileOnly .basicWorkspace,
+  .employeeMobileOnly .workspaceLayout,
+  .employeeMobileOnly .pageContainer,
+  .employeeMobileOnly .workspacePageContainer {
+    background: transparent;
+  }
+
+  .employeeMobileOnly .mobileWorkspaceChrome,
+  .employeeMobileOnly .mobileHeader {
+    background: rgba(247, 250, 252, 0.88);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+
+  .employeeMobileOnly .mobileHeader {
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  }
+
+  .employeeMobileOnly .mobileHeaderCopy h1 {
+    color: var(--employee-text);
+    font-size: 26px;
+    line-height: 32px;
+    font-weight: 760;
+    letter-spacing: -0.03em;
+  }
+
+  .employeeMobileOnly .mobileHeaderCopy p,
+  .employeeMobileOnly .mobileHeaderCopy span,
+  .employeeMobileOnly .mobileTopbarTitle p {
+    color: var(--employee-muted);
+  }
+
+  .employeeMobileOnly .mobileIconButton,
+  .employeeMobileOnly .mobileAvatarButton {
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--employee-text);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.05);
+  }
+
+  .employeeMobileOnly .pageContainer,
+  .employeeMobileOnly .workspacePageContainer {
+    padding: 12px 14px calc(var(--mobile-nav-h) + var(--mobile-bottom-safe) + 18px);
+  }
+
+  .employeeMobileOnly .mobileSectionStack {
+    gap: 14px;
+  }
+
+  .employeeMobileOnly .mobileEmployeeStatsGrid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .employeeMobileOnly .mobileEmployeeStatCard {
+    display: grid;
+    min-height: 138px;
+    padding: 16px;
+    border: 1px solid var(--employee-border);
+    border-radius: 22px;
+    background: var(--employee-card);
+    color: var(--employee-text);
+    text-align: left;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+  }
+
+  .employeeMobileOnly .mobileEmployeeStatCard span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    justify-self: end;
+    width: 38px;
+    height: 38px;
+    border-radius: 15px;
+  }
+
+  .employeeMobileOnly .mobileEmployeeStatCard strong {
+    align-self: end;
+    color: var(--employee-muted);
+    font-size: 13px;
+    font-weight: 720;
+  }
+
+  .employeeMobileOnly .mobileEmployeeStatCard b {
+    color: var(--employee-text);
+    font-size: 28px;
+    line-height: 32px;
+    font-weight: 780;
+    letter-spacing: -0.04em;
+  }
+
+  .employeeMobileOnly .mobileEmployeeStatCard em {
+    color: var(--employee-muted);
+    font-size: 12px;
+    font-style: normal;
+    font-weight: 650;
+  }
+
+  .employeeMobileOnly .mobileEmployeeStatCard.blue span {
+    color: var(--employee-blue);
+    background: rgba(11, 132, 255, 0.10);
+  }
+
+  .employeeMobileOnly .mobileEmployeeStatCard.green span {
+    color: var(--employee-green);
+    background: rgba(34, 197, 94, 0.11);
+  }
+
+  .employeeMobileOnly .mobileEmployeeStatCard.purple span {
+    color: var(--employee-purple);
+    background: rgba(124, 58, 237, 0.10);
+  }
+
+  .employeeMobileOnly .mobileEmployeeStatCard.orange span {
+    color: var(--employee-orange);
+    background: rgba(245, 158, 11, 0.12);
+  }
+
+  .employeeMobileOnly .sectionTitle,
+  .employeeMobileOnly .mobileListSectionHead,
+  .employeeMobileOnly .cardHead {
+    align-items: center;
+    min-height: 34px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  .employeeMobileOnly .sectionTitle h2,
+  .employeeMobileOnly .sectionTitle h3,
+  .employeeMobileOnly .mobileListSectionHead h3,
+  .employeeMobileOnly .cardHead h3 {
+    margin: 0;
+    color: var(--employee-text);
+    font-size: 17px;
+    line-height: 24px;
+    font-weight: 740;
+    letter-spacing: -0.01em;
+  }
+
+  .employeeMobileOnly .sectionLink {
+    min-height: 32px;
+    padding: 0 12px;
+    border-radius: 999px;
+    color: var(--employee-blue);
+    background: rgba(11, 132, 255, 0.08);
+    font-size: 13px;
+    font-weight: 740;
+  }
+
+  .employeeMobileOnly .mobileCard,
+  .employeeMobileOnly .card,
+  .employeeMobileOnly .mobileSection,
+  .employeeMobileOnly .mobilePriorityCard,
+  .employeeMobileOnly .mobileInventoryPlainPanel,
+  .employeeMobileOnly .mobileChecklistProgressCard,
+  .employeeMobileOnly .mobileListSurface,
+  .employeeMobileOnly .mobileFlatPanel {
+    border: 1px solid var(--employee-border);
+    border-radius: 24px;
+    background: var(--employee-card);
+    box-shadow: 0 18px 46px rgba(15, 23, 42, 0.055);
+  }
+
+  .employeeMobileOnly .mobileCard,
+  .employeeMobileOnly .card,
+  .employeeMobileOnly .mobileSection,
+  .employeeMobileOnly .mobileInventoryPlainPanel,
+  .employeeMobileOnly .mobileChecklistProgressCard {
+    padding: 18px;
+  }
+
+  .employeeMobileOnly .mobileOverviewList,
+  .employeeMobileOnly .mobileTaskList,
+  .employeeMobileOnly .mobileInventoryList,
+  .employeeMobileOnly .mobileChecklistPlainList,
+  .employeeMobileOnly .upcomingBookingsList {
+    overflow: hidden;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.78);
+    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.04);
+  }
+
+  .employeeMobileOnly .mobileOverviewRow,
+  .employeeMobileOnly .mobileTaskRow,
+  .employeeMobileOnly .mobileInventoryItem,
+  .employeeMobileOnly .mobileChecklistLine,
+  .employeeMobileOnly .upcomingBookingRow {
+    min-height: 64px;
+    padding: 13px 14px;
+    border: 0;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    border-radius: 0;
+    background: transparent;
+    color: var(--employee-text);
+    box-shadow: none;
+  }
+
+  .employeeMobileOnly .mobileTasksScreen .mobileTaskList,
+  .employeeMobileOnly .mobileChecklistScreen .mobileChecklistPlainList {
+    display: grid;
+    gap: 10px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .employeeMobileOnly .mobileTasksScreen .mobileTaskRow,
+  .employeeMobileOnly .mobileChecklistScreen .mobileChecklistLine {
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.045);
+  }
+
+  .employeeMobileOnly .mobileTasksScreen .mobileTaskRow.done,
+  .employeeMobileOnly .mobileChecklistScreen .mobileChecklistLine.done {
+    border-color: rgba(34, 197, 94, 0.18);
+    background: rgba(240, 253, 244, 0.76);
+  }
+
+  .employeeMobileOnly .mobileOverviewRow:last-child,
+  .employeeMobileOnly .mobileTaskRow:last-child,
+  .employeeMobileOnly .mobileInventoryItem:last-child,
+  .employeeMobileOnly .mobileChecklistLine:last-child,
+  .employeeMobileOnly .upcomingBookingRow:last-child {
+    border-bottom: 0;
+  }
+
+  .employeeMobileOnly .mobileOverviewRow:active,
+  .employeeMobileOnly .mobileTaskRow:active,
+  .employeeMobileOnly .mobileInventoryItem:active,
+  .employeeMobileOnly .mobileChecklistLine:active {
+    background: rgba(11, 132, 255, 0.06);
+    transform: none;
+  }
+
+  .employeeMobileOnly .mobileOverviewIcon,
+  .employeeMobileOnly .mobileTaskStatus,
+  .employeeMobileOnly .mobileChecklistToggle,
+  .employeeMobileOnly .bottomNavCreateBadge {
+    border: 0;
+    box-shadow: none;
+  }
+
+  .employeeMobileOnly .mobileOverviewIcon {
+    width: 42px;
+    height: 42px;
+    border-radius: 16px;
+  }
+
+  .employeeMobileOnly .mobileOverviewIcon.blue {
+    color: var(--employee-blue);
+    background: rgba(11, 132, 255, 0.10);
+  }
+
+  .employeeMobileOnly .mobileOverviewIcon.green {
+    color: var(--employee-green);
+    background: rgba(34, 197, 94, 0.11);
+  }
+
+  .employeeMobileOnly .mobileOverviewIcon.amber {
+    color: var(--employee-orange);
+    background: rgba(245, 158, 11, 0.12);
+  }
+
+  .employeeMobileOnly .mobileOverviewIcon.purple {
+    color: var(--employee-purple);
+    background: rgba(124, 58, 237, 0.10);
+  }
+
+  .employeeMobileOnly .mobileOverviewIcon.rose {
+    color: var(--employee-red);
+    background: rgba(244, 63, 94, 0.10);
+  }
+
+  .employeeMobileOnly .mobileOverviewCopy strong,
+  .employeeMobileOnly .mobileTaskCopy strong,
+  .employeeMobileOnly .mobileChecklistLineHead strong,
+  .employeeMobileOnly .mobileInventoryCopy strong,
+  .employeeMobileOnly .upcomingBookingRow strong {
+    color: var(--employee-text);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 720;
+  }
+
+  .employeeMobileOnly .mobileOverviewCopy span,
+  .employeeMobileOnly .mobileTaskCopy span,
+  .employeeMobileOnly .mobileInventoryCopy span,
+  .employeeMobileOnly .mobileChecklistLineMeta,
+  .employeeMobileOnly .upcomingBookingRow span,
+  .employeeMobileOnly .mobileInlineHint {
+    color: #64748b;
+    font-size: 13px;
+    line-height: 18px;
+  }
+
+  .employeeMobileOnly .mobileSectionCount,
+  .employeeMobileOnly .mobileOverviewRow > b {
+    min-width: 30px;
+    height: 28px;
+    display: inline-grid;
+    place-items: center;
+    border-radius: 999px;
+    color: var(--employee-blue);
+    background: rgba(11, 132, 255, 0.08);
+    font-size: 13px;
+    font-weight: 760;
+  }
+
+  .employeeMobileOnly .mobileAccordionSection {
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .employeeMobileOnly .mobileAccordionSection .mobileListSectionHead {
+    padding: 16px 18px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  }
+
+  .employeeMobileOnly .mobileAccordionSection .compactAccordionBody {
+    padding: 0;
+  }
+
+  .employeeMobileOnly .mobileChecklistPicker {
+    display: flex;
+    gap: 8px;
+    padding: 4px;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.04);
+  }
+
+  .employeeMobileOnly .mobileChecklistProgressCard {
+    gap: 12px;
+  }
+
+  .employeeMobileOnly .progressBar {
+    height: 9px;
+    border-radius: 999px;
+    background: rgba(226, 232, 240, 0.95);
+  }
+
+  .employeeMobileOnly .progressBarFill {
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--employee-blue), var(--employee-green));
+  }
+
+  .employeeMobileOnly .mobileChecklistPickerItem {
+    min-height: 44px;
+    padding: 9px 12px;
+    border: 0;
+    border-radius: 16px;
+    background: transparent;
+    color: var(--employee-muted);
+  }
+
+  .employeeMobileOnly .mobileChecklistPickerItem.active {
+    color: var(--employee-blue);
+    background: rgba(11, 132, 255, 0.10);
+  }
+
+  .employeeMobileOnly .mobileChecklistLine.done {
+    background: rgba(34, 197, 94, 0.045);
+  }
+
+  .employeeMobileOnly .mobileChecklistToggle {
+    width: 38px;
+    height: 38px;
+    border-radius: 15px;
+    background: rgba(11, 132, 255, 0.10);
+    color: var(--employee-blue);
+  }
+
+  .employeeMobileOnly .mobileChecklistToggle.done {
+    background: rgba(34, 197, 94, 0.13);
+    color: var(--employee-green);
+  }
+
+  .employeeMobileOnly .mobileChecklistIndex,
+  .employeeMobileOnly .mobileChecklistSmartTags em,
+  .employeeMobileOnly .mobileChecklistSmartTags b,
+  .employeeMobileOnly .badge {
+    border: 0;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 740;
+  }
+
+  .employeeMobileOnly .mobileChecklistSmartTags em,
+  .employeeMobileOnly .mobileChecklistSmartTags b.pending {
+    color: #64748b;
+    background: rgba(100, 116, 139, 0.10);
+  }
+
+  .employeeMobileOnly .mobileChecklistSmartTags b.done,
+  .employeeMobileOnly .badge.active {
+    color: var(--employee-green);
+    background: rgba(34, 197, 94, 0.12);
+  }
+
+  .employeeMobileOnly .mobileChecklistSmartTags b.problem,
+  .employeeMobileOnly .badge.cancelled {
+    color: var(--employee-red);
+    background: rgba(244, 63, 94, 0.12);
+  }
+
+  .employeeMobileOnly .badge.warning,
+  .employeeMobileOnly .badge.trial {
+    color: var(--employee-orange);
+    background: rgba(245, 158, 11, 0.12);
+  }
+
+  .employeeMobileOnly input,
+  .employeeMobileOnly select,
+  .employeeMobileOnly textarea {
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 16px;
+    background: rgba(248, 250, 252, 0.9);
+    color: var(--employee-text);
+  }
+
+  .employeeMobileOnly input::placeholder,
+  .employeeMobileOnly textarea::placeholder {
+    color: #94a3b8;
+    opacity: 1;
+  }
+
+  .employeeMobileOnly .field > span,
+  .employeeMobileOnly .fieldCaption {
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 760;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .employeeMobileOnly .btn,
+  .employeeMobileOnly .mobilePrimaryButton {
+    border-radius: 16px;
+  }
+
+  .employeeMobileOnly .mobilePrimaryButton,
+  .employeeMobileOnly .btn:not(.soft):not(.ghost):not(.danger) {
+    border-color: transparent;
+    background: var(--employee-blue);
+    color: #fff;
+    box-shadow: 0 14px 30px rgba(11, 132, 255, 0.18);
+  }
+
+  .employeeMobileOnly .mobileSheetModal,
+  .employeeMobileOnly .bottomSheetBackdrop,
+  .employeeMobileOnly .modal {
+    background: rgba(15, 23, 42, 0.32);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  .employeeMobileOnly .mobileSheetPanel,
+  .employeeMobileOnly .bottomSheet,
+  .employeeMobileOnly .modalCard {
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 26px 26px 0 0;
+    background: rgba(255, 255, 255, 0.97);
+    color: var(--employee-text);
+    box-shadow: 0 -24px 80px rgba(15, 23, 42, 0.16);
+  }
+
+  .employeeMobileOnly .mobileSheetModalHead h3,
+  .employeeMobileOnly .bottomSheetHead h3,
+  .employeeMobileOnly .modalHead h2 {
+    color: var(--employee-text);
+  }
+
+  .employeeMobileOnly .mobileSheetModalHead p,
+  .employeeMobileOnly .bottomSheetHead p,
+  .employeeMobileOnly .modalHead p {
+    color: var(--employee-muted);
+  }
+
+  .employeeMobileOnly .empty {
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+    min-height: 128px;
+    padding: 24px 16px;
+    border: 1px solid rgba(148, 163, 184, 0.14);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.66);
+    color: var(--employee-text);
+    text-align: center;
+  }
+
+  .employeeMobileOnly .emptyIcon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 15px;
+    color: var(--employee-blue);
+    background: rgba(11, 132, 255, 0.09);
+  }
+
+  .employeeMobileOnly .empty strong {
+    color: var(--employee-text);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 720;
+  }
+
+  .employeeMobileOnly .bottomNavigationRail {
+    gap: 4px;
+    padding: 7px 10px calc(7px + var(--mobile-bottom-safe));
+    border-top: 1px solid rgba(148, 163, 184, 0.14);
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 -18px 44px rgba(15, 23, 42, 0.08);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+  }
+
+  .employeeMobileOnly .bottomNavigationRail.fiveItems {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .employeeMobileOnly .bottomNavItem {
+    color: #64748b;
+    border-radius: 16px;
+  }
+
+  .employeeMobileOnly .bottomNavItem.active {
+    color: var(--employee-blue);
+    background: rgba(11, 132, 255, 0.08);
+  }
+
+  .employeeMobileOnly .bottomNavCreateBadge {
+    background: linear-gradient(135deg, var(--employee-blue), #38bdf8);
+    color: #fff;
+    box-shadow: 0 14px 30px rgba(11, 132, 255, 0.24);
+  }
+
+  .employeeMobileOnly .employeeProfileCard {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 84px;
+    padding: 16px;
+    border: 1px solid var(--employee-border);
+    border-radius: 22px;
+    background: var(--employee-card);
+    color: var(--employee-text);
+    text-align: left;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.06);
+  }
+
+  .employeeMobileOnly .employeeProfileAvatar {
+    display: inline-grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 18px;
+    color: #fff;
+    background: linear-gradient(135deg, var(--employee-blue), var(--employee-purple));
+    font-size: 17px;
+    font-weight: 780;
+  }
+
+  .employeeMobileOnly .mobileTaskRow.danger strong {
+    color: var(--employee-red);
   }
 }

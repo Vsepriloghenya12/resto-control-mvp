@@ -53,6 +53,8 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
   const [showTechForm, setShowTechForm] = useState(false);
   const [techForm, setTechForm] = useState<any>({ title: '', description: '', category: 'equipment', urgency: 'normal' });
   const [problemRange, setProblemRange] = useState({ from: today, to: today });
+  const [showProblemPeriodPicker, setShowProblemPeriodPicker] = useState(false);
+  const [problemPeriodDraft, setProblemPeriodDraft] = useState({ from: today, to: today });
   const isSenior = seniorRoles.includes(user?.role);
   const canCreateTasks = admin || isSenior;
   const canManageTechRequests = admin && ['owner', 'manager'].includes(user?.role);
@@ -279,19 +281,51 @@ export function Tasks({ user, admin = false, showTechComposer = false, onCloseCo
   const closedTechRequests = techRequests
     .filter((request) => ['done', 'cancelled'].includes(request.status))
     .sort((a, b) => String(b.resolved_at || b.updated_at || b.created_at || '').localeCompare(String(a.resolved_at || a.updated_at || a.created_at || '')));
-  const setProblemQuickRange = (from: string, to = from) => setProblemRange({ from, to });
+  const yesterday = shiftInputDate(today, -1);
+  const isTodayRange = problemRange.from === today && problemRange.to === today;
+  const isYesterdayRange = problemRange.from === yesterday && problemRange.to === yesterday;
+  const setProblemQuickRange = (from: string, to = from) => {
+    setShowProblemPeriodPicker(false);
+    setProblemRange({ from, to });
+  };
+  const openProblemPeriodPicker = () => {
+    setProblemPeriodDraft(problemRange);
+    setShowProblemPeriodPicker(true);
+  };
+  const applyProblemPeriod = () => {
+    setProblemRange({
+      from: problemPeriodDraft.from || today,
+      to: problemPeriodDraft.to || problemPeriodDraft.from || today
+    });
+    setShowProblemPeriodPicker(false);
+  };
   const problemDateTools = <div className="overviewDateTools problemDateTools">
-    <Button type="button" kind="soft" onClick={() => setProblemQuickRange(today)}>Сегодня</Button>
-    <Button type="button" kind="soft" onClick={() => setProblemQuickRange(shiftInputDate(today, -1))}>Вчера</Button>
-    <Button type="button" kind="soft" onClick={() => setProblemQuickRange(shiftInputDate(today, -6), today)}>7 дней</Button>
-    <label><span>с</span><input type="date" value={problemRange.from} onChange={(e: any) => setProblemRange({ ...problemRange, from: e.target.value || today })} /></label>
-    <label><span>по</span><input type="date" value={problemRange.to} onChange={(e: any) => setProblemRange({ ...problemRange, to: e.target.value || problemRange.from })} /></label>
+    <Button type="button" kind={isTodayRange ? undefined : 'soft'} onClick={() => setProblemQuickRange(today)}>Сегодня</Button>
+    <Button type="button" kind={isYesterdayRange ? undefined : 'soft'} onClick={() => setProblemQuickRange(yesterday)}>Вчера</Button>
+    <Button type="button" kind={showProblemPeriodPicker || (!isTodayRange && !isYesterdayRange) ? undefined : 'soft'} onClick={openProblemPeriodPicker}>Выбор периода</Button>
   </div>;
 
   return <>
-    {canManageTechRequests && <Card className="problemPeriodCard" title="Период проблем">
-      {problemDateTools}
-    </Card>}
+    {canManageTechRequests && problemDateTools}
+    {showProblemPeriodPicker && <div className="modal" onClick={() => setShowProblemPeriodPicker(false)}>
+      <div className="modalCard infoModalCard problemPeriodModal" onClick={(event) => event.stopPropagation()}>
+        <div className="modalHead">
+          <div>
+            <h2>Выбор периода</h2>
+            <p>Покажем проблемы за выбранные даты</p>
+          </div>
+          <button type="button" className="iconBtn" onClick={() => setShowProblemPeriodPicker(false)} aria-label="Закрыть">×</button>
+        </div>
+        <div className="form two compactAdminForm">
+          <Field label="С" type="date" value={problemPeriodDraft.from} onChange={(e: any) => setProblemPeriodDraft({ ...problemPeriodDraft, from: e.target.value || today })} />
+          <Field label="По" type="date" value={problemPeriodDraft.to} onChange={(e: any) => setProblemPeriodDraft({ ...problemPeriodDraft, to: e.target.value || problemPeriodDraft.from })} />
+        </div>
+        <div className="modalActions">
+          <Button type="button" kind="soft" onClick={() => setShowProblemPeriodPicker(false)}>Отмена</Button>
+          <Button type="button" onClick={applyProblemPeriod}>Применить</Button>
+        </div>
+      </div>
+    </div>}
 
     {canManageTechRequests && <Card title="Проблемы сотрудников" right={<span className="badge warning">{activeTechRequests.length} открыто</span>}>
       {activeTechRequests.length === 0 && <Empty text="Открытых проблем пока нет" />}

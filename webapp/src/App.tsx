@@ -1148,7 +1148,7 @@ function RestaurantWorkspace({
       </div>
 
       <div className="pageContainer workspacePageContainer">
-        {banner(openBilling)}
+        {active === 'overview' && banner(openBilling)}
         <div className="workspaceContent">{children}</div>
       </div>
     </section>
@@ -1491,7 +1491,7 @@ function RestaurantAdmin({ user, restaurant, restaurants = [], onRestaurantSwitc
     onBillingPlanSelect={setPreferredBillingPlan}
     banner={(openBilling) => user.role === 'owner' ? <SubscriptionBanner restaurant={restaurant} openBilling={openBilling} /> : null}
   >
-    <div className={cx('contentStack', tab === 'overview' && 'reportPage')}>{section}</div>
+    <div className="contentStack">{section}</div>
   </RestaurantWorkspace>;
 }
 
@@ -1915,6 +1915,14 @@ function AdminOverview({ user, mode = 'owner', onNavigate }: { user: any; mode?:
   const openShiftsFromToday = Array.isArray(data.open_shifts_today) ? data.open_shifts_today : [];
   const openShiftsToday = openShiftsFromToday.length > 0 ? openShiftsFromToday : openShifts;
   const openTasksCount = taskSummary.not_done ?? taskSummary.open ?? data.tasks_open;
+  const lossSources = safeArray(lossData?.sources_by_type);
+  const attentionItems = [
+    { key: 'tasks', title: 'Задачи требуют внимания', count: Number(taskSummary.overdue || 0) + Number(taskSummary.not_done || 0), tone: 'blue', panel: 'tasks' as AdminOverviewPanelKey },
+    { key: 'problems', title: 'Открытые технические обращения', count: Number(problemSummary.new || 0) + Number(problemSummary.in_progress || 0), tone: 'rose', panel: 'problems' as AdminOverviewPanelKey },
+    { key: 'checklists', title: 'Невыполненные чек-листы', count: Number(checklistSummary.not_done || 0), tone: 'violet', panel: 'checklists' as AdminOverviewPanelKey },
+    { key: 'inventory', title: 'Инвентаризации ждут сдачи', count: Number(inventorySummary.not_ready || 0), tone: 'green', panel: 'inventory' as AdminOverviewPanelKey }
+  ].filter((item) => item.count > 0);
+  const totalAttentionCount = attentionItems.reduce((sum, item) => sum + item.count, 0);
   const statNumber = (value: any, tone: 'done' | 'todo' | 'neutral' = 'neutral') => {
     const count = Number(value || 0);
     return <span className={cx('statNumberPart', count === 0 ? 'zero' : tone)}>{count}</span>;
@@ -1927,7 +1935,15 @@ function AdminOverview({ user, mode = 'owner', onNavigate }: { user: any; mode?:
       </span>)}
     </span>
   );
-  return <>
+  return <section className="adminOverviewDashboard">
+    <div className="adminOverviewTitle">
+      <div>
+        <h2>Главная</h2>
+        <p>Контроль процессов на сегодня</p>
+      </div>
+      <span>{managerMode ? 'Панель менеджера' : 'Панель владельца'}</span>
+    </div>
+
     <div className={cx('statsGrid', managerMode && 'managerStatsGrid')}>
       <StatCard icon="users" title="Сотрудники" value={employeesValue} active={activePanel === 'employees'} onClick={() => setActivePanel('employees')} />
       <StatCard icon="users" title="Сотрудники на смене" value={statNumber(openShiftsToday.length, openShiftsToday.length ? 'done' : 'neutral')} active={activePanel === 'shifts'} onClick={() => setActivePanel('shifts')} />
@@ -1939,13 +1955,97 @@ function AdminOverview({ user, mode = 'owner', onNavigate }: { user: any; mode?:
     </div>
 
     {overviewMsg && <div className={overviewMsgKind}>{overviewMsg}</div>}
+
+    <div className="overviewInsightGrid">
+      <section className="overviewInsightCard overviewAttentionCard">
+        <div className="overviewInsightHead">
+          <div>
+            <h3>Что требует внимания</h3>
+            <p>Актуальные процессы из текущих данных</p>
+          </div>
+          <strong>{totalAttentionCount}</strong>
+        </div>
+        <div className="overviewAttentionList">
+          {attentionItems.length ? attentionItems.map((item) => <button type="button" className={cx('overviewAttentionRow', item.tone)} onClick={() => setActivePanel(item.panel)} key={item.key}>
+            <span>{item.count}</span>
+            <b>{item.title}</b>
+            <em>›</em>
+          </button>) : <Empty text="Пока нет данных" />}
+        </div>
+      </section>
+
+      <section className="overviewInsightCard">
+        <div className="overviewInsightHead">
+          <div>
+            <h3>Динамика процессов</h3>
+            <p>По дням за выбранный период контроля</p>
+          </div>
+        </div>
+        <OverviewMiniTrend rows={safeArray(lossData?.trend)} />
+      </section>
+
+      <section className="overviewInsightCard">
+        <div className="overviewInsightHead">
+          <div>
+            <h3>Источники по типам</h3>
+            <p>Где чаще появляются отклонения</p>
+          </div>
+        </div>
+        <OverviewProcessBars rows={lossSources} />
+      </section>
+    </div>
+
     <AdminOverviewDetailPanel activePanel={activePanel} user={user} employees={employees} rows={employeeMetrics} shifts={openShiftsToday} taskRange={taskRange} onTaskRangeChange={setTaskRange} taskForm={taskForm} onTaskFormChange={setTaskForm} onTaskCreate={createOverviewTask} problems={problemSummary.details || []} updatingProblemId={updatingProblemId} onProblemStatusChange={updateOverviewProblemStatus} inventoryAssignments={data.inventory_assignments_today || []} />
     <LossControlBlock data={lossData} period={lossPeriod} loading={lossLoading} onPeriodChange={setLossPeriod} />
-  </>;
+  </section>;
 }
 
 function safeArray(value: any) {
   return Array.isArray(value) ? value : [];
+}
+
+function OverviewMiniTrend({ rows }: { rows: any[] }) {
+  const totals = safeArray(rows).map((row) => ({
+    date: row.date,
+    total: ['tasks', 'checklists', 'inventories', 'tech_requests', 'bookings', 'shifts', 'photo'].reduce((sum, key) => sum + Number(row[key] || 0), 0)
+  }));
+  const max = Math.max(1, ...totals.map((row) => row.total));
+  const width = 260;
+  const height = 92;
+  const pad = 8;
+  const points = totals.map((row, index) => {
+    const x = totals.length <= 1 ? width / 2 : pad + (index * (width - pad * 2)) / (totals.length - 1);
+    const y = height - pad - (row.total / max) * (height - pad * 2);
+    return `${x},${y}`;
+  }).join(' ');
+  if (!totals.length || totals.every((row) => row.total === 0)) {
+    return <Empty text="Динамика появится после накопления данных" />;
+  }
+  return <div className="overviewMiniTrend">
+    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Динамика процессов">
+      <path d={`M ${pad} ${height - pad} H ${width - pad}`} />
+      <polyline points={points} />
+      {totals.map((row, index) => {
+        const x = totals.length <= 1 ? width / 2 : pad + (index * (width - pad * 2)) / (totals.length - 1);
+        const y = height - pad - (row.total / max) * (height - pad * 2);
+        return <circle cx={x} cy={y} r="3" key={`${row.date}-${index}`} />;
+      })}
+    </svg>
+    <div><span>{totals[0]?.date}</span><b>{totals[totals.length - 1]?.total || 0}</b><span>{totals[totals.length - 1]?.date}</span></div>
+  </div>;
+}
+
+function OverviewProcessBars({ rows }: { rows: any[] }) {
+  const visibleRows = safeArray(rows).filter((row) => Number(row.value || 0) > 0).slice(0, 6);
+  const max = Math.max(1, ...visibleRows.map((row) => Number(row.value || 0)));
+  if (!visibleRows.length) return <Empty text="Пока нет данных" />;
+  return <div className="overviewProcessBars">
+    {visibleRows.map((row) => <div className="overviewProcessRow" key={row.type || row.key || row.label}>
+      <span>{row.label || lossTypeLabels[row.type] || row.type || 'Процесс'}</span>
+      <div><i style={{ width: `${Math.max(7, (Number(row.value || 0) / max) * 100)}%` }} /></div>
+      <b>{row.value}</b>
+    </div>)}
+  </div>;
 }
 
 function LossControlBlock({ data, period, loading, onPeriodChange }: { data: any; period: LossPeriod; loading: boolean; onPeriodChange: (period: LossPeriod) => void }) {
@@ -2602,7 +2702,7 @@ function UsersAdmin({ user }: any) {
       load();
     } catch (e: any) { setMsg(e.message); }
   }
-  return <>
+  return <div className="adminUsersDesktopPage">
     <Card title="Создать сотрудника" className="adminCreateCard">
       <form className="form two compactAdminForm" onSubmit={submit}>
         <Field label="Имя" value={form.name} onChange={(e: any) => setForm({ ...form, name: e.target.value })} />
@@ -2635,11 +2735,11 @@ function UsersAdmin({ user }: any) {
         </div>;
       })}</div>
     </Card>
-  </>;
+  </div>;
 }
 
 function EmployeeApp({ user, restaurant, onLogout }: any) {
-  const [tab, setTab] = useState<Tab>(() => initialTabFromUrl('today', ['today', 'checklists', 'bookings', 'inventory', 'tasks', 'knowledge', 'admin-checklists', 'admin-tasks']));
+  const [tab, setTab] = useState<Tab>(() => initialTabFromUrl('today', ['today', 'tasks', 'checklists', 'shift', 'profile', 'bookings', 'inventory', 'knowledge', 'admin-checklists', 'admin-tasks']));
   const [notificationCount, setNotificationCount] = useState(0);
   const [openTechComposer, setOpenTechComposer] = useState(false);
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
@@ -2662,11 +2762,11 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
   useEffect(() => { refreshNotifications(); }, [tab]);
 
   const mobileNavItems: MobileNavItem[] = [
-    { id: 'today', title: 'Обзор', icon: 'overview', active: tab === 'today', onClick: () => setTab('today') },
+    { id: 'today', title: 'Главная', icon: 'overview', active: tab === 'today', onClick: () => setTab('today') },
+    { id: 'tasks', title: 'Задачи', icon: 'tasks', active: tab === 'tasks', onClick: () => setTab('tasks') },
     { id: 'checklists', title: 'Чек-листы', icon: 'checklists', active: tab === 'checklists', onClick: () => setTab('checklists') },
-    { id: 'bookings', title: 'Брони', icon: 'bookings', active: tab === 'bookings', onClick: () => setTab('bookings') },
-    { id: 'tasks', title: 'Проблемы', icon: 'tasks', active: tab === 'tasks', onClick: () => setTab('tasks') },
-    ...(isSenior ? [{ id: 'admin-tasks', title: 'Отдел', icon: 'users' as IconName, active: tab === 'admin-tasks' || tab === 'admin-checklists', onClick: () => setTab('admin-tasks') }] : [])
+    { id: 'shift', title: 'Смена', icon: 'support', active: tab === 'shift', onClick: () => setTab('shift') },
+    { id: 'profile', title: 'Профиль', icon: 'user', active: tab === 'profile', onClick: () => setTab('profile') }
   ];
 
   const mobileMenuItems: MobileActionItem[] = [
@@ -2706,8 +2806,8 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     setActive={setTab}
     onLogout={onLogout}
     mobile={{
-      title: tab === 'today' ? <>Добро пожаловать, <em>{user.name}</em></> : '',
-      subtitle: tab === 'today' ? roles[user.role] : '',
+      title: tab === 'today' ? <>Здравствуйте, <em>{user.name}</em></> : '',
+      subtitle: tab === 'today' ? 'Сегодня на смене' : '',
       isOverview: tab === 'today',
       showMenuButton: true,
       showNotifications: true,
@@ -2720,11 +2820,13 @@ function EmployeeApp({ user, restaurant, onLogout }: any) {
     }}
   >
     <OfflineSyncBanner />
-    {tab === 'today' && <Today user={user} onOpenTasks={() => setTab('tasks')} onOpenChecklists={() => setTab('checklists')} onOpenBookings={() => setTab('bookings')} onOpenInventory={() => setTab('inventory')} />}
+    {tab === 'today' && <Today user={user} onOpenTasks={() => setTab('tasks')} onOpenChecklists={() => setTab('checklists')} onOpenBookings={() => setTab('bookings')} onOpenInventory={() => setTab('inventory')} onOpenShift={() => setTab('shift')} />}
     {tab === 'checklists' && <Checklists user={user} />}
     {tab === 'bookings' && <Bookings user={user} />}
     {tab === 'inventory' && <Inventory user={user} />}
     {tab === 'tasks' && <Tasks user={user} showTechComposer={openTechComposer} onCloseComposer={() => setOpenTechComposer(false)} />}
+    {tab === 'shift' && <EmployeeShiftScreen user={user} restaurant={restaurant} onOpenTasks={() => setTab('tasks')} onOpenInventory={() => setTab('inventory')} onOpenProfile={() => setTab('profile')} onCreateProblem={() => { setTab('tasks'); setOpenTechComposer(true); }} />}
+    {tab === 'profile' && <EmployeeProfileScreen user={user} restaurant={restaurant} onOpenKnowledge={() => setTab('knowledge')} onLogout={onLogout} />}
     {tab === 'admin-checklists' && <Checklists user={user} admin />}
     {tab === 'admin-tasks' && <Tasks user={user} admin />}
     {tab === 'knowledge' && <Knowledge user={user} />}
@@ -2737,13 +2839,15 @@ function Today({
   onOpenTasks,
   onOpenChecklists,
   onOpenBookings,
-  onOpenInventory
+  onOpenInventory,
+  onOpenShift
 }: {
   user: any;
   onOpenTasks: () => void;
   onOpenChecklists: () => void;
   onOpenBookings: () => void;
   onOpenInventory: () => void;
+  onOpenShift: () => void;
 }) {
   const [overview, setOverview] = useState<any | null>(null);
 
@@ -2811,48 +2915,40 @@ function Today({
   ];
 
   return <div className="mobileSectionStack">
-    <SectionTitle title="Сегодня" action={<button type="button" className="sectionLink" onClick={onOpenTasks}>Все задачи</button>} />
+    <SectionTitle title="Главная" subtitle="Коротко о смене и важных действиях" action={<button type="button" className="sectionLink" onClick={onOpenTasks}>Задачи</button>} />
     <ShiftControl user={user} />
 
-    <div className="mobileOverviewList">
-      <button type="button" className="mobileOverviewRow" onClick={onOpenChecklists}>
-        <div className="mobileOverviewIcon blue"><AppIcon name="checklists" className="navIcon" /></div>
-        <div className="mobileOverviewCopy">
-          <strong>Чек-листы</strong>
-          <span>{completedChecklistTemplateIds.size} из {overview.checklists.length} выполнено</span>
-        </div>
-        <b>{overview.checklists.length}</b>
+    <div className="mobileEmployeeStatsGrid">
+      <button type="button" className="mobileEmployeeStatCard blue" onClick={onOpenShift}>
+        <span><AppIcon name="overview" className="navIcon" /></span>
+        <strong>Моя смена</strong>
+        <b>Открыть</b>
+        <em>Статус смены</em>
       </button>
-      <button type="button" className="mobileOverviewRow" onClick={onOpenTasks}>
-        <div className="mobileOverviewIcon green"><AppIcon name="tasks" className="navIcon" /></div>
-        <div className="mobileOverviewCopy">
-          <strong>Задачи</strong>
-          <span>{openTasks.length} в работе</span>
-        </div>
+      <button type="button" className="mobileEmployeeStatCard green" onClick={onOpenTasks}>
+        <span><AppIcon name="tasks" className="navIcon" /></span>
+        <strong>Мои задачи</strong>
         <b>{openTasks.length}</b>
+        <em>{openTasks.filter((task: any) => task.overdue || task.require_photo).length} срочных</em>
       </button>
-      <button type="button" className="mobileOverviewRow" onClick={onOpenBookings}>
-        <div className="mobileOverviewIcon rose"><AppIcon name="bookings" className="navIcon" /></div>
-        <div className="mobileOverviewCopy">
-          <strong>Брони</strong>
-          <span>{upcomingBookings.length ? `ближайшая: ${fmtDate(upcomingBookings[0].reserved_for)}` : `${activeBookings.length} активных`}</span>
-        </div>
-        <b>{activeBookings.length}</b>
+      <button type="button" className="mobileEmployeeStatCard purple" onClick={onOpenChecklists}>
+        <span><AppIcon name="checklists" className="navIcon" /></span>
+        <strong>Чек-листы</strong>
+        <b>{completedChecklistTemplateIds.size}/{overview.checklists.length}</b>
+        <em>Прогресс</em>
       </button>
-      <button type="button" className="mobileOverviewRow" onClick={onOpenInventory}>
-        <div className="mobileOverviewIcon purple"><AppIcon name="inventory" className="navIcon" /></div>
-        <div className="mobileOverviewCopy">
-          <strong>Инвентаризация</strong>
-          <span>{pendingInventoryTemplates.length ? `${pendingInventoryTemplates.length} нужно отправить` : 'отправлено сегодня'}</span>
-        </div>
-        <b>{readyInventoryTemplates.length}</b>
+      <button type="button" className="mobileEmployeeStatCard orange" onClick={onOpenInventory}>
+        <span><AppIcon name="inventory" className="navIcon" /></span>
+        <strong>Инвентаризации</strong>
+        <b>{pendingInventoryTemplates.length}</b>
+        <em>{readyInventoryTemplates.length} доступно</em>
       </button>
     </div>
 
-    <Card title="Приоритет" className="mobileCard compactMobileCard mobilePriorityCard">
+    <Card title="Что важно сегодня" className="mobileCard compactMobileCard mobilePriorityCard">
       <div className="mobileTaskList">
         {priorityItems.slice(0, 4).map((item: any) => <button key={item.id} type="button" className="mobileTaskRow compact" onClick={item.onClick}>
-          <span className="mobileTaskStatus" />
+          <span className={cx('mobileOverviewIcon', item.icon === 'tasks' ? 'green' : item.icon === 'inventory' ? 'purple' : item.icon === 'bookings' ? 'rose' : item.icon === 'support' ? 'amber' : 'blue')}><AppIcon name={item.icon} className="navIcon" /></span>
           <div className="mobileTaskCopy">
             <strong>{item.title}</strong>
             <span>{item.subtitle}</span>
@@ -2864,6 +2960,75 @@ function Today({
       {completedTasks.length > 0 && <div className="mobileInlineHint">Выполнено за смену: {completedTasks.length}</div>}
     </Card>
   </div>;
+}
+
+function EmployeeShiftScreen({ user, restaurant, onOpenTasks, onOpenInventory, onOpenProfile, onCreateProblem }: { user: any; restaurant: any; onOpenTasks: () => void; onOpenInventory: () => void; onOpenProfile: () => void; onCreateProblem: () => void }) {
+  const quickActions = [
+    { title: 'Сообщить о проблеме', subtitle: 'Поломка или нужна помощь менеджера', icon: 'support' as IconName, tone: 'amber', onClick: onCreateProblem },
+    { title: 'Мои задачи', subtitle: 'Открытые задачи на смену', icon: 'tasks' as IconName, tone: 'green', onClick: onOpenTasks },
+    { title: 'Инвентаризация', subtitle: 'Назначенные бланки и остатки', icon: 'inventory' as IconName, tone: 'purple', onClick: onOpenInventory },
+    { title: 'Профиль', subtitle: roles[user.role] || 'Сотрудник', icon: 'user' as IconName, tone: 'blue', onClick: onOpenProfile }
+  ];
+
+  return <div className="mobileSectionStack mobileShiftScreen">
+    <SectionTitle title="Моя смена" subtitle={restaurant?.name || 'Рабочий кабинет'} />
+    <ShiftControl user={user} />
+    <Card title="Быстрые действия" className="mobileCard compactMobileCard">
+      <div className="mobileTaskList">
+        {quickActions.map((item) => <button type="button" className="mobileTaskRow compact" onClick={item.onClick} key={item.title}>
+          <span className={cx('mobileOverviewIcon', item.tone)}><AppIcon name={item.icon} className="navIcon" /></span>
+          <div className="mobileTaskCopy"><strong>{item.title}</strong><span>{item.subtitle}</span></div>
+          <AppIcon name="chevron" className="navIcon" />
+        </button>)}
+      </div>
+    </Card>
+    <EmployeeProfileSummary user={user} restaurant={restaurant} onClick={onOpenProfile} />
+  </div>;
+}
+
+function EmployeeProfileScreen({ user, restaurant, onOpenKnowledge, onLogout }: { user: any; restaurant: any; onOpenKnowledge: () => void; onLogout: () => void }) {
+  return <div className="mobileSectionStack mobileProfileScreen">
+    <SectionTitle title="Профиль" subtitle={restaurant?.name || 'Ресто Контроль'} />
+    <EmployeeProfileSummary user={user} restaurant={restaurant} />
+    <Card title="Доступ и настройки" className="mobileCard compactMobileCard">
+      <div className="mobileTaskList">
+        <button type="button" className="mobileTaskRow compact" onClick={onOpenKnowledge}>
+          <span className="mobileOverviewIcon blue"><AppIcon name="knowledge" className="navIcon" /></span>
+          <div className="mobileTaskCopy"><strong>База знаний</strong><span>Инструкции, стандарты и сервис-бук</span></div>
+          <AppIcon name="chevron" className="navIcon" />
+        </button>
+        <button type="button" className="mobileTaskRow compact" onClick={() => void runPwaInstall('app')}>
+          <span className="mobileOverviewIcon purple"><AppIcon name="phone" className="navIcon" /></span>
+          <div className="mobileTaskCopy"><strong>Установить на телефон</strong><span>Добавить приложение на главный экран</span></div>
+          <AppIcon name="chevron" className="navIcon" />
+        </button>
+        <button type="button" className="mobileTaskRow compact" onClick={() => void runPushNotificationsEnable()}>
+          <span className="mobileOverviewIcon amber"><AppIcon name="notification" className="navIcon" /></span>
+          <div className="mobileTaskCopy"><strong>Уведомления</strong><span>Задачи и комментарии с текстом</span></div>
+          <AppIcon name="chevron" className="navIcon" />
+        </button>
+        <button type="button" className="mobileTaskRow compact danger" onClick={onLogout}>
+          <span className="mobileOverviewIcon rose"><AppIcon name="logout" className="navIcon" /></span>
+          <div className="mobileTaskCopy"><strong>Выйти</strong><span>Завершить рабочую сессию</span></div>
+          <AppIcon name="chevron" className="navIcon" />
+        </button>
+      </div>
+    </Card>
+  </div>;
+}
+
+function EmployeeProfileSummary({ user, restaurant, onClick }: { user: any; restaurant: any; onClick?: () => void }) {
+  const content = <>
+    <div className="employeeProfileAvatar">{userInitials(user.name)}</div>
+    <div className="mobileTaskCopy">
+      <strong>{user.name || 'Сотрудник'}</strong>
+      <span>{roles[user.role] || user.role} · {departments[user.department] || user.department || 'подразделение'} · {restaurant?.name || 'ресторан'}</span>
+    </div>
+    {onClick && <AppIcon name="chevron" className="navIcon" />}
+  </>;
+  return onClick
+    ? <button type="button" className="employeeProfileCard" onClick={onClick}>{content}</button>
+    : <article className="employeeProfileCard">{content}</article>;
 }
 
 function Checklists({ user, admin = false }: any) {
