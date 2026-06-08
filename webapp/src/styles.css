@@ -9317,7 +9317,7 @@ body {
 }
 
 /* Desktop SaaS visual system for owner and manager workspaces */
-@media (min-width: 981px) {
+@media (min-width: 981px), (pointer: fine) {
   body:has(.ownerDesktopWorkspace),
   body:has(.managerWorkspace) {
     background:
@@ -9363,6 +9363,25 @@ body {
     gap: 26px;
     margin: 0;
     color: var(--dash-text);
+  }
+
+  .ownerDesktopWorkspace,
+  .managerWorkspace {
+    display: grid !important;
+  }
+
+  .ownerDesktopWorkspace .desktopWorkspaceChrome,
+  .managerWorkspace .desktopWorkspaceChrome,
+  .ownerDesktopWorkspace .dashboardSidebar,
+  .managerWorkspace .dashboardSidebar {
+    display: grid !important;
+  }
+
+  .ownerDesktopWorkspace .mobileWorkspaceChrome,
+  .managerWorkspace .mobileWorkspaceChrome,
+  .ownerDesktopWorkspace .bottomNavigation,
+  .managerWorkspace .bottomNavigation {
+    display: none !important;
   }
 
   .ownerDesktopWorkspace .workspaceMain,
@@ -10371,7 +10390,7 @@ body {
 }
 
 /* Employee mobile unified visual system */
-@media (max-width: 980px) {
+@media (max-width: 980px), (pointer: fine) {
   .employeeMobileOnly {
     --employee-bg: #f7fafc;
     --employee-card: rgba(255, 255, 255, 0.94);
